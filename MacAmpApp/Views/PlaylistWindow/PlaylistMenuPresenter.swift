@@ -5,109 +5,42 @@ import AppKit
 struct PlaylistMenuPresenter {
     let skinManager: SkinManager
     let audioPlayer: AudioPlayer
-    let menuDelegate: PlaylistMenuDelegate
     let windowHeight: CGFloat
     let windowWidth: CGFloat
     let selectedIndices: Set<Int>
 
-    private func playlistContentView() -> NSView? {
-        if let view = WindowCoordinator.shared?.playlistWindow?.contentView {
-            return view
-        }
-        return NSApp.keyWindow?.contentView
-    }
-
-    private func presentPlaylistMenu(_ menu: NSMenu, at point: NSPoint) {
-        guard let contentView = playlistContentView() else { return }
-        menu.popUp(positioning: nil, at: point, in: contentView)
-    }
+    private static let popupBottomFromWindowBottom: CGFloat = 12
+    private static let addPopupLeft: CGFloat = 14
+    private static let remPopupLeft: CGFloat = 43
+    private static let miscPopupLeft: CGFloat = 101
+    private static let listPopupRight: CGFloat = 22
 
     func showAddMenu() {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.delegate = menuDelegate
-
-        let addURLItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_ADD_URL",
-            selectedSprite: "PLAYLIST_ADD_URL_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.addURL),
-            target: PlaylistWindowActions.shared
-        )
-        addURLItem.representedObject = audioPlayer
-        menu.addItem(addURLItem)
-
-        let addDirItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_ADD_DIR",
-            selectedSprite: "PLAYLIST_ADD_DIR_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.addDirectory),
-            target: PlaylistWindowActions.shared
-        )
-        addDirItem.representedObject = audioPlayer
-        menu.addItem(addDirItem)
-
-        let addFileItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_ADD_FILE",
-            selectedSprite: "PLAYLIST_ADD_FILE_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.addFile),
-            target: PlaylistWindowActions.shared
-        )
-        addFileItem.representedObject = audioPlayer
-        menu.addItem(addFileItem)
-
-        presentPlaylistMenu(menu, at: NSPoint(x: 12, y: windowHeight - 68))
+        let tiles: [PlaylistSpritePopupTile] = [
+            tile("PLAYLIST_ADD_URL", "PLAYLIST_ADD_URL_SELECTED",
+                 PlaylistWindowActions.shared.addURL),
+            tile("PLAYLIST_ADD_DIR", "PLAYLIST_ADD_DIR_SELECTED",
+                 PlaylistWindowActions.shared.addDirectory),
+            tile("PLAYLIST_ADD_FILE", "PLAYLIST_ADD_FILE_SELECTED",
+                 PlaylistWindowActions.shared.addFile),
+        ]
+        present(tiles: tiles, barSprite: "PLAYLIST_ADD_MENU_BAR", tilesLeft: Self.addPopupLeft)
     }
 
     func showRemMenu() {
         PlaylistWindowActions.shared.selectedIndices = selectedIndices
 
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.delegate = menuDelegate
-
-        let remMiscItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_REMOVE_MISC",
-            selectedSprite: "PLAYLIST_REMOVE_MISC_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.removeMisc),
-            target: PlaylistWindowActions.shared
-        )
-        remMiscItem.representedObject = audioPlayer
-        menu.addItem(remMiscItem)
-
-        let remAllItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_REMOVE_ALL",
-            selectedSprite: "PLAYLIST_REMOVE_ALL_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.removeAll),
-            target: PlaylistWindowActions.shared
-        )
-        remAllItem.representedObject = audioPlayer
-        menu.addItem(remAllItem)
-
-        let cropItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_CROP",
-            selectedSprite: "PLAYLIST_CROP_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.cropPlaylist),
-            target: PlaylistWindowActions.shared
-        )
-        cropItem.representedObject = audioPlayer
-        menu.addItem(cropItem)
-
-        let remSelItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_REMOVE_SELECTED",
-            selectedSprite: "PLAYLIST_REMOVE_SELECTED_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.removeSelected),
-            target: PlaylistWindowActions.shared
-        )
-        remSelItem.representedObject = audioPlayer
-        menu.addItem(remSelItem)
-
-        presentPlaylistMenu(menu, at: NSPoint(x: 41, y: windowHeight - 87))
+        let tiles: [PlaylistSpritePopupTile] = [
+            tile("PLAYLIST_REMOVE_MISC", "PLAYLIST_REMOVE_MISC_SELECTED",
+                 PlaylistWindowActions.shared.removeMisc),
+            tile("PLAYLIST_REMOVE_ALL", "PLAYLIST_REMOVE_ALL_SELECTED",
+                 PlaylistWindowActions.shared.removeAll),
+            tile("PLAYLIST_CROP", "PLAYLIST_CROP_SELECTED",
+                 PlaylistWindowActions.shared.cropPlaylist),
+            tile("PLAYLIST_REMOVE_SELECTED", "PLAYLIST_REMOVE_SELECTED_SELECTED",
+                 PlaylistWindowActions.shared.removeSelected),
+        ]
+        present(tiles: tiles, barSprite: "PLAYLIST_REMOVE_MENU_BAR", tilesLeft: Self.remPopupLeft)
     }
 
     func showSelNotSupportedAlert() {
@@ -118,78 +51,62 @@ struct PlaylistMenuPresenter {
     }
 
     func showMiscMenu() {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.delegate = menuDelegate
-
-        let sortItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_SORT_LIST",
-            selectedSprite: "PLAYLIST_SORT_LIST_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.sortList),
-            target: PlaylistWindowActions.shared
-        )
-        sortItem.representedObject = audioPlayer
-        menu.addItem(sortItem)
-
-        let fileInfoItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_FILE_INFO",
-            selectedSprite: "PLAYLIST_FILE_INFO_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.fileInfo),
-            target: PlaylistWindowActions.shared
-        )
-        fileInfoItem.representedObject = audioPlayer
-        menu.addItem(fileInfoItem)
-
-        let miscOptionsItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_MISC_OPTIONS",
-            selectedSprite: "PLAYLIST_MISC_OPTIONS_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.miscOptions),
-            target: PlaylistWindowActions.shared
-        )
-        miscOptionsItem.representedObject = audioPlayer
-        menu.addItem(miscOptionsItem)
-
-        presentPlaylistMenu(menu, at: NSPoint(x: 100, y: windowHeight - 68))
+        let tiles: [PlaylistSpritePopupTile] = [
+            tile("PLAYLIST_SORT_LIST", "PLAYLIST_SORT_LIST_SELECTED",
+                 PlaylistWindowActions.shared.sortList),
+            tile("PLAYLIST_FILE_INFO", "PLAYLIST_FILE_INFO_SELECTED",
+                 PlaylistWindowActions.shared.fileInfo),
+            tile("PLAYLIST_MISC_OPTIONS", "PLAYLIST_MISC_OPTIONS_SELECTED",
+                 PlaylistWindowActions.shared.miscOptions),
+        ]
+        present(tiles: tiles, barSprite: "PLAYLIST_MISC_MENU_BAR", tilesLeft: Self.miscPopupLeft)
     }
 
     func showListMenu() {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.delegate = menuDelegate
+        let tiles: [PlaylistSpritePopupTile] = [
+            tile("PLAYLIST_NEW_LIST", "PLAYLIST_NEW_LIST_SELECTED",
+                 PlaylistWindowActions.shared.newList),
+            tile("PLAYLIST_SAVE_LIST", "PLAYLIST_SAVE_LIST_SELECTED",
+                 PlaylistWindowActions.shared.saveList),
+            tile("PLAYLIST_LOAD_LIST", "PLAYLIST_LOAD_LIST_SELECTED",
+                 PlaylistWindowActions.shared.loadList),
+        ]
+        let tilesLeft = windowWidth - Self.listPopupRight - PlaylistSpritePopup.tileWidth
+        present(tiles: tiles, barSprite: "PLAYLIST_LIST_BAR", tilesLeft: tilesLeft)
+    }
 
-        let newListItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_NEW_LIST",
-            selectedSprite: "PLAYLIST_NEW_LIST_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.newList),
-            target: PlaylistWindowActions.shared
+    private func tile(
+        _ normal: String,
+        _ selected: String,
+        _ action: @escaping (NSMenuItem) -> Void
+    ) -> PlaylistSpritePopupTile {
+        let player = audioPlayer
+        return PlaylistSpritePopupTile(
+            normalSprite: normal,
+            selectedSprite: selected,
+            action: {
+                let item = NSMenuItem()
+                item.representedObject = player
+                action(item)
+            }
         )
-        newListItem.representedObject = audioPlayer
-        menu.addItem(newListItem)
+    }
 
-        let saveListItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_SAVE_LIST",
-            selectedSprite: "PLAYLIST_SAVE_LIST_SELECTED",
+    private func present(tiles: [PlaylistSpritePopupTile], barSprite: String, tilesLeft: CGFloat) {
+        guard let window = WindowCoordinator.shared?.playlistWindow else { return }
+
+        // Panel encloses the .bar (3 wide) and the stack of tiles (22 wide).
+        // Panel left = tilesLeft - barWidth, matching Webamp's .bar { left: -3 } offset.
+        let panelLeft = tilesLeft - PlaylistSpritePopup.barWidth
+        let originInWindow = NSPoint(x: panelLeft, y: Self.popupBottomFromWindowBottom)
+        let screenOrigin = window.convertPoint(toScreen: originInWindow)
+
+        PlaylistSpritePopupHost.show(
+            tiles: tiles,
+            barSprite: barSprite,
+            screenOrigin: screenOrigin,
             skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.saveList),
-            target: PlaylistWindowActions.shared
+            parentWindow: window
         )
-        saveListItem.representedObject = audioPlayer
-        menu.addItem(saveListItem)
-
-        let loadListItem = SpriteMenuItem(
-            normalSprite: "PLAYLIST_LOAD_LIST",
-            selectedSprite: "PLAYLIST_LOAD_LIST_SELECTED",
-            skinManager: skinManager,
-            action: #selector(PlaylistWindowActions.loadList),
-            target: PlaylistWindowActions.shared
-        )
-        loadListItem.representedObject = audioPlayer
-        menu.addItem(loadListItem)
-
-        presentPlaylistMenu(menu, at: NSPoint(x: windowWidth - 46, y: windowHeight - 68))
     }
 }
