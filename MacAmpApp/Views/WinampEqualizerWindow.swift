@@ -344,9 +344,18 @@ struct WinampEqualizerWindow: View {
                         }
                     }
                 }
-                .stroke(Color.green, lineWidth: 1)
+                .stroke(eqCurveColor, lineWidth: 1)
                 .at(EQCoords.graphArea)
             )
+    }
+
+    /// EQ preview curve color. Skins paint a 24-entry palette in viscolor.txt;
+    /// index 18 ("oscilloscope 1") is the convention for single-line
+    /// visualizations like the EQ preview. Falls back to green when no
+    /// skin is loaded or the palette is too short.
+    private var eqCurveColor: Color {
+        let palette = skinManager.currentSkin?.visualizerColors ?? []
+        return palette.indices.contains(18) ? palette[18] : .green
     }
 }
 
