@@ -46,7 +46,7 @@ struct VisualizerView: View {
         Group {
             switch mode {
             case .none:
-                Rectangle().fill(Color.black)
+                Rectangle().fill(backgroundColor)
             case .oscilloscope:
                 OscilloscopeView(height: height)
             case .spectrum:
@@ -63,7 +63,7 @@ struct VisualizerView: View {
             }
         }
         .frame(width: VisualizerLayout.width, height: height)
-        .background(Color.black)
+        .background(backgroundColor)
         .onTapGesture {
             // Cycle through modes: spectrum → oscilloscope → none
             let allModes = AppSettings.VisualizerMode.allCases
@@ -88,6 +88,10 @@ struct VisualizerView: View {
         }
     }
     
+    private var backgroundColor: Color {
+        skinManager.currentSkin?.visualizerColors.first ?? .black
+    }
+
     private func updateBars() {
         // Get frequency data from audio player
         let frequencyData = audioPlayer.getFrequencyData(bands: barCount)
@@ -263,6 +267,7 @@ struct OscilloscopeView: View {
             context.stroke(path, with: .color(color), lineWidth: 1)
         }
         .frame(width: VisualizerLayout.width, height: height)
+        .background(backgroundColor)
         .onReceive(updateTimer) { _ in
             if audioPlayer.isVisualizerRendering {
                 waveformData = audioPlayer.getWaveformSamples(count: VisualizerLayout.oscilloscopeSampleCount)
@@ -270,6 +275,10 @@ struct OscilloscopeView: View {
                 waveformData = []
             }
         }
+    }
+
+    private var backgroundColor: Color {
+        skinManager.currentSkin?.visualizerColors.first ?? .black
     }
 
     private func oscilloscopeColor() -> Color {
