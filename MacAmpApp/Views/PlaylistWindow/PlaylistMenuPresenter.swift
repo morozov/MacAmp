@@ -95,8 +95,6 @@ struct PlaylistMenuPresenter {
     private func present(tiles: [PlaylistSpritePopupTile], barSprite: String, tilesLeft: CGFloat) {
         guard let window = WindowCoordinator.shared?.playlistWindow else { return }
 
-        // Panel encloses the .bar (3 wide) and the stack of tiles (22 wide).
-        // Panel left = tilesLeft - barWidth, matching Webamp's .bar { left: -3 } offset.
         let panelLeft = tilesLeft - PlaylistSpritePopup.barWidth
         let originInWindow = NSPoint(x: panelLeft, y: Self.popupBottomFromWindowBottom)
         let screenOrigin = window.convertPoint(toScreen: originInWindow)
