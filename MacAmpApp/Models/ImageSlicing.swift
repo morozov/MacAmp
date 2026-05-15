@@ -11,15 +11,16 @@ extension NSImage {
             return nil
         }
 
-        // Verify the rect is within bounds
+        // Clamp to bounds: BMP heights vary across skins, and scaling would interpolate magenta separators.
         let imageBounds = CGRect(x: 0, y: 0, width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
-        if !imageBounds.contains(rect) && !imageBounds.intersects(rect) {
+        let clampedRect = rect.intersection(imageBounds)
+        guard !clampedRect.isNull, clampedRect.width > 0, clampedRect.height > 0 else {
             AppLog.error(.ui, "ImageSlicing: Rect \(rect) is outside image bounds \(imageBounds)")
             return nil
         }
 
-        guard let croppedCGImage = cgImage.cropping(to: rect) else {
-            AppLog.error(.ui, "ImageSlicing: CGImage.cropping failed for rect \(rect)")
+        guard let croppedCGImage = cgImage.cropping(to: clampedRect) else {
+            AppLog.error(.ui, "ImageSlicing: CGImage.cropping failed for rect \(clampedRect)")
             return nil
         }
 
@@ -27,8 +28,8 @@ extension NSImage {
         // parent-child buffer sharing that CGImage.cropping(to:) creates.
         // Without this, the parent BMP's full float pixel buffer stays alive
         // as long as any cropped sprite references it.
-        let width = Int(rect.width)
-        let height = Int(rect.height)
+        let width = Int(clampedRect.width)
+        let height = Int(clampedRect.height)
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(
                   data: nil,
@@ -42,11 +43,25 @@ extension NSImage {
             AppLog.error(.ui, "ImageSlicing: Failed to create independent CGContext for \(rect)")
             return nil
         }
-        context.draw(croppedCGImage, in: CGRect(origin: .zero, size: rect.size))
+        context.draw(croppedCGImage, in: CGRect(origin: .zero, size: clampedRect.size))
+
+        // Winamp chroma key: RGB(255, 0, 255) marks transparent.
+        if let data = context.data {
+            let buffer = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+            for i in stride(from: 0, to: width * height * 4, by: 4) {
+                if buffer[i] == 255, buffer[i + 1] == 0, buffer[i + 2] == 255 {
+                    buffer[i] = 0
+                    buffer[i + 1] = 0
+                    buffer[i + 2] = 0
+                    buffer[i + 3] = 0
+                }
+            }
+        }
+
         guard let independentCGImage = context.makeImage() else {
-            AppLog.error(.ui, "ImageSlicing: Failed to create independent CGImage for \(rect)")
+            AppLog.error(.ui, "ImageSlicing: Failed to create independent CGImage for \(clampedRect)")
             return nil
         }
-        return NSImage(cgImage: independentCGImage, size: rect.size)
+        return NSImage(cgImage: independentCGImage, size: clampedRect.size)
     }
 }
