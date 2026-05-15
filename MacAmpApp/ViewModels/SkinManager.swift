@@ -75,13 +75,18 @@ final class SkinManager {
 
         let playlistStyle = Self.parsePlaylistStyle(from: payload.pledit, fallback: .winampDefault)
         let visualizerColors = Self.parseVisualizerColors(from: payload.viscolor, fallback: Self.defaultVisualizerColors)
+        let eqGraphLineColors = Self.extractEQGraphLineColors(
+            from: extractedImages,
+            visualizerColors: visualizerColors
+        )
 
         return Skin(
             visualizerColors: visualizerColors,
             playlistStyle: playlistStyle,
             images: extractedImages,
             cursors: [:],
-            loadedSheets: loadedSheets
+            loadedSheets: loadedSheets,
+            eqGraphLineColors: eqGraphLineColors
         )
     }
 
@@ -378,6 +383,10 @@ final class SkinManager {
 
         let playlistStyle = Self.parsePlaylistStyle(from: payload.pledit, fallback: .pleditParserDefault)
         let visualizerColors = Self.parseVisualizerColors(from: payload.viscolor, fallback: [])
+        let eqGraphLineColors = Self.extractEQGraphLineColors(
+            from: extractedImages,
+            visualizerColors: visualizerColors
+        )
 
         // VIDEO.bmp sprites now handled by standard extraction loop (like PLEDIT)
         // No special parsing needed - defined in SkinSprites.swift
@@ -386,7 +395,8 @@ final class SkinManager {
             playlistStyle: playlistStyle,
             images: extractedImages,  // Now includes VIDEO_* sprite keys
             cursors: [:],
-            loadedSheets: loadedSheets  // Track which sheets actually loaded
+            loadedSheets: loadedSheets,  // Track which sheets actually loaded
+            eqGraphLineColors: eqGraphLineColors
         )
 
         currentSkin = newSkin
@@ -414,6 +424,47 @@ final class SkinManager {
             return colors
         }
         return fallback
+    }
+
+    /// Decode the 19 EQ preview row colors from EQ_GRAPH_LINE_COLORS (1×19 strip
+    /// in EQMAIN.bmp). Falls back to viscolor[18] when the sprite is unavailable.
+    private static func extractEQGraphLineColors(
+        from images: [String: NSImage],
+        visualizerColors: [Color]
+    ) -> [NSColor] {
+        let fallbackColor: NSColor = visualizerColors.indices.contains(18)
+            ? NSColor(visualizerColors[18])
+            : NSColor(Color.green)
+        let fallback = Array(repeating: fallbackColor, count: 19)
+
+        guard let img = images["EQ_GRAPH_LINE_COLORS"],
+              let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              cg.width >= 1, cg.height == 19,
+              let cs = CGColorSpace(name: CGColorSpace.sRGB) else {
+            return fallback
+        }
+        var buf = [UInt8](repeating: 0, count: 19 * 4)
+        guard let ctx = CGContext(
+            data: &buf,
+            width: 1,
+            height: 19,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: cs,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return fallback
+        }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 19))
+        return (0..<19).map { row in
+            // Image row 0 is at the TOP. CGContext put it at the bottom of buf.
+            let bufRow = 18 - row
+            let i = bufRow * 4
+            return NSColor(srgbRed: CGFloat(buf[i]) / 255,
+                           green: CGFloat(buf[i + 1]) / 255,
+                           blue: CGFloat(buf[i + 2]) / 255,
+                           alpha: 1)
+        }
     }
 
     /// Extract sprites from a sheet image into a dictionary, silently skipping failures.

@@ -317,45 +317,95 @@ struct WinampEqualizerWindow: View {
 
     @ViewBuilder
     private func buildEQCurve() -> some View {
-        // Simplified EQ curve visualization
+        // Curve is overlaid on the background sprite; don't add `.at(graphArea)`
+        // inside the overlay or it'll be offset twice.
+        let lineColors = skinManager.currentSkin?.eqGraphLineColors
+            ?? Array(repeating: NSColor.systemGreen, count: 19)
         SimpleSpriteImage("EQ_GRAPH_BACKGROUND", width: 113, height: 19)
-            .at(EQCoords.graphArea)
             .overlay(
-                // Draw EQ curve based on band values
-                Path { path in
-                    let graphWidth: CGFloat = 113
-                    let graphHeight: CGFloat = 19
-                    let bands = audioPlayer.eqBands
-                    
-                    if !bands.isEmpty {
-                        let stepX = graphWidth / CGFloat(bands.count - 1)
-                        let centerY = graphHeight / 2
-                        
-                        for (index, gain) in bands.enumerated() {
-                            let x = CGFloat(index) * stepX
-                            let normalizedGain = CGFloat(gain) / 24.0 // -12..12 to -0.5..0.5
-                            let y = centerY - (normalizedGain * centerY)
-                            
-                            if index == 0 {
-                                path.move(to: CGPoint(x: x, y: y))
-                            } else {
-                                path.addLine(to: CGPoint(x: x, y: y))
-                            }
-                        }
-                    }
-                }
-                .stroke(eqCurveColor, lineWidth: 1)
-                .at(EQCoords.graphArea)
+                Image(nsImage: renderEQCurveImage(
+                    bands: audioPlayer.eqBands,
+                    lineColors: lineColors
+                ))
+                .interpolation(.none)
+                .antialiased(false)
+                .resizable()
+                .frame(width: 113, height: 19)
             )
+            .at(EQCoords.graphArea)
     }
 
-    /// EQ preview curve color. Skins paint a 24-entry palette in viscolor.txt;
-    /// index 18 ("oscilloscope 1") is the convention for single-line
-    /// visualizations like the EQ preview. Falls back to green when no
-    /// skin is loaded or the palette is too short.
-    private var eqCurveColor: Color {
-        let palette = skinManager.currentSkin?.visualizerColors ?? []
-        return palette.indices.contains(18) ? palette[18] : .green
+    /// Render the 113×19 EQ preview curve. Writes RGBA bytes directly into the
+    /// context buffer — `ctx.fill(1×1)` per pixel would be ~2k state changes
+    /// per repaint.
+    private func renderEQCurveImage(bands: [Float], lineColors: [NSColor]) -> NSImage {
+        let width = 113
+        let height = 19
+        let bandCount = bands.count
+        let maxX = width - 1
+        let stride = width * 4
+
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let ctx = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: stride,
+            space: cs,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let data = ctx.data else {
+            return NSImage(size: NSSize(width: width, height: height))
+        }
+        let buf = data.bindMemory(to: UInt8.self, capacity: height * stride)
+
+        if bandCount > 1, lineColors.count == height {
+            var rowBytes = [(r: UInt8, g: UInt8, b: UInt8)](
+                repeating: (0, 0, 0), count: height
+            )
+            for i in 0..<height {
+                let c = lineColors[i].usingColorSpace(.sRGB) ?? lineColors[i]
+                rowBytes[i] = (
+                    UInt8(clamping: Int((c.redComponent * 255).rounded())),
+                    UInt8(clamping: Int((c.greenComponent * 255).rounded())),
+                    UInt8(clamping: Int((c.blueComponent * 255).rounded()))
+                )
+            }
+
+            // Match Webamp's percentToRange((1 - value/range) * 100, 0, GRAPH_HEIGHT - 1):
+            // gain= -12 → row 18, gain= 0 → row 9, gain= +12 → row 0.
+            func sampleY(at x: Int) -> Int {
+                let position = Double(x) / Double(maxX) * Double(bandCount - 1)
+                let lower = min(Int(position), bandCount - 2)
+                let frac = CGFloat(position - Double(lower))
+                let gain = CGFloat(bands[lower]) + (CGFloat(bands[lower + 1]) - CGFloat(bands[lower])) * frac
+                let yDisplay = CGFloat(height - 1) * (12.0 - gain) / 24.0
+                return max(0, min(height - 1, Int(yDisplay.rounded())))
+            }
+
+            var lastDisplayY = sampleY(at: 0)
+            for x in 0...maxX {
+                let displayY = sampleY(at: x)
+                let topDisplay = min(displayY, lastDisplayY)
+                let h = 1 + abs(lastDisplayY - displayY)
+                for dy in 0..<h {
+                    let dispRow = topDisplay + dy
+                    let cgY = height - 1 - dispRow // CGContext is bottom-left.
+                    let i = cgY * stride + x * 4
+                    let c = rowBytes[dispRow]
+                    buf[i]     = c.r
+                    buf[i + 1] = c.g
+                    buf[i + 2] = c.b
+                    buf[i + 3] = 0xFF
+                }
+                lastDisplayY = displayY
+            }
+        }
+
+        guard let cg = ctx.makeImage() else {
+            return NSImage(size: NSSize(width: width, height: height))
+        }
+        return NSImage(cgImage: cg, size: NSSize(width: width, height: height))
     }
 }
 
