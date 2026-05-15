@@ -1,13 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// Sprite-based text renderer for playlist time displays
-/// Uses CHARACTER sprites from TEXT.BMP with colors from PLEDIT.TXT
-///
-/// Unlike SkinnedText (which uses raw character sprites), this component:
-/// 1. Applies PLEDIT.TXT normalTextColor for proper skin theming
-/// 2. Uses monospaced layout for time display (5px char width + 1px spacing)
-/// 3. Optimized for playlist info bar rendering
+/// Time display in the playlist info bar.
 struct PlaylistTimeText: View {
     @Environment(SkinManager.self) var skinManager
 
@@ -19,15 +13,14 @@ struct PlaylistTimeText: View {
         self.spacing = spacing
     }
 
-    /// Get the text color from PLEDIT.TXT (Normal=#00FF00 or skin-specific)
-    private var textColor: Color {
+    private var fallbackColor: Color {
         skinManager.currentSkin?.playlistStyle.normalTextColor ?? Color(red: 0, green: 1.0, blue: 0)
     }
 
     var body: some View {
         PlaylistBitmapText(
             text,
-            color: textColor,
+            fallbackColor: fallbackColor,
             spacing: spacing,
             fallbackSize: 8,
             fallbackDesign: Font.Design.monospaced

@@ -1,26 +1,25 @@
 import SwiftUI
 import AppKit
 
-/// General-purpose bitmap text renderer for the playlist using TEXT.BMP glyphs.
-/// Applies PLEDIT-based colors and falls back to system text when glyphs are missing.
+/// Bitmap text renderer using TEXT.BMP glyphs; uses `fallbackColor` for missing glyphs.
 struct PlaylistBitmapText: View {
     @Environment(SkinManager.self) var skinManager
 
     let text: String
-    let color: Color
+    let fallbackColor: Color
     let spacing: CGFloat
     let fallbackSize: CGFloat
     let fallbackDesign: Font.Design
 
     init(
         _ text: String,
-        color: Color,
+        fallbackColor: Color,
         spacing: CGFloat = 1,
         fallbackSize: CGFloat = 9,
         fallbackDesign: Font.Design = .default
     ) {
         self.text = text
-        self.color = color
+        self.fallbackColor = fallbackColor
         self.spacing = spacing
         self.fallbackSize = fallbackSize
         self.fallbackDesign = fallbackDesign
@@ -41,11 +40,10 @@ struct PlaylistBitmapText: View {
                         .antialiased(false)
                         .resizable()
                         .frame(width: img.size.width, height: img.size.height)
-                        .colorMultiply(color)
                 } else {
                     Text(String(ch))
                         .font(.system(size: fallbackSize, design: fallbackDesign))
-                        .foregroundColor(color)
+                        .foregroundColor(fallbackColor)
                 }
             }
         }
