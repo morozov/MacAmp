@@ -135,7 +135,6 @@ struct MainWindowFullLayer: View {
     private func buildSpectrumAnalyzer() -> some View {
         VisualizerView()
             .frame(width: VisualizerLayout.width, height: VisualizerLayout.height)
-            .background(Color.black.opacity(0.5))
             .at(Layout.spectrumAnalyzer)
     }
 
