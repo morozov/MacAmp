@@ -9,7 +9,6 @@ struct WinampPlaylistWindow: View {
     @Environment(WindowFocusState.self) private var windowFocusState
 
     @State private var ui = PlaylistWindowInteractionState()
-    @State private var menuDelegate = PlaylistMenuDelegate()
     @State private var sizeState = PlaylistWindowSizeState()
 
     private var windowWidth: CGFloat { sizeState.windowWidth }
@@ -31,7 +30,6 @@ struct WinampPlaylistWindow: View {
         PlaylistMenuPresenter(
             skinManager: skinManager,
             audioPlayer: audioPlayer,
-            menuDelegate: menuDelegate,
             windowHeight: windowHeight,
             windowWidth: windowWidth,
             selectedIndices: ui.selectedIndices

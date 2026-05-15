@@ -379,6 +379,12 @@ struct SkinSprites {
             Sprite(name: "PLAYLIST_LOAD_LIST", x: 204, y: 149, width: 22, height: 18),
             Sprite(name: "PLAYLIST_LOAD_LIST_SELECTED", x: 227, y: 149, width: 22, height: 18),
 
+            // Popup menu side-bars: 3px vertical chrome drawn at popup-left - 3.
+            Sprite(name: "PLAYLIST_ADD_MENU_BAR", x: 48, y: 111, width: 3, height: 54),
+            Sprite(name: "PLAYLIST_REMOVE_MENU_BAR", x: 100, y: 111, width: 3, height: 72),
+            Sprite(name: "PLAYLIST_MISC_MENU_BAR", x: 200, y: 111, width: 3, height: 54),
+            Sprite(name: "PLAYLIST_LIST_BAR", x: 250, y: 111, width: 3, height: 54),
+
             // Transport control buttons (tiny gold buttons in info bar) - 6 buttons total
             // Located in dark horizontal bar of PLEDIT.BMP sprite sheet (Y:62 normal, Y:72 active)
             Sprite(name: "PLAYLIST_PREV_BUTTON", x: 136, y: 62, width: 10, height: 9),
