@@ -32,7 +32,7 @@ enum WinampMainWindowLayout {
 
     // Shuffle/Repeat buttons (to the right of eject)
     static let shuffleButton = CGPoint(x: 164, y: 89)
-    static let repeatButton = CGPoint(x: 211, y: 89)
+    static let repeatButton = CGPoint(x: 210, y: 89)
 
     // EQ/Playlist buttons
     static let eqButton = CGPoint(x: 219, y: 58)
