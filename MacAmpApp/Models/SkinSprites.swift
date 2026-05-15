@@ -450,12 +450,15 @@ extension SkinSprites {
     private static let fontLookup: [Character: (Int, Int)] = {
         var map: [Character: (Int, Int)] = [:]
         func set(_ ch: Character, _ r: Int, _ c: Int) { map[ch] = (r, c) }
-        let row0 = "abcdefghijklmnopqrstuvwxyz\"@ "
+        let row0 = "abcdefghijklmnopqrstuvwxyz\"@"
         for (i, ch) in row0.enumerated() { set(ch, 0, i) }
+        set(" ", 0, 30)
         let row1 = "0123456789….:()-'!_+\\/[]^&%,=$#"
         for (i, ch) in row1.enumerated() { set(ch, 1, i) }
         let row2: [(Character, Int)] = [("Å",0),("Ö",1),("Ä",2),("?",3),("*",4)]
         for (ch, col) in row2 { set(ch, 2, col) }
+        set("<", 1, 22); set(">", 1, 23)
+        set("{", 1, 22); set("}", 1, 23)
         return map
     }()
 
