@@ -24,6 +24,9 @@ struct Skin: @unchecked Sendable {
     // Track which optional sheets were actually loaded (not fallback)
     let loadedSheets: Set<String>
 
+    // 19-row EQ preview palette from EQ_GRAPH_LINE_COLORS.
+    let eqGraphLineColors: [NSColor]
+
     // Additional skin elements (region maps, letter widths, etc.) can be added as parsing expands.
 }
 

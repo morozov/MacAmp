@@ -18,7 +18,8 @@ struct SpriteResolverTests {
             ),
             images: [:],
             cursors: [:],
-            loadedSheets: []
+            loadedSheets: [],
+            eqGraphLineColors: []
         )
     }
 
@@ -35,7 +36,8 @@ struct SpriteResolverTests {
             playlistStyle: emptySkin.playlistStyle,
             images: ["DIGIT_3": NSImage(size: NSSize(width: 9, height: 13))],
             cursors: [:],
-            loadedSheets: []
+            loadedSheets: [],
+            eqGraphLineColors: []
         )
         let resolver = SpriteResolver(skin: skin)
         #expect(resolver.resolve(.digit(3)) == "DIGIT_3")
