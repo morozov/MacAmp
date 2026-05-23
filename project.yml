@@ -27,7 +27,7 @@ targets:
         buildPhase: resources
     resources:
       - path: MacAmpApp/Skins
-      - path: MacAmpApp/Assets.xcassets
+      - path: MacAmpApp/AppIcon.icon
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hankyeomans.MacAmp
