@@ -81,17 +81,11 @@ final class WinampMainWindowInteractionState {
             }
         }
 
-        let width = geometry.size.width
-        let x = min(max(0, value.location.x), width)
-        let progress = Double(x / width)
-
-        scrubbingProgress = progress
+        scrubbingProgress = positionProgress(for: value, in: geometry)
     }
 
     func handlePositionDragEnd(_ value: DragGesture.Value, in geometry: GeometryProxy, audioPlayer: AudioPlayer) {
-        let width = geometry.size.width
-        let x = min(max(0, value.location.x), width)
-        let progress = Double(x / width)
+        let progress = positionProgress(for: value, in: geometry)
 
         scrubbingProgress = progress
         audioPlayer.seekToPercent(progress, resume: wasPlayingPreScrub)
@@ -102,6 +96,15 @@ final class WinampMainWindowInteractionState {
             guard !Task.isCancelled else { return }
             self?.isScrubbing = false
         }
+    }
+
+    private func positionProgress(for value: DragGesture.Value, in geometry: GeometryProxy) -> Double {
+        let thumbWidth: CGFloat = 29
+        let trackableWidth = geometry.size.width - thumbWidth
+        guard trackableWidth > 0 else { return 0 }
+        let centeredX = value.location.x - thumbWidth / 2
+        let clamped = min(max(0, centeredX), trackableWidth)
+        return Double(clamped / trackableWidth)
     }
 
     // MARK: - Time Helpers
