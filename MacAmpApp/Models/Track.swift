@@ -1,5 +1,20 @@
 import Foundation
 
+// MARK: - CueSlice
+
+/// A logical track defined by a CUE sheet entry. A CUE-derived `Track` carries
+/// a `cueSlice` describing the slice's position within the underlying audio
+/// file: `startTime` is the absolute offset in the file, `duration` is the
+/// gap to the next slice's start (or to EOF for the last slice).
+struct CueSlice: Equatable, Sendable {
+    let startTime: Double
+    let duration: Double
+    let cueSheetURL: URL
+
+    /// Absolute end time within the underlying audio file.
+    var endTime: Double { startTime + duration }
+}
+
 // MARK: - Track
 
 /// Represents a single audio or video track in the playlist.
@@ -10,6 +25,21 @@ struct Track: Identifiable, Equatable, Sendable {
     var title: String
     var artist: String
     var duration: Double
+    var cueSlice: CueSlice?
+
+    init(
+        url: URL,
+        title: String,
+        artist: String,
+        duration: Double,
+        cueSlice: CueSlice? = nil
+    ) {
+        self.url = url
+        self.title = title
+        self.artist = artist
+        self.duration = duration
+        self.cueSlice = cueSlice
+    }
 
     /// Returns true if this track is an internet radio stream (HTTP/HTTPS URL)
     /// Streams cannot be played via AudioPlayer (which uses AVAudioFile for local files only)
@@ -18,6 +48,9 @@ struct Track: Identifiable, Equatable, Sendable {
         let scheme = url.scheme?.lowercased()
         return !url.isFileURL && (scheme == "http" || scheme == "https")
     }
+
+    /// True when this track plays a CUE-defined slice of `url` rather than the whole file.
+    var isCueSlice: Bool { cueSlice != nil }
 
     static func == (lhs: Track, rhs: Track) -> Bool {
         lhs.id == rhs.id

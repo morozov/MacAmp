@@ -125,9 +125,15 @@ final class AudioEngineController {
 
     // MARK: - Audio Scheduling
 
-    /// Schedules audio playback from a specific time.
-    /// - Returns: `true` if audio was scheduled, `false` if track ended.
-    func scheduleFrom(time: Double, seekID: UUID?) -> Bool {
+    /// Schedules audio playback from a specific time, optionally bounded by an end time.
+    /// - Parameters:
+    ///   - time: Absolute start time within the loaded file (seconds).
+    ///   - endTime: Optional absolute end time; when non-nil, the scheduled segment ends here
+    ///     and the completion handler fires at that boundary. Used by CUE slice playback to
+    ///     trigger track advance at the slice end rather than at EOF.
+    ///   - seekID: Completion-handler tag for stale-completion filtering.
+    /// - Returns: `true` if audio was scheduled, `false` if the start is at or past EOF (or past `endTime`).
+    func scheduleFrom(time: Double, endTime: Double? = nil, seekID: UUID?) -> Bool {
         guard let file = audioFile else {
             AppLog.warn(.audio, "scheduleFrom: No audio file loaded")
             return false
@@ -143,9 +149,19 @@ final class AudioEngineController {
             return false
         }
 
-        let startFrame = AVAudioFramePosition(max(0, min(time, fileDuration)) * sampleRate)
-        let totalFrames = file.length
-        let framesRemaining = max(0, totalFrames - startFrame)
+        let clampedStart = max(0, min(time, fileDuration))
+        let startFrame = AVAudioFramePosition(clampedStart * sampleRate)
+
+        // Determine end frame: bounded by endTime if provided, otherwise EOF.
+        let endFrame: AVAudioFramePosition
+        if let endTime {
+            let clampedEnd = max(clampedStart, min(endTime, fileDuration))
+            endFrame = AVAudioFramePosition(clampedEnd * sampleRate)
+        } else {
+            endFrame = file.length
+        }
+
+        let framesRemaining = max(0, endFrame - startFrame)
 
         playheadOffset = Double(startFrame) / sampleRate
         playerNode.stop()
@@ -178,6 +194,10 @@ final class AudioEngineController {
         guard sampleRate > 0 else { return 0 }
         return Double(file.length) / sampleRate
     }
+
+    /// The URL of the currently loaded audio file, or nil if none.
+    /// Used by CUE-slice playback to skip a reload when consecutive slices share a file.
+    var currentFileURL: URL? { audioFile?.url }
 
     // MARK: - Audio Workgroup
 

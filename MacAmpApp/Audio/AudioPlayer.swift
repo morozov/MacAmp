@@ -49,6 +49,18 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
     @ObservationIgnored private var isHandlingCompletion = false
     @ObservationIgnored private var seekGuardActive = false
     @ObservationIgnored private var playlistGeneration: UInt64 = 0
+
+    /// CUE slices currently covered by a single scheduled segment, in playback order.
+    /// The scheduled segment spans from `runSlices.first.cueSlice.startTime` to
+    /// `runSlices.last.cueSlice.endTime`, which lets the MP3 / AAC decoder run
+    /// uninterrupted across slice boundaries (separate `scheduleSegment` calls
+    /// snap to compressed-frame boundaries and lose up to ~26ms of audio per
+    /// transition for MP3 — exactly the sub-second cut a "gapless" CUE album
+    /// would otherwise suffer). The progress callback compares the engine's
+    /// absolute time against each slice's bounds and virtually advances state
+    /// when it crosses one, so each slice's seek bar, "now playing", and
+    /// `currentTrack` update without touching the player.
+    @ObservationIgnored private var runSlices: [Track] = []
     var currentTrackURL: URL?
     var currentTitle: String = "No Track Loaded"
     var currentDuration: Double = 0.0
@@ -177,11 +189,27 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         // Wire engine callbacks
         engine.onProgressUpdate = { [weak self] currentTime, progress in
             guard let self else { return }
-            self.currentTime = currentTime
-            if self.currentDuration > 0 {
-                self.playbackProgress = progress
+            if self.currentTrack?.cueSlice != nil {
+                // Virtual slice transition: the engine is playing one segment that
+                // spans the whole run, so progress crossing a slice boundary means
+                // we've moved to the next slice — advance state without touching
+                // the player. Search the run rather than stepping one, so a long
+                // tick interval doesn't strand us on a slice we've already passed.
+                if let covering = self.sliceCovering(absoluteTime: currentTime),
+                   covering.id != self.currentTrack?.id {
+                    self.virtualSliceAdvance(to: covering)
+                }
+                guard let slice = self.currentTrack?.cueSlice else { return }
+                let sliceCurrent = max(0, min(currentTime - slice.startTime, slice.duration))
+                self.currentTime = sliceCurrent
+                self.playbackProgress = slice.duration > 0 ? sliceCurrent / slice.duration : 0
             } else {
-                self.playbackProgress = 0
+                self.currentTime = currentTime
+                if self.currentDuration > 0 {
+                    self.playbackProgress = progress
+                } else {
+                    self.playbackProgress = 0
+                }
             }
         }
         engine.onPlaybackEnded = { [weak self] seekID in
@@ -310,20 +338,54 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         playlistController.addTrack(track)
     }
 
+    /// Add the tracks parsed from a CUE sheet directly to the playlist, bypassing
+    /// the async metadata-load placeholder mechanism used for whole-file adds.
+    /// Skips the add if the playlist already contains entries from the same sheet.
+    /// - Returns: true if tracks were added, false if the sheet was already present.
+    @discardableResult
+    func addCueTracks(_ tracks: [Track]) -> Bool {
+        guard let sheetURL = tracks.first?.cueSlice?.cueSheetURL else { return false }
+        if playlistController.containsCueSheet(url: sheetURL) {
+            AppLog.debug(.audio, "CUE sheet already in playlist, skipping: \(sheetURL.lastPathComponent)")
+            return false
+        }
+        for track in tracks {
+            playlistController.addTrack(track)
+        }
+        return true
+    }
+
     func removeTrack(at index: Int) {
+        let removedID: UUID? = playlistController.playlist.indices.contains(index)
+            ? playlistController.playlist[index].id
+            : nil
+        let removedIsInRun = removedID != nil && runSlices.contains { $0.id == removedID }
         playlistController.removeTrack(at: index)
+        // If the removed slice was part of the current scheduled run, the engine
+        // segment still spans through its data and would play the just-removed
+        // audio. Re-seek to the current position to rebuild the run from the new
+        // playlist; this is a brief gap on removal, but the alternative is the
+        // user hearing what they just deleted. Removals outside the run leave the
+        // run valid — Track ids are stable, so the runSlices array still resolves
+        // to the same audio independent of playlist-index shifts.
+        if removedIsInRun, let current = currentTrack, current.isCueSlice,
+           isPlaying || isPaused, engine.audioFile != nil {
+            seek(to: currentTime, resume: isPlaying)
+        }
     }
 
     func replacePlaylist(with tracks: [Track]) {
         playlistGeneration &+= 1
         playlistController.clear()
         for track in tracks { playlistController.addTrack(track) }
+        runSlices = []
         AppLog.debug(.audio, "Replaced playlist with \(tracks.count) tracks")
     }
 
     func clearPlaylist() {
         playlistGeneration &+= 1
         playlistController.clear()
+        runSlices = []
     }
 
     func playTrack(track: Track) {
@@ -373,7 +435,7 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
 
         switch mediaType {
         case .audio:
-            loadAudioFile(url: track.url)
+            loadAudioFile(for: track)
         case .video:
             videoPlaybackController.loadVideo(url: track.url, autoPlay: false)
             transition(to: .playing)
@@ -391,22 +453,51 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         return videoExtensions.contains(url.pathExtension.lowercased()) ? .video : .audio
     }
 
-    private func loadAudioFile(url: URL) {
+    private func loadAudioFile(for track: Track) {
         do {
-            try engine.loadFile(url: url)
+            let normalizedTrackURL = track.url.standardizedFileURL
+            let loadedURL = engine.currentFileURL?.standardizedFileURL
+            let canReuseLoadedFile = track.isCueSlice
+                && loadedURL == normalizedTrackURL
+                && engine.audioFile != nil
+
+            if !canReuseLoadedFile {
+                try engine.loadFile(url: track.url)
+            }
+
             currentSeekID = UUID()
-            _ = engine.scheduleFrom(time: 0, seekID: currentSeekID)
+            if let slice = track.cueSlice {
+                // Schedule the whole run of consecutive same-file slices as ONE segment.
+                // This keeps the decoder running across slice boundaries (separate
+                // scheduleSegment calls would each re-prime the MP3 decoder, eating
+                // ~26ms of audio at every transition). Slice-level state updates
+                // happen in the progress callback.
+                runSlices = computeRunSlices(startingAt: track)
+                let runEndTime = runSlices.last?.cueSlice?.endTime ?? slice.endTime
+                _ = engine.scheduleFrom(
+                    time: slice.startTime,
+                    endTime: runEndTime,
+                    seekID: currentSeekID
+                )
+            } else {
+                runSlices = []
+                _ = engine.scheduleFrom(time: 0, seekID: currentSeekID)
+            }
             engine.setVolume(volume)
             engine.setBalance(balance)
 
-            // Sync currentDuration from file (fallback when metadata duration is 0/missing)
-            let fileDuration = engine.currentFileDuration
-            if fileDuration.isFinite && fileDuration > 0 {
-                currentDuration = fileDuration
+            // For non-CUE tracks, sync currentDuration from the loaded file.
+            // For CUE slices, currentDuration was already set from track.duration (slice length)
+            // in playTrack and must not be overwritten with the file duration.
+            if !track.isCueSlice {
+                let fileDuration = engine.currentFileDuration
+                if fileDuration.isFinite && fileDuration > 0 {
+                    currentDuration = fileDuration
+                }
             }
 
             Task { @MainActor [weak self] in
-                if let props = await MetadataLoader.loadAudioProperties(from: url) {
+                if let props = await MetadataLoader.loadAudioProperties(from: track.url) {
                     self?.channelCount = props.channelCount
                     self?.bitrate = props.bitrate
                     self?.sampleRate = props.sampleRate
@@ -417,6 +508,61 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
             engine.clearFile()
             transition(to: .stopped(.manual))
         }
+    }
+
+    /// Walk the playlist forward from `start` collecting every consecutive same-file
+    /// CUE slice whose `cueSlice.startTime` equals the previous slice's `endTime`.
+    /// The result is the run of slices a single `scheduleSegment` call covers so the
+    /// decoder runs uninterrupted. Stops at: shuffle / repeat-one (where "next" is
+    /// not the sequentially-next track), a non-CUE track, a different-file slice,
+    /// a non-contiguous slice, or end of playlist (without wrapping for repeat-all
+    /// to avoid an unbounded run).
+    private func computeRunSlices(startingAt start: Track) -> [Track] {
+        guard start.isCueSlice else { return [] }
+        let playlist = playlistController.playlist
+        guard let startIdx = playlist.firstIndex(of: start) else { return [start] }
+        if playlistController.shuffleEnabled || playlistController.repeatMode == .one {
+            return [start]
+        }
+        var run: [Track] = [start]
+        let runURL = start.url.standardizedFileURL
+        var idx = startIdx
+        while idx + 1 < playlist.count {
+            idx += 1
+            let candidate = playlist[idx]
+            guard let candidateSlice = candidate.cueSlice,
+                  candidate.url.standardizedFileURL == runURL,
+                  let lastSlice = run.last?.cueSlice,
+                  abs(candidateSlice.startTime - lastSlice.endTime) < 0.001 else {
+                break
+            }
+            run.append(candidate)
+        }
+        return run
+    }
+
+    /// Find the slice in the current run whose `[startTime, endTime)` contains
+    /// the engine's absolute file time. Returns nil when `absoluteTime` is outside
+    /// every slice in the run (e.g., transient tail past the run end before the
+    /// completion handler fires).
+    private func sliceCovering(absoluteTime: Double) -> Track? {
+        runSlices.first(where: { track in
+            guard let slice = track.cueSlice else { return false }
+            return absoluteTime >= slice.startTime && absoluteTime < slice.endTime
+        })
+    }
+
+    /// Advance observable state to a slice that the engine is already playing as
+    /// part of the current run. No engine interaction — the audio has not been
+    /// stopped or rescheduled, only our bookkeeping has caught up to it.
+    private func virtualSliceAdvance(to track: Track) {
+        playlistController.updatePosition(with: track)
+        currentTrack = track
+        currentTitle = "\(track.artist) - \(track.title)"
+        currentDuration = track.duration
+        currentTrackURL = track.url
+        playlistController.resetEnded()
+        onPlaylistAdvanceRequest?(track)
     }
 
     // MARK: - Transport
@@ -485,6 +631,7 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
 
         engine.stopAudio()
         currentSeekID = UUID()
+        runSlices = []
         _ = engine.scheduleFrom(time: 0, seekID: currentSeekID)
 
         currentTrack = nil
@@ -583,8 +730,13 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
             return
         }
 
-        let fileDuration = engine.currentFileDuration
-        let targetTime = percent * fileDuration
+        // For CUE slices, percent is relative to the slice — seek() does the offset mapping.
+        let targetTime: Double
+        if let slice = currentTrack?.cueSlice {
+            targetTime = percent * slice.duration
+        } else {
+            targetTime = percent * engine.currentFileDuration
+        }
         seek(to: targetTime, resume: resume)
     }
 
@@ -604,12 +756,38 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         currentSeekID = UUID()
         engine.invalidateProgressTimer()
 
-        let fileDuration = engine.currentFileDuration
-        let targetProgress = fileDuration > 0 ? time / fileDuration : 0
+        // For CUE slices, `time` is slice-relative; translate to absolute file time
+        // and bound the scheduled segment to the END of the current run, not just
+        // the current slice. Bounding to slice.endTime would split the single-segment
+        // run on every seek and cost the gapless property until the next track change.
+        // Recompute the run against the current playlist — anything that changed it
+        // (track removal, shuffle/repeat toggle) needs to flow into the new bound.
+        let absoluteTime: Double
+        let scheduleEndTime: Double?
+        let targetProgress: Double
+        let sliceRelativeTime: Double
+        if let current = currentTrack, let slice = current.cueSlice {
+            runSlices = computeRunSlices(startingAt: current)
+            let clampedInSlice = max(0, min(time, slice.duration))
+            absoluteTime = slice.startTime + clampedInSlice
+            scheduleEndTime = runSlices.last?.cueSlice?.endTime ?? slice.endTime
+            targetProgress = slice.duration > 0 ? clampedInSlice / slice.duration : 0
+            sliceRelativeTime = clampedInSlice
+        } else {
+            let fileDuration = engine.currentFileDuration
+            absoluteTime = time
+            scheduleEndTime = nil
+            targetProgress = fileDuration > 0 ? time / fileDuration : 0
+            sliceRelativeTime = time
+        }
 
-        let audioScheduled = engine.scheduleFrom(time: time, seekID: currentSeekID)
+        let audioScheduled = engine.scheduleFrom(
+            time: absoluteTime,
+            endTime: scheduleEndTime,
+            seekID: currentSeekID
+        )
 
-        currentTime = time
+        currentTime = sliceRelativeTime
         playbackProgress = targetProgress
 
         if audioScheduled && shouldPlay {
@@ -673,13 +851,24 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
             if self.shouldIgnoreCompletion(from: fromSeekID) { return }
 
             self.isHandlingCompletion = true
+            // The scheduled segment can span an entire run of consecutive same-file
+            // CUE slices, so when it completes we want to advance past the WHOLE run,
+            // not into the next slice within it. Snap currentTrack to the last slice
+            // in the run before computing the next track — the 0.1s progress timer
+            // may not have caught up to it yet at the moment completion fires.
+            if let lastInRun = self.runSlices.last,
+               self.currentTrack?.id != lastInRun.id {
+                self.virtualSliceAdvance(to: lastInRun)
+            }
+            self.runSlices = []
             self.transition(to: .stopped(.completed))
             self.engine.invalidateProgressTimer()
             self.playbackProgress = 1
-            // Use engine file duration (authoritative for audio) to avoid jump if
-            // currentDuration was set from metadata (AVAsset.duration).
-            // For video, engine.audioFile may be stale — use currentDuration.
-            if self.currentMediaType == .audio, self.engine.currentFileDuration > 0 {
+            // CUE slices end at slice.duration (slice-relative). Non-CUE audio uses the
+            // engine's file duration (authoritative). Video falls back to currentDuration.
+            if let slice = self.currentTrack?.cueSlice {
+                self.currentTime = slice.duration
+            } else if self.currentMediaType == .audio, self.engine.currentFileDuration > 0 {
                 self.currentTime = self.engine.currentFileDuration
             } else {
                 self.currentTime = self.currentDuration

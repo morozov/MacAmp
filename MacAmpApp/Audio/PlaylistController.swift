@@ -113,6 +113,15 @@ final class PlaylistController {
                pendingTrackURLs.contains(normalizedURL)
     }
 
+    /// Check if any playlist entry was sourced from the given CUE sheet.
+    /// Used to dedup repeated additions of the same `.cue`.
+    func containsCueSheet(url: URL) -> Bool {
+        let normalizedURL = url.standardizedFileURL
+        return playlist.contains { track in
+            track.cueSlice?.cueSheetURL.standardizedFileURL == normalizedURL
+        }
+    }
+
     /// Remove a track at the specified index
     func removeTrack(at index: Int) {
         guard playlist.indices.contains(index) else { return }

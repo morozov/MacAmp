@@ -96,7 +96,8 @@ struct AppCommands: Commands {
     private func presentOpenPanel() {
         let panel = NSOpenPanel()
         panel.title = "Open Audio Files"
-        panel.allowedContentTypes = [.audio]
+        let cueType = UTType(filenameExtension: "cue") ?? .plainText
+        panel.allowedContentTypes = [.audio, cueType]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
 
@@ -105,7 +106,46 @@ struct AppCommands: Commands {
             Task { @MainActor in
                 let wasEmpty = audioPlayer.playlist.isEmpty
                 for url in panel.urls {
-                    audioPlayer.addTrack(url: url)
+                    let ext = url.pathExtension.lowercased()
+                    if ext == "cue" {
+                        // Direct `.cue` open is an explicit user request, so a parse
+                        // failure surfaces as an alert rather than being swallowed.
+                        do {
+                            let parsed = try await CueParser.parse(fileURL: url)
+                            audioPlayer.addCueTracks(parsed.tracks)
+                        } catch {
+                            WinampAlertHelper.showError(
+                                title: "Failed to Load CUE Sheet",
+                                message: error.localizedDescription
+                            )
+                        }
+                    } else if let sidecar = CueParser.sidecarCueURL(for: url) {
+                        // Opportunistic sidecar: parse failure or a FILE directive that
+                        // resolves to a different audio file falls back silently to a
+                        // normal whole-file add.
+                        var sidecarConsumed = false
+                        do {
+                            let parsed = try await CueParser.parse(fileURL: sidecar)
+                            if parsed.audioFileURL.standardizedFileURL == url.standardizedFileURL {
+                                sidecarConsumed = audioPlayer.addCueTracks(parsed.tracks)
+                            } else {
+                                AppLog.debug(
+                                    .audio,
+                                    "Ignoring sidecar CUE \(sidecar.lastPathComponent): FILE resolves to '\(parsed.audioFileURL.lastPathComponent)', expected '\(url.lastPathComponent)'"
+                                )
+                            }
+                        } catch {
+                            AppLog.debug(
+                                .audio,
+                                "Ignoring sidecar CUE \(sidecar.lastPathComponent): \(error.localizedDescription)"
+                            )
+                        }
+                        if !sidecarConsumed {
+                            audioPlayer.addTrack(url: url)
+                        }
+                    } else {
+                        audioPlayer.addTrack(url: url)
+                    }
                 }
                 if wasEmpty, let firstTrack = audioPlayer.playlist.first {
                     await playbackCoordinator.play(track: firstTrack)

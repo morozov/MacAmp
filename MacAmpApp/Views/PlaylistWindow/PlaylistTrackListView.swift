@@ -62,7 +62,9 @@ struct PlaylistTrackListView: View {
     }
 
     private func trackTextColor(track: Track) -> Color {
-        if let currentTrack = playbackCoordinator.currentTrack, currentTrack.url == track.url {
+        if let currentTrack = playbackCoordinator.currentTrack,
+           currentTrack.url == track.url,
+           currentTrack.cueSlice?.startTime == track.cueSlice?.startTime {
             return playlistStyle.currentTextColor
         }
         return playlistStyle.normalTextColor
