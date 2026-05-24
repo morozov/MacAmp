@@ -57,7 +57,8 @@ final class PlaylistWindowActions: NSObject {
         let openPanel = NSOpenPanel()
         let m3uType = UTType(filenameExtension: "m3u") ?? .plainText
         let m3u8Type = UTType(filenameExtension: "m3u8") ?? .plainText
-        openPanel.allowedContentTypes = [.audio, m3uType, m3u8Type, .movie]
+        let cueType = UTType(filenameExtension: "cue") ?? .plainText
+        openPanel.allowedContentTypes = [.audio, m3uType, m3u8Type, cueType, .movie]
         openPanel.allowsMultipleSelection = true
         openPanel.canChooseDirectories = false
         openPanel.title = "Add Files to Playlist"
@@ -92,6 +93,22 @@ final class PlaylistWindowActions: NSObject {
             let ext = url.pathExtension.lowercased()
             if ext == "m3u" || ext == "m3u8" {
                 await parseAndAddM3U(url, audioPlayer: audioPlayer)
+            } else if ext == "cue" {
+                await parseAndAddCue(url, audioPlayer: audioPlayer, reportFailureLoudly: true)
+            } else if let sidecar = CueParser.sidecarCueURL(for: url) {
+                // Opportunistic sidecar: a sidecar parse failure or a FILE-directive
+                // mismatch (CUE points at a different audio file) does NOT block the
+                // audio file from being added the normal way. Direct CUE opens fail
+                // loudly; sidecar misses fall back silently.
+                let added = await parseAndAddCue(
+                    sidecar,
+                    audioPlayer: audioPlayer,
+                    reportFailureLoudly: false,
+                    expectedAudioURL: url
+                )
+                if !added {
+                    audioPlayer.addTrack(url: url)
+                }
             } else {
                 audioPlayer.addTrack(url: url)
             }
@@ -109,6 +126,51 @@ final class PlaylistWindowActions: NSObject {
             addEntries(entries, to: audioPlayer)
         case .failure(let error):
             showErrorAlert("Failed to Load M3U Playlist", error: error)
+        }
+    }
+
+    /// Parse a CUE sheet and add its tracks to the playlist.
+    /// - Parameters:
+    ///   - reportFailureLoudly: true for direct `.cue` opens, false for sidecar discovery.
+    ///   - expectedAudioURL: when non-nil (sidecar path), the CUE's `FILE` directive
+    ///     MUST resolve to this audio file; on mismatch the sheet is ignored
+    ///     (debug-log only) and `false` is returned so the caller adds the original
+    ///     audio file normally.
+    /// - Returns: true if tracks were added, false on parse failure, FILE mismatch,
+    ///   or when the sheet was already in the playlist.
+    @discardableResult
+    private func parseAndAddCue(
+        _ url: URL,
+        audioPlayer: AudioPlayer,
+        reportFailureLoudly: Bool,
+        expectedAudioURL: URL? = nil
+    ) async -> Bool {
+        let result: Result<CueParseResult, Error>
+        do {
+            let parsed = try await CueParser.parse(fileURL: url)
+            result = .success(parsed)
+        } catch {
+            result = .failure(error)
+        }
+
+        switch result {
+        case .success(let parsed):
+            if let expectedAudioURL,
+               parsed.audioFileURL.standardizedFileURL != expectedAudioURL.standardizedFileURL {
+                AppLog.debug(
+                    .audio,
+                    "Ignoring sidecar CUE \(url.lastPathComponent): FILE resolves to '\(parsed.audioFileURL.lastPathComponent)', expected '\(expectedAudioURL.lastPathComponent)'"
+                )
+                return false
+            }
+            return audioPlayer.addCueTracks(parsed.tracks)
+        case .failure(let error):
+            if reportFailureLoudly {
+                showErrorAlert("Failed to Load CUE Sheet", error: error)
+            } else {
+                AppLog.debug(.audio, "Ignoring sidecar CUE \(url.lastPathComponent): \(error.localizedDescription)")
+            }
+            return false
         }
     }
 
@@ -243,6 +305,20 @@ final class PlaylistWindowActions: NSObject {
         guard !audioPlayer.playlist.isEmpty else {
             showAlert("Save List", "Playlist is empty")
             return
+        }
+
+        // Warn if the playlist contains CUE-derived entries — M3U cannot represent
+        // slicing, so on reload the per-URL dedup collapses sibling slices to one row.
+        if audioPlayer.playlist.contains(where: { $0.isCueSlice }) {
+            let alert = NSAlert()
+            alert.messageText = "Save with CUE slicing loss?"
+            alert.informativeText = "This playlist contains CUE-sliced tracks. M3U cannot represent CUE slicing — on reload, sliced tracks will collapse back to the underlying audio file."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Save Anyway")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() != .alertFirstButtonReturn {
+                return
+            }
         }
 
         let savePanel = NSSavePanel()

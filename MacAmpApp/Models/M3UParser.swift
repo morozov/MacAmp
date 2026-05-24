@@ -127,6 +127,10 @@ struct M3UWriter {
     static func write(tracks: [Track], to url: URL) throws {
         var lines = ["#EXTM3U"]
 
+        // CUE-derived tracks write one EXTINF line per slice with the shared underlying URL.
+        // M3U has no representation for an in-file offset, so on reload the per-URL dedup in
+        // PlaylistController.containsTrack will collapse sibling slices back to a single
+        // whole-file entry. Save List displays a warning to make this loss visible.
         for track in tracks {
             let duration = track.isStream ? -1 : Int(track.duration)
             let displayTitle = track.artist.isEmpty || track.artist == "Unknown Artist"
