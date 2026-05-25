@@ -49,6 +49,7 @@ struct MacAmpApp: App {
             windowFocusState: windowFocusState
         )
         WindowCoordinator.shared = coordinator
+        WindowCoordinatorBox.shared.value = coordinator
         dockingController.windowCoordinator = coordinator
     }
 

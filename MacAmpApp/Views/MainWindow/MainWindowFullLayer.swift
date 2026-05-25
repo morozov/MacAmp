@@ -175,7 +175,11 @@ struct MainWindowFullLayer: View {
 
     @ViewBuilder
     private func buildWindowToggleButtons() -> some View {
-        let coordinator = WindowCoordinator.shared
+        // Read through the observable box so SwiftUI re-renders (and action
+        // closures recapture the coordinator) when the singleton is published
+        // from MacAmpApp.init — `WindowCoordinator.shared` is a plain static
+        // and isn't tracked by the Observation runtime.
+        let coordinator = WindowCoordinatorBox.shared.value
         let eqVisible = coordinator?.isEQWindowVisible ?? false
         let playlistVisible = coordinator?.isPlaylistWindowVisible ?? false
 

@@ -1,6 +1,25 @@
 import AppKit
 import Observation
 
+/// Observable holder for the WindowCoordinator singleton.
+///
+/// `WindowCoordinator.shared` is a plain static var, so SwiftUI's
+/// observation runtime can't track when it's assigned. Window controllers
+/// finish constructing — and their `NSHostingController` view bodies first
+/// evaluate — while `WindowCoordinator.init` is still in flight, so any
+/// view that resolves `WindowCoordinator.shared` at body-eval time
+/// captures `nil`. Reading through `WindowCoordinatorBox.shared.value`
+/// gives the view a dependency the runtime *does* track, so the nil → set
+/// transition triggers a re-render and the next body eval captures the
+/// live coordinator into action closures and sprite computations.
+@MainActor
+@Observable
+final class WindowCoordinatorBox {
+    @MainActor static let shared = WindowCoordinatorBox()
+    var value: WindowCoordinator?
+    private init() {}
+}
+
 @MainActor
 @Observable
 final class WindowCoordinator {

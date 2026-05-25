@@ -8,12 +8,18 @@ final class WindowVisibilityController {
     private let registry: WindowRegistry
     private let settings: AppSettings
 
-    var isEQWindowVisible: Bool = false
-    var isPlaylistWindowVisible: Bool = false
+    var isEQWindowVisible: Bool
+    var isPlaylistWindowVisible: Bool
 
     init(registry: WindowRegistry, settings: AppSettings) {
         self.registry = registry
         self.settings = settings
+        // Seed from persisted settings so the first SwiftUI body evaluation
+        // (during makeKeyAndOrderFront in showAllWindows) reads the actual
+        // restored visibility, not the transient `false` it would see before
+        // showAllWindows flips the flags.
+        self.isEQWindowVisible = settings.showEqualizerWindow
+        self.isPlaylistWindowVisible = settings.showPlaylistWindow
     }
 
     // MARK: - Key Window Actions
