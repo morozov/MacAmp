@@ -15,6 +15,14 @@ final class WindowZOrderController {
     /// Lifts all visible MacAmp windows above non-MacAmp windows while
     /// preserving their current relative Z-order. `keyWindow` (or
     /// `NSApp.keyWindow` if nil) is placed on top.
+    ///
+    /// Call from `NSApplication.didBecomeActiveNotification` only — that
+    /// is, once per app activation. Do NOT also call from
+    /// `windowDidBecomeKey`: the cascade emits a burst of `orderFront`
+    /// notifications that NSToolTipManager treats as user activity and
+    /// aborts pending SwiftUI `.help()` tooltips. A routine in-app focus
+    /// change cannot let a foreign window slip between MacAmp's windows,
+    /// so the activation cascade is sufficient.
     func bringAllWindowsForward(keyWindow: NSWindow? = nil) {
         let effectiveKey = keyWindow ?? NSApp.keyWindow
         let backToFront = visibleManagedWindowsBackToFront()

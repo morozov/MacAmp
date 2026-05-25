@@ -11,8 +11,7 @@ struct WindowDelegateWiring {
     static func wire(
         registry: WindowRegistry,
         persistenceDelegate: WindowPersistenceDelegate?,
-        windowFocusState: WindowFocusState,
-        zOrderController: WindowZOrderController
+        windowFocusState: WindowFocusState
     ) -> WindowDelegateWiring {
         let windowKinds: [(WindowKind, NSWindow?)] = [
             (.main, registry.mainWindow),
@@ -43,8 +42,7 @@ struct WindowDelegateWiring {
             // Add focus delegate
             let focusDelegate = WindowFocusDelegate(
                 kind: kind,
-                focusState: windowFocusState,
-                zOrderController: zOrderController
+                focusState: windowFocusState
             )
             multiplexer.add(delegate: focusDelegate)
 
