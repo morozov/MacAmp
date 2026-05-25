@@ -31,11 +31,13 @@ final class WindowVisibilityController {
             registry.eqWindow?.orderFront(nil)
         }
         isEQWindowVisible = true
+        settings.showEqualizerWindow = true
     }
 
     func hideEQWindow() {
         registry.eqWindow?.orderOut(nil)
         isEQWindowVisible = false
+        settings.showEqualizerWindow = false
     }
 
     func toggleEQWindowVisibility() -> Bool {
@@ -43,10 +45,12 @@ final class WindowVisibilityController {
         if eq.isVisible {
             eq.orderOut(nil)
             isEQWindowVisible = false
+            settings.showEqualizerWindow = false
             return false
         } else {
             eq.orderFront(nil)
             isEQWindowVisible = true
+            settings.showEqualizerWindow = true
             return true
         }
     }
@@ -64,11 +68,13 @@ final class WindowVisibilityController {
             registry.playlistWindow?.orderFront(nil)
         }
         isPlaylistWindowVisible = true
+        settings.showPlaylistWindow = true
     }
 
     func hidePlaylistWindow() {
         registry.playlistWindow?.orderOut(nil)
         isPlaylistWindowVisible = false
+        settings.showPlaylistWindow = false
     }
 
     func togglePlaylistWindowVisibility() -> Bool {
@@ -76,10 +82,12 @@ final class WindowVisibilityController {
         if playlist.isVisible {
             playlist.orderOut(nil)
             isPlaylistWindowVisible = false
+            settings.showPlaylistWindow = false
             return false
         } else {
             playlist.orderFront(nil)
             isPlaylistWindowVisible = true
+            settings.showPlaylistWindow = true
             return true
         }
     }
@@ -118,12 +126,15 @@ final class WindowVisibilityController {
 
     func showAllWindows() {
         registry.mainWindow?.makeKeyAndOrderFront(nil)
-        registry.eqWindow?.orderFront(nil)
-        registry.playlistWindow?.orderFront(nil)
 
-        isEQWindowVisible = true
-        isPlaylistWindowVisible = true
-
+        if settings.showPlaylistWindow {
+            registry.playlistWindow?.orderFront(nil)
+            isPlaylistWindowVisible = true
+        }
+        if settings.showEqualizerWindow {
+            registry.eqWindow?.orderFront(nil)
+            isEQWindowVisible = true
+        }
         if settings.showVideoWindow {
             registry.videoWindow?.orderFront(nil)
         }

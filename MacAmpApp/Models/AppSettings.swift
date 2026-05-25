@@ -41,6 +41,8 @@ final class AppSettings {
         static let isMainWindowShaded = "isMainWindowShaded"
         static let showVideoWindow = "showVideoWindow"
         static let showMilkdropWindow = "showMilkdropWindow"
+        static let showEqualizerWindow = "showEqualizerWindow"
+        static let showPlaylistWindow = "showPlaylistWindow"
         static let timeDisplayMode = "timeDisplayMode"
         static let visualizerMode = "visualizerMode"
         static let repeatMode = "repeatMode"
@@ -78,6 +80,10 @@ final class AppSettings {
         self.isMainWindowShaded = UserDefaults.standard.bool(forKey: Keys.isMainWindowShaded)
         self.showVideoWindow = UserDefaults.standard.bool(forKey: Keys.showVideoWindow)
         self.showMilkdropWindow = UserDefaults.standard.bool(forKey: Keys.showMilkdropWindow)
+        // Default to visible — preserves existing first-launch behavior where
+        // showAllWindows() unconditionally surfaced the EQ window.
+        self.showEqualizerWindow = (UserDefaults.standard.object(forKey: Keys.showEqualizerWindow) as? Bool) ?? true
+        self.showPlaylistWindow = (UserDefaults.standard.object(forKey: Keys.showPlaylistWindow) as? Bool) ?? true
 
         // NOTE: videoWindowSizeMode loading removed - Size2D persisted in VideoWindowSizeState
 
@@ -268,6 +274,21 @@ final class AppSettings {
     var showMilkdropWindow: Bool = false {
         didSet {
             UserDefaults.standard.set(showMilkdropWindow, forKey: Keys.showMilkdropWindow)
+        }
+    }
+
+    /// EQ window visibility state (persisted). Written by WindowVisibilityController
+    /// when the user closes/opens the EQ window so the choice survives a relaunch.
+    var showEqualizerWindow: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showEqualizerWindow, forKey: Keys.showEqualizerWindow)
+        }
+    }
+
+    /// Playlist window visibility state (persisted). Mirrors `showEqualizerWindow`.
+    var showPlaylistWindow: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showPlaylistWindow, forKey: Keys.showPlaylistWindow)
         }
     }
 
