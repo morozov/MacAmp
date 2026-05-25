@@ -7,10 +7,12 @@ import AppKit
 final class WindowFocusDelegate: NSObject, NSWindowDelegate {
     private let kind: WindowKind
     private let focusState: WindowFocusState
+    private let zOrderController: WindowZOrderController
 
-    init(kind: WindowKind, focusState: WindowFocusState) {
+    init(kind: WindowKind, focusState: WindowFocusState, zOrderController: WindowZOrderController) {
         self.kind = kind
         self.focusState = focusState
+        self.zOrderController = zOrderController
         super.init()
     }
 
@@ -21,6 +23,11 @@ final class WindowFocusDelegate: NSObject, NSWindowDelegate {
         focusState.isPlaylistKey = (kind == .playlist)
         focusState.isVideoKey = (kind == .video)
         focusState.isMilkdropKey = (kind == .milkdrop)
+
+        // Keep MacAmp's windows visually grouped: lift all visible siblings
+        // above any non-MacAmp windows that may have been overlapping them.
+        let keyWindow = notification.object as? NSWindow
+        zOrderController.bringAllWindowsForward(keyWindow: keyWindow)
     }
 
     func windowDidResignKey(_ notification: Notification) {

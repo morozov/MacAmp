@@ -35,6 +35,8 @@ final class WindowCoordinator {
     private let settingsObserver: WindowSettingsObserver
     var hasPresentedInitialWindows = false
     private var delegateWiring: WindowDelegateWiring?
+    private var zOrderController: WindowZOrderController?
+    private var appActivationObserver: NSObjectProtocol?
     private var volumeScrollController: VolumeScrollWheelController?
     private var hotkeyMonitor: WinampHotkeyMonitor?
 
@@ -152,13 +154,31 @@ final class WindowCoordinator {
         )
         debugLogWindowPositions(step: "after settings observer start")
 
+        // Z-order controller keeps MacAmp windows grouped as a single app
+        // when another app's window has been raised between them.
+        let zOrderController = WindowZOrderController(registry: registry)
+        self.zOrderController = zOrderController
+
         // Wire up snap manager, delegate multiplexers, persistence, and focus delegates
         delegateWiring = WindowDelegateWiring.wire(
             registry: registry,
             persistenceDelegate: framePersistence.persistenceDelegate,
-            windowFocusState: windowFocusState
+            windowFocusState: windowFocusState,
+            zOrderController: zOrderController
         )
         debugLogWindowPositions(step: "after delegate wiring")
+
+        // Cmd+Tab back to MacAmp doesn't fire windowDidBecomeKey on the
+        // non-key sub-windows, so observe app activation explicitly.
+        appActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak zOrderController] _ in
+            MainActor.assumeIsolated {
+                zOrderController?.bringAllWindowsForward()
+            }
+        }
 
         // Capture scroll-wheel events over main + EQ windows for volume control
         volumeScrollController = VolumeScrollWheelController(
@@ -183,6 +203,9 @@ final class WindowCoordinator {
 
     isolated deinit {
         settingsObserver.stop()
+        if let appActivationObserver {
+            NotificationCenter.default.removeObserver(appActivationObserver)
+        }
     }
 
     // MARK: - Window Resize (forwarded to WindowResizeController)
