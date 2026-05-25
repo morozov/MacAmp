@@ -20,10 +20,14 @@ struct PlaylistTrackListView: View {
                             .frame(width: trackWidth, height: 13)
                             .background(trackBackground(track: track, index: index))
                             .id(index)
-                            .onTapGesture(count: 2) {
-                                Task { await playbackCoordinator.play(track: track) }
-                            }
-                            .onTapGesture { onTrackTap(index) }
+                            .overlay(
+                                ClickCatcherView(
+                                    onSingleClick: { onTrackTap(index) },
+                                    onDoubleClick: {
+                                        Task { await playbackCoordinator.play(track: track) }
+                                    }
+                                )
+                            )
                     }
                 }
             }
