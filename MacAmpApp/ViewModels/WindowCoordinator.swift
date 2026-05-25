@@ -241,7 +241,7 @@ final class WindowCoordinator {
 
     // MARK: - Window Visibility (forwarded to WindowVisibilityController)
 
-    func minimizeKeyWindow() { visibility.minimizeKeyWindow() }
+    func hideApp() { visibility.hideApp() }
     func showEQWindow() { visibility.showEQWindow() }
     func hideEQWindow() { visibility.hideEQWindow() }
     func toggleEQWindowVisibility() -> Bool { visibility.toggleEQWindowVisibility() }

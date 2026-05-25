@@ -134,7 +134,7 @@ struct WinampEqualizerWindow: View {
         Group {
             // Minimize button
             Button(action: {
-                WindowCoordinator.shared?.minimizeKeyWindow()
+                WindowCoordinator.shared?.hideApp()
             }) {
                 SimpleSpriteImage("MAIN_MINIMIZE_BUTTON", width: 9, height: 9)
             }

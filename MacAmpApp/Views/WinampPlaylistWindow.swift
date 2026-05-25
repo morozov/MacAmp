@@ -46,7 +46,7 @@ struct WinampPlaylistWindow: View {
                     PlaylistShadeView(
                         windowWidth: windowWidth,
                         isWindowActive: isWindowActive,
-                        onMinimize: { WindowCoordinator.shared?.minimizeKeyWindow() },
+                        onMinimize: { WindowCoordinator.shared?.hideApp() },
                         onShadeToggle: { ui.isShadeMode.toggle() },
                         onClose: { WindowCoordinator.shared?.hidePlaylistWindow() }
                     )
@@ -114,7 +114,7 @@ struct WinampPlaylistWindow: View {
 
         PlaylistTitleBarButtons(
             windowWidth: windowWidth,
-            onMinimize: { WindowCoordinator.shared?.minimizeKeyWindow() },
+            onMinimize: { WindowCoordinator.shared?.hideApp() },
             onShadeToggle: { ui.isShadeMode.toggle() },
             onClose: { WindowCoordinator.shared?.hidePlaylistWindow() }
         )

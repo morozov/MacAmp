@@ -24,8 +24,17 @@ final class WindowVisibilityController {
 
     // MARK: - Key Window Actions
 
-    func minimizeKeyWindow() {
-        NSApp.keyWindow?.miniaturize(nil)
+    /// Hide the entire app — Winamp's minimize-the-player semantics. macOS
+    /// keeps the app icon in the Dock; clicking it (or Cmd-Tab back) sends
+    /// `unhide(_:)`, which re-shows exactly the windows that were visible.
+    ///
+    /// Per-window `NSWindow.miniaturize(_:)` would put each window in the
+    /// Dock as its own tile — borderless windows lose their click-to-restore
+    /// affordance, and the user can end up with main minimized while EQ /
+    /// playlist still float, which contradicts Winamp's "all sub-windows
+    /// move as a group" model.
+    func hideApp() {
+        NSApp.hide(nil)
     }
 
     // MARK: - EQ Window

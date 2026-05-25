@@ -56,7 +56,7 @@ struct MainWindowFullLayer: View {
     private func buildTitlebarButtons() -> some View {
         Group {
             Button(action: {
-                WindowCoordinator.shared?.minimizeKeyWindow()
+                WindowCoordinator.shared?.hideApp()
             }, label: {
                 SimpleSpriteImage("MAIN_MINIMIZE_BUTTON", width: 9, height: 9)
             })
