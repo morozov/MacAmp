@@ -5,7 +5,6 @@ struct PlaylistShadeView: View {
 
     let windowWidth: CGFloat
     let isWindowActive: Bool
-    let onMinimize: () -> Void
     let onShadeToggle: () -> Void
     let onClose: () -> Void
 
@@ -32,7 +31,6 @@ struct PlaylistShadeView: View {
 
             PlaylistTitleBarButtons(
                 windowWidth: windowWidth,
-                onMinimize: onMinimize,
                 onShadeToggle: onShadeToggle,
                 onClose: onClose
             )

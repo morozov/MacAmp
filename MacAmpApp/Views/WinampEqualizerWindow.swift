@@ -34,9 +34,8 @@ struct WinampEqualizerWindow: View {
         // Presets button - CORRECTED
         static let presetsButton = CGPoint(x: 217, y: 18)
         
-        // Titlebar buttons (same as main window)
-        static let minimizeButton = CGPoint(x: 244, y: 3)
-        static let shadeButton = CGPoint(x: 254, y: 3) 
+        // Titlebar buttons — EQ has only shade and close (no minimize)
+        static let shadeButton = CGPoint(x: 254, y: 3)
         static let closeButton = CGPoint(x: 264, y: 3)
         
         // EQ curve graph area - CORRECTED
@@ -132,16 +131,6 @@ struct WinampEqualizerWindow: View {
     @ViewBuilder
     private func buildTitlebarButtons() -> some View {
         Group {
-            // Minimize button
-            Button(action: {
-                WindowCoordinator.shared?.hideApp()
-            }) {
-                SimpleSpriteImage("MAIN_MINIMIZE_BUTTON", width: 9, height: 9)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .at(EQCoords.minimizeButton)
-
             // Shade button
             Button(action: {
                 isShadeMode.toggle()
