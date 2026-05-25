@@ -163,13 +163,18 @@ final class WindowCoordinator {
         delegateWiring = WindowDelegateWiring.wire(
             registry: registry,
             persistenceDelegate: framePersistence.persistenceDelegate,
-            windowFocusState: windowFocusState,
-            zOrderController: zOrderController
+            windowFocusState: windowFocusState
         )
         debugLogWindowPositions(step: "after delegate wiring")
 
-        // Cmd+Tab back to MacAmp doesn't fire windowDidBecomeKey on the
-        // non-key sub-windows, so observe app activation explicitly.
+        // Cmd+Tab back into MacAmp (or clicking one sub-window from another
+        // app) doesn't fire windowDidBecomeKey on the non-key sub-windows,
+        // so observe app activation explicitly. The cascade is intentionally
+        // NOT also wired into `windowDidBecomeKey` — routine in-app focus
+        // changes can't let a foreign window slip between MacAmp's, and the
+        // `orderFront` burst there was cancelling pending SwiftUI `.help()`
+        // tooltips (NSToolTipManager treats the notifications as activity
+        // and aborts its delay timer).
         appActivationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
