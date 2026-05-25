@@ -16,6 +16,26 @@ final class WinampMainWindowInteractionState {
     var scrollOffset: CGFloat = 0
     var scrollTimer: Timer?
 
+    // MARK: - Marquee transient overrides
+
+    /// When set, pre-empts the playback title in the marquee. Cleared after
+    /// `showTransientMessage`'s duration elapses.
+    var transientMessage: String?
+    private var transientMessageTask: Task<Void, Never>?
+
+    /// Show `text` in the marquee for `duration` seconds, replacing the
+    /// playback title. Re-entrant: a new call cancels the prior auto-clear
+    /// and restarts the timer.
+    func showTransientMessage(_ text: String, duration: TimeInterval = 1.0) {
+        transientMessage = text
+        transientMessageTask?.cancel()
+        transientMessageTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            self?.transientMessage = nil
+        }
+    }
+
     // MARK: - Pause blinking
 
     var pauseBlinkVisible: Bool = true
@@ -131,5 +151,8 @@ final class WinampMainWindowInteractionState {
         scrollRestartTask = nil
         scrubResetTask?.cancel()
         scrubResetTask = nil
+        transientMessageTask?.cancel()
+        transientMessageTask = nil
+        transientMessage = nil
     }
 }

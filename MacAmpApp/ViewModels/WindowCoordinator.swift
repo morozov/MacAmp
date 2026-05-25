@@ -17,6 +17,7 @@ final class WindowCoordinator {
     private let settingsObserver: WindowSettingsObserver
     var hasPresentedInitialWindows = false
     private var delegateWiring: WindowDelegateWiring?
+    private var volumeScrollController: VolumeScrollWheelController?
 
     var mainWindow: NSWindow? { registry.mainWindow }
     var eqWindow: NSWindow? { registry.eqWindow }
@@ -145,6 +146,13 @@ final class WindowCoordinator {
             windowFocusState: windowFocusState
         )
         debugLogWindowPositions(step: "after delegate wiring")
+
+        // Capture scroll-wheel events over main + EQ windows for volume control
+        volumeScrollController = VolumeScrollWheelController(
+            registry: registry,
+            audioPlayer: audioPlayer,
+            playbackCoordinator: playbackCoordinator
+        )
     }
 
     isolated deinit {
