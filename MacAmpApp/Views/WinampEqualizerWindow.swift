@@ -283,26 +283,40 @@ struct WinampEqualizerWindow: View {
         // button at `.at(254, 3)` would offset 254 px right of the *center*,
         // ending up off-window and unclickable.
         ZStack(alignment: .topLeading) {
-            // Shade background
+            // Shade background. The slider TRACKS for volume and balance are
+            // baked into this sprite — the EQShadeSlider only renders the thumb.
             SimpleSpriteImage("EQ_SHADE_BACKGROUND", width: 275, height: 14)
                 .at(CGPoint(x: 0, y: 0))
 
-            // Compact volume and balance sliders in shade mode
-            // Volume slider (left side)
-            HStack(spacing: 1) {
-                SimpleSpriteImage("EQ_SHADE_VOLUME_SLIDER_LEFT", width: 3, height: 7)
-                SimpleSpriteImage("EQ_SHADE_VOLUME_SLIDER_CENTER", width: 3, height: 7)
-                SimpleSpriteImage("EQ_SHADE_VOLUME_SLIDER_RIGHT", width: 3, height: 7)
-            }
-            .at(CGPoint(x: 20, y: 4))
+            // Compact volume + balance sliders (Webamp's `EqualizerShade.tsx`
+            // mounts `<Volume id="equalizer-volume">` and
+            // `<Balance id="equalizer-balance">`; CSS positions them at
+            // (61, 4) 97×6 and (164, 4) 43×6 respectively).
+            let volumeBinding = Binding<Float>(
+                get: { audioPlayer.volume },
+                set: { playbackCoordinator.setVolume($0) }
+            )
+            EQShadeSlider(
+                value: volumeBinding,
+                valueRange: 0...1,
+                trackWidth: 97,
+                spritePrefix: "EQ_SHADE_VOLUME_SLIDER",
+                onDragEnded: { playbackCoordinator.commitVolume() }
+            )
+            .at(CGPoint(x: 61, y: 4))
 
-            // Balance slider (right side)
-            HStack(spacing: 1) {
-                SimpleSpriteImage("EQ_SHADE_BALANCE_SLIDER_LEFT", width: 3, height: 7)
-                SimpleSpriteImage("EQ_SHADE_BALANCE_SLIDER_CENTER", width: 3, height: 7)
-                SimpleSpriteImage("EQ_SHADE_BALANCE_SLIDER_RIGHT", width: 3, height: 7)
-            }
-            .at(CGPoint(x: 180, y: 4))
+            let balanceBinding = Binding<Float>(
+                get: { audioPlayer.balance },
+                set: { playbackCoordinator.setBalance($0) }
+            )
+            EQShadeSlider(
+                value: balanceBinding,
+                valueRange: -1...1,
+                trackWidth: 43,
+                spritePrefix: "EQ_SHADE_BALANCE_SLIDER",
+                onDragEnded: { playbackCoordinator.commitBalance() }
+            )
+            .at(CGPoint(x: 164, y: 4))
 
             // Titlebar buttons
             buildTitlebarButtons()
