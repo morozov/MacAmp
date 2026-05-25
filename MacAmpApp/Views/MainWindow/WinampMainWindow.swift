@@ -80,9 +80,14 @@ struct WinampMainWindow: View {
         }
         .onAppear {
             interactionState.isViewVisible = true
-            interactionState.displayTitleProvider = { [playbackCoordinator] in
-                playbackCoordinator.displayTitle.isEmpty ? "MacAmp" : playbackCoordinator.displayTitle
+            interactionState.displayTitleProvider = { [playbackCoordinator, weak interactionState] in
+                if let transient = interactionState?.transientMessage { return transient }
+                return playbackCoordinator.displayTitle.isEmpty ? "MacAmp" : playbackCoordinator.displayTitle
             }
+        }
+        .onChange(of: audioPlayer.volume) { _, newValue in
+            let pct = Int((newValue * 100).rounded())
+            interactionState.showTransientMessage("Volume: \(pct)%")
         }
         .onReceive(pauseBlinkTimer) { _ in
             if playbackCoordinator.isPaused {

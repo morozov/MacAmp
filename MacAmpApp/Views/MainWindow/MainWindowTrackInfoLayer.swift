@@ -9,7 +9,8 @@ struct MainWindowTrackInfoLayer: View {
     private typealias Layout = WinampMainWindowLayout
 
     var body: some View {
-        let trackText = playbackCoordinator.displayTitle.isEmpty ? "MacAmp" : playbackCoordinator.displayTitle
+        let baseText = playbackCoordinator.displayTitle.isEmpty ? "MacAmp" : playbackCoordinator.displayTitle
+        let trackText = interactionState.transientMessage ?? baseText
         let textWidth = trackText.count * 5
         let displayWidth = Int(Layout.trackInfo.width)
 
@@ -19,6 +20,7 @@ struct MainWindowTrackInfoLayer: View {
                     .offset(x: interactionState.scrollOffset, y: -2)
                     .onAppear { interactionState.startScrolling() }
                     .onChange(of: playbackCoordinator.displayTitle) { _, _ in interactionState.resetScrolling() }
+                    .onChange(of: interactionState.transientMessage) { _, _ in interactionState.resetScrolling() }
             }
             .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height)
             .clipped()
