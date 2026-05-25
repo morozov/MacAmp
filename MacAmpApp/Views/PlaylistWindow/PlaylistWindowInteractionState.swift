@@ -8,7 +8,16 @@ final class PlaylistWindowInteractionState {
     private static let aKeyCode: UInt16 = 0
     private static let deleteKeyCode: UInt16 = 51         // kVK_Delete (Backspace, the "delete" key on Mac laptops)
     private static let forwardDeleteKeyCode: UInt16 = 117 // kVK_ForwardDelete (full keyboards)
+    private static let upArrowKeyCode: UInt16 = 126
+    private static let downArrowKeyCode: UInt16 = 125
+    private static let pageUpKeyCode: UInt16 = 116
+    private static let pageDownKeyCode: UInt16 = 121
+    private static let homeKeyCode: UInt16 = 115
+    private static let endKeyCode: UInt16 = 119
+    private static let returnKeyCode: UInt16 = 36
+    private static let keypadEnterKeyCode: UInt16 = 76
     var selectedIndices: Set<Int> = []
+    var cursorIndex: Int?
     var isShadeMode: Bool = false
     var scrollOffset: Int = 0
     var dragStartSize: Size2D?
@@ -19,7 +28,9 @@ final class PlaylistWindowInteractionState {
     func installKeyboardMonitor(
         playlistWindow: @escaping () -> NSWindow?,
         playlistCount: @escaping () -> Int,
-        removeTrack: @escaping (Int) -> Void
+        visibleTrackCount: @escaping () -> Int,
+        removeTrack: @escaping (Int) -> Void,
+        playTrackAt: @escaping (Int) -> Void
     ) {
         keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // Do NOT use `self?.handleKeyPress(...) ?? event`: Swift collapses
@@ -32,7 +43,9 @@ final class PlaylistWindowInteractionState {
                 event: event,
                 isPlaylistKey: isPlaylistEvent,
                 playlistCount: playlistCount(),
-                removeTrack: removeTrack
+                visibleTrackCount: visibleTrackCount(),
+                removeTrack: removeTrack,
+                playTrackAt: playTrackAt
             )
         }
     }
@@ -55,13 +68,16 @@ final class PlaylistWindowInteractionState {
         } else {
             selectedIndices = [index]
         }
+        cursorIndex = index
     }
 
     func handleKeyPress(
         event: NSEvent,
         isPlaylistKey: Bool,
         playlistCount: Int,
-        removeTrack: (Int) -> Void
+        visibleTrackCount: Int,
+        removeTrack: (Int) -> Void,
+        playTrackAt: (Int) -> Void
     ) -> NSEvent? {
         guard isPlaylistKey else { return event }
 
@@ -72,6 +88,7 @@ final class PlaylistWindowInteractionState {
         // Top via `AppCommands` (menuWa5.ts item 40019).
         if appModifiers == .command, event.keyCode == Self.aKeyCode {
             selectedIndices = Set(0..<playlistCount)
+            cursorIndex = selectedIndices.min()
             return nil
         }
 
@@ -84,15 +101,74 @@ final class PlaylistWindowInteractionState {
                 removeTrack(index)
             }
             selectedIndices = []
+            cursorIndex = nil
             return nil
         }
 
         if event.keyCode == Self.escapeKeyCode {
             selectedIndices = []
+            cursorIndex = nil
             return nil
         }
 
+        // Navigation keys — playlist-scoped, no modifier. Consume even on an
+        // empty playlist so an idle press doesn't beep.
+        if appModifiers.isEmpty {
+            switch event.keyCode {
+            case Self.upArrowKeyCode:
+                moveCursor(by: -1, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                return nil
+            case Self.downArrowKeyCode:
+                moveCursor(by: +1, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                return nil
+            case Self.pageUpKeyCode:
+                moveCursor(by: -max(1, visibleTrackCount), playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                return nil
+            case Self.pageDownKeyCode:
+                moveCursor(by: +max(1, visibleTrackCount), playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                return nil
+            case Self.homeKeyCode:
+                setCursor(to: 0, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                return nil
+            case Self.endKeyCode:
+                setCursor(to: playlistCount - 1, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                return nil
+            case Self.returnKeyCode, Self.keypadEnterKeyCode:
+                if let target = cursorIndex ?? selectedIndices.min() {
+                    playTrackAt(target)
+                }
+                return nil
+            default:
+                break
+            }
+        }
+
         return event
+    }
+
+    private func moveCursor(by delta: Int, playlistCount: Int, visibleTrackCount: Int) {
+        guard playlistCount > 0 else { return }
+        // Cold start (no cursor): Down/PgDn/End land on the first row, Up/PgUp
+        // land on the last row — matches Finder list-view convention.
+        let current: Int = cursorIndex ?? (delta > 0 ? -1 : playlistCount)
+        setCursor(to: current + delta, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+    }
+
+    private func setCursor(to index: Int, playlistCount: Int, visibleTrackCount: Int) {
+        guard playlistCount > 0 else { return }
+        let clamped = max(0, min(playlistCount - 1, index))
+        cursorIndex = clamped
+        selectedIndices = [clamped]
+        ensureCursorVisible(visibleTrackCount: visibleTrackCount, playlistCount: playlistCount)
+    }
+
+    private func ensureCursorVisible(visibleTrackCount: Int, playlistCount: Int) {
+        guard let cursor = cursorIndex, visibleTrackCount > 0 else { return }
+        if cursor < scrollOffset {
+            scrollOffset = cursor
+        } else if cursor >= scrollOffset + visibleTrackCount {
+            scrollOffset = cursor - visibleTrackCount + 1
+        }
     }
 
     func clampScrollOffset(maxOffset: Int) {

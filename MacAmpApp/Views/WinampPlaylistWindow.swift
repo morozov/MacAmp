@@ -60,7 +60,13 @@ struct WinampPlaylistWindow: View {
             ui.installKeyboardMonitor(
                 playlistWindow: { WindowCoordinator.shared?.playlistWindow },
                 playlistCount: { audioPlayer.playlist.count },
-                removeTrack: { audioPlayer.removeTrack(at: $0) }
+                visibleTrackCount: { sizeState.visibleTrackCount },
+                removeTrack: { audioPlayer.removeTrack(at: $0) },
+                playTrackAt: { index in
+                    guard audioPlayer.playlist.indices.contains(index) else { return }
+                    let track = audioPlayer.playlist[index]
+                    Task { await playbackCoordinator.play(track: track) }
+                }
             )
             PlaylistWindowActions.shared.radioLibrary = radioLibrary
             PlaylistWindowActions.shared.playbackCoordinator = playbackCoordinator
