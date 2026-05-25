@@ -31,6 +31,10 @@ class WinampEqualizerWindowController: NSWindowController {
             .environment(windowFocusState)
 
         let hostingController = NSHostingController(rootView: rootView)
+        // Let the NSWindow track SwiftUI's measured content size so that
+        // toggling shade mode (or any future size change) resizes the window
+        // automatically — no imperative `setFrame` plumbing required.
+        hostingController.sizingOptions = [.preferredContentSize]
         let hostingView = hostingController.view
         hostingView.frame = NSRect(origin: .zero, size: window.contentLayoutRect.size)
         hostingView.autoresizingMask = [.width, .height]
