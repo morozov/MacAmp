@@ -35,7 +35,9 @@ final class PlaylistWindowActions: NSObject {
     // MARK: - Unified M3U Entry Addition
 
     /// Add parsed M3U entries to the playlist. Shared by Add Files and Load List paths.
-    private func addEntries(_ entries: [M3UEntry], to audioPlayer: AudioPlayer) {
+    /// `.cue` entries are expanded into their slices; failures surface as alerts
+    /// (the user explicitly referenced the sheet from the M3U).
+    private func addEntries(_ entries: [M3UEntry], to audioPlayer: AudioPlayer) async {
         for entry in entries {
             if entry.isRemoteStream {
                 let streamTrack = Track(
@@ -45,10 +47,26 @@ final class PlaylistWindowActions: NSObject {
                     duration: 0.0
                 )
                 audioPlayer.addStreamTrack(streamTrack)
+            } else if entry.url.pathExtension.lowercased() == "cue" {
+                await parseAndAddCue(entry.url, audioPlayer: audioPlayer, reportFailureLoudly: true)
             } else {
                 audioPlayer.addTrack(url: entry.url)
             }
         }
+    }
+
+    /// Load List apply: stale-generation check, clear, then expand entries.
+    /// The generation check happens before mutating state; once we commit, a newer
+    /// load arriving mid-await will clear and re-apply on its own turn.
+    private func applyLoadedEntries(
+        _ entries: [M3UEntry],
+        expectedGeneration: UInt64,
+        audioPlayer: AudioPlayer
+    ) async -> Bool {
+        guard loadListGeneration == expectedGeneration else { return false }
+        audioPlayer.clearPlaylist()
+        await addEntries(entries, to: audioPlayer)
+        return true
     }
 
     // MARK: - Add Files Panel
@@ -123,7 +141,7 @@ final class PlaylistWindowActions: NSObject {
 
         switch result {
         case .success(let entries):
-            addEntries(entries, to: audioPlayer)
+            await addEntries(entries, to: audioPlayer)
         case .failure(let error):
             showErrorAlert("Failed to Load M3U Playlist", error: error)
         }
@@ -366,14 +384,11 @@ final class PlaylistWindowActions: NSObject {
 
                     switch result {
                     case .success(let entries):
-                        let applied: Bool = await MainActor.run {
-                            // Reject stale results if another load started while parsing
-                            guard self.loadListGeneration == expectedGeneration else { return false }
-                            // LOAD LIST replaces the playlist (Winamp behavior)
-                            audioPlayer.clearPlaylist()
-                            self.addEntries(entries, to: audioPlayer)
-                            return true
-                        }
+                        let applied = await self.applyLoadedEntries(
+                            entries,
+                            expectedGeneration: expectedGeneration,
+                            audioPlayer: audioPlayer
+                        )
                         // Auto-play first track (only if we actually applied the results)
                         if applied {
                             await self.autoPlayFirstTrack(
