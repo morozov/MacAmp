@@ -49,39 +49,50 @@ struct PlaylistBottomControlsView: View {
 
     @ViewBuilder
     private func buildMenuButtons() -> some View {
-        let buttonY = windowHeight - 24
+        // Per Webamp packages/webamp/css/playlist-window.css, each menu container
+        // is 22×18 at bottom=12; lefts are 14/43/72/101 and the LIST menu is
+        // right=22. SwiftUI .position centers the view, so x = left + 11 and
+        // y = windowHeight − 12 − 9.
+        let buttonY = windowHeight - 21
+        let width: CGFloat = 22
+        let height: CGFloat = 18
 
         Button(action: { menuPresenter.showAddMenu() }, label: {
-            Color.clear.frame(width: 22, height: 18).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 16, y: buttonY)
+            Color.clear.frame(width: width, height: height).contentShape(Rectangle())
+        }).buttonStyle(.plain).focusable(false).position(x: 25, y: buttonY)
 
         Button(action: { menuPresenter.showRemMenu() }, label: {
-            Color.clear.frame(width: 22, height: 18).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 42, y: buttonY)
+            Color.clear.frame(width: width, height: height).contentShape(Rectangle())
+        }).buttonStyle(.plain).focusable(false).position(x: 54, y: buttonY)
 
         Button(action: { menuPresenter.showSelNotSupportedAlert() }, label: {
-            Color.clear.frame(width: 18, height: 18).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 78, y: buttonY)
+            Color.clear.frame(width: width, height: height).contentShape(Rectangle())
+        }).buttonStyle(.plain).focusable(false).position(x: 83, y: buttonY)
 
         Button(action: { menuPresenter.showMiscMenu() }, label: {
-            Color.clear.frame(width: 18, height: 18).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 105, y: buttonY)
+            Color.clear.frame(width: width, height: height).contentShape(Rectangle())
+        }).buttonStyle(.plain).focusable(false).position(x: 112, y: buttonY)
 
         Button(action: { menuPresenter.showListMenu() }, label: {
-            Color.clear.frame(width: 22, height: 18).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: windowWidth - 32, y: buttonY)
+            Color.clear.frame(width: width, height: height).contentShape(Rectangle())
+        }).buttonStyle(.plain).focusable(false).position(x: windowWidth - 33, y: buttonY)
     }
 
     @ViewBuilder
     private func buildTransportButtons() -> some View {
-        let transportY = windowHeight - 12
-        let baseX = windowWidth - 150 + 8
+        // Per Webamp packages/webamp/css/playlist-window.css, .playlist-action-buttons
+        // is a flex row at top=22, left=3 inside the right-anchored 150-wide
+        // .playlist-bottom-right; each child is 10×10 flush. SwiftUI .position
+        // centers, so y = windowHeight − 11 (top 22 inside 38-tall bottom + 5) and
+        // each x = windowWidth − 147 + N*10 + 5 = windowWidth − 142 + N*10.
+        let transportY = windowHeight - 11
+        let baseX = windowWidth - 142
 
         transportButton(action: { Task { await playbackCoordinator.previous() } }, x: baseX, y: transportY)
-        transportButton(action: { playbackCoordinator.togglePlayPause() }, x: baseX + 11, y: transportY)
-        transportButton(action: { playbackCoordinator.pause() }, x: baseX + 22, y: transportY)
-        transportButton(action: { playbackCoordinator.stop() }, x: baseX + 33, y: transportY)
-        transportButton(action: { Task { await playbackCoordinator.next() } }, x: baseX + 44, y: transportY)
+        transportButton(action: { playbackCoordinator.togglePlayPause() }, x: baseX + 10, y: transportY)
+        transportButton(action: { playbackCoordinator.pause() }, x: baseX + 20, y: transportY)
+        transportButton(action: { playbackCoordinator.stop() }, x: baseX + 30, y: transportY)
+        transportButton(action: { Task { await playbackCoordinator.next() } }, x: baseX + 40, y: transportY)
         transportButton(action: {
             PlaylistWindowActions.shared.presentAddFilesPanel(audioPlayer: audioPlayer, playbackCoordinator: playbackCoordinator)
         }, x: baseX + 50, y: transportY)
@@ -89,7 +100,7 @@ struct PlaylistBottomControlsView: View {
 
     private func transportButton(action: @escaping () -> Void, x: CGFloat, y: CGFloat) -> some View {
         Button(action: action, label: {
-            Color.clear.frame(width: 10, height: 9).contentShape(Rectangle())
+            Color.clear.frame(width: 10, height: 10).contentShape(Rectangle())
         })
         .buttonStyle(.plain)
         .focusable(false)
