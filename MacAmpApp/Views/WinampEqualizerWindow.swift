@@ -287,8 +287,13 @@ struct WinampEqualizerWindow: View {
     
     @ViewBuilder
     private func buildShadeMode() -> some View {
-        // EQ shade mode shows a compact 275×14px bar
-        ZStack {
+        // EQ shade mode shows a compact 275×14px bar.
+        // `alignment: .topLeading` matches the full-mode ZStack so `.at(...)`
+        // (which is `.offset(...)`) lands children at absolute coordinates from
+        // the top-left — with the default `.center` alignment a titlebar
+        // button at `.at(254, 3)` would offset 254 px right of the *center*,
+        // ending up off-window and unclickable.
+        ZStack(alignment: .topLeading) {
             // Shade background
             SimpleSpriteImage("EQ_SHADE_BACKGROUND", width: 275, height: 14)
                 .at(CGPoint(x: 0, y: 0))
