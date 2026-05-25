@@ -57,7 +57,11 @@ struct WinampPlaylistWindow: View {
         .frame(width: windowWidth, height: ui.isShadeMode ? 14 : windowHeight)
         .background(Color.black)
         .onAppear {
-            ui.installKeyboardMonitor { [audioPlayer] in audioPlayer.playlist.count }
+            ui.installKeyboardMonitor(
+                playlistWindow: { WindowCoordinator.shared?.playlistWindow },
+                playlistCount: { audioPlayer.playlist.count },
+                removeTrack: { audioPlayer.removeTrack(at: $0) }
+            )
             PlaylistWindowActions.shared.radioLibrary = radioLibrary
             PlaylistWindowActions.shared.playbackCoordinator = playbackCoordinator
             WindowCoordinator.shared?.updatePlaylistWindowSize(to: sizeState.pixelSize)

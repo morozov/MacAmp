@@ -31,7 +31,12 @@ final class VolumeScrollWheelController {
 
     private func install() {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            self?.handle(event) ?? event
+            // `self?.handle(event) ?? event` collapses the optional chain and
+            // silently turns a real `nil` (consume) into `event`, letting the
+            // scroll-wheel event fall through to whatever lies under the
+            // cursor.
+            guard let self else { return event }
+            return self.handle(event)
         }
     }
 

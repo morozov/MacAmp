@@ -12,65 +12,68 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandMenu("Options") {
             Button(dockingController.showMain ? "Hide Main" : "Show Main") { dockingController.toggleMain() }
-                .keyboardShortcut("1", modifiers: [.command, .shift])
+                .keyboardShortcut(WinampKeyBindings.toggleMainWindow.shortcut)
             Button(dockingController.showPlaylist ? "Hide Playlist" : "Show Playlist") { dockingController.togglePlaylist() }
-                .keyboardShortcut("2", modifiers: [.command, .shift])
+                .keyboardShortcut(WinampKeyBindings.togglePlaylistWindow.shortcut)
             Button(dockingController.showEqualizer ? "Hide Equalizer" : "Show Equalizer") { dockingController.toggleEqualizer() }
-                .keyboardShortcut("3", modifiers: [.command, .shift])
+                .keyboardShortcut(WinampKeyBindings.toggleEqualizerWindow.shortcut)
 
             Divider()
 
             Button("Shade/Unshade Main") { settings.isMainWindowShaded.toggle() }
-                .keyboardShortcut("1", modifiers: [.command, .option])
+                .keyboardShortcut(WinampKeyBindings.shadeMainWindow.shortcut)
             Button("Shade/Unshade Playlist") { dockingController.toggleShade(.playlist) }
-                .keyboardShortcut("2", modifiers: [.command, .option])
+                .keyboardShortcut(WinampKeyBindings.shadePlaylistWindow.shortcut)
             Button("Shade/Unshade Equalizer") { dockingController.toggleShade(.equalizer) }
-                .keyboardShortcut("3", modifiers: [.command, .option])
+                .keyboardShortcut(WinampKeyBindings.shadeEqualizerWindow.shortcut)
 
             Divider()
 
-            // Clutter bar functions
+            // Clutter bar functions. Cmd+A is context-sensitive — the playlist
+            // window's keyDown monitor intercepts it as Select All when the
+            // playlist is key.
             Button(settings.isDoubleSizeMode ? "Normal Size" : "Double Size") {
                 settings.isDoubleSizeMode.toggle()
             }
-            .keyboardShortcut("d", modifiers: [.control])
+            .keyboardShortcut(WinampKeyBindings.doubleSize.shortcut)
 
-            Button(settings.isAlwaysOnTop ? "Disable Always On Top" : "Enable Always On Top") {
+            Button("Always On Top") {
                 settings.isAlwaysOnTop.toggle()
             }
-            .keyboardShortcut("a", modifiers: [.control])
+            .keyboardShortcut(WinampKeyBindings.alwaysOnTop.shortcut)
 
             Button("Options Menu") {
                 settings.showOptionsMenuTrigger = true
             }
-            .keyboardShortcut("o", modifiers: [.control])
+            .keyboardShortcut(WinampKeyBindings.openOptionsMenu.shortcut)
 
             Button("Time: \(settings.timeDisplayMode == .elapsed ? "Show Remaining" : "Show Elapsed")") {
                 settings.toggleTimeDisplayMode()
             }
-            .keyboardShortcut("t", modifiers: [.control])
+            .keyboardShortcut(WinampKeyBindings.timeMode.shortcut)
 
             Button("Track Information") {
                 settings.showTrackInfoDialog = true
             }
-            .keyboardShortcut("i", modifiers: [.control])
+            .keyboardShortcut(WinampKeyBindings.trackInfo.shortcut)
 
+            // Repeat: plain `R` via WinampHotkeyMonitor matches Webamp.
             Button(audioPlayer.repeatMode.label) {
                 audioPlayer.repeatMode = audioPlayer.repeatMode.next()
             }
-            .keyboardShortcut("r", modifiers: [.control])
 
-            // Video Window toggle - setting change triggers observer
+            // Video Window toggle. Plain `V` (Webamp stop) is in the hotkey
+            // monitor and `⌘V` is system Paste, so video uses `⌘⇧V`.
             Button(settings.showVideoWindow ? "Hide Video Window" : "Show Video Window") {
                 settings.showVideoWindow.toggle()
             }
-            .keyboardShortcut("v", modifiers: [.control])
+            .keyboardShortcut(WinampKeyBindings.videoWindow.shortcut)
 
             // Milkdrop Window toggle - setting change triggers observer
             Button(settings.showMilkdropWindow ? "Hide Milkdrop" : "Show Milkdrop") {
                 settings.showMilkdropWindow.toggle()
             }
-            .keyboardShortcut("k", modifiers: [.control])
+            .keyboardShortcut(WinampKeyBindings.milkdrop.shortcut)
 
             // NOTE: Ctrl+1/Ctrl+2 removed - VIDEO window now uses drag resize with 1x/2x button presets
 
@@ -82,14 +85,14 @@ struct AppCommands: Commands {
             Button("Open Files...") {
                 presentOpenPanel()
             }
-            .keyboardShortcut("o", modifiers: [.command])
+            .keyboardShortcut(WinampKeyBindings.openFiles.shortcut)
         }
 
         CommandGroup(replacing: .appSettings) {
             Button("Preferences...") {
                 openWindow(id: "preferences")
             }
-            .keyboardShortcut(",", modifiers: [.command])
+            .keyboardShortcut(WinampKeyBindings.preferences.shortcut)
         }
     }
 

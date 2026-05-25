@@ -36,6 +36,7 @@ final class WindowCoordinator {
     var hasPresentedInitialWindows = false
     private var delegateWiring: WindowDelegateWiring?
     private var volumeScrollController: VolumeScrollWheelController?
+    private var hotkeyMonitor: WinampHotkeyMonitor?
 
     var mainWindow: NSWindow? { registry.mainWindow }
     var eqWindow: NSWindow? { registry.eqWindow }
@@ -164,6 +165,19 @@ final class WindowCoordinator {
             registry: registry,
             audioPlayer: audioPlayer,
             playbackCoordinator: playbackCoordinator
+        )
+
+        // Install Winamp's plain-key hotkeys (Z/X/C/V/B/L/R/S, arrows, Option+W/E/G).
+        hotkeyMonitor = WinampHotkeyMonitor(
+            audioPlayer: audioPlayer,
+            playbackCoordinator: playbackCoordinator,
+            dockingController: dockingController,
+            presentOpenPanel: { [audioPlayer, playbackCoordinator] in
+                PlaylistWindowActions.shared.presentAddFilesPanel(
+                    audioPlayer: audioPlayer,
+                    playbackCoordinator: playbackCoordinator
+                )
+            }
         )
     }
 
