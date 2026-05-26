@@ -16,48 +16,9 @@ struct MainWindowShadeLayer: View {
             SimpleSpriteImage("MAIN_SHADE_BACKGROUND", width: 275, height: 14)
                 .at(CGPoint(x: 0, y: 0))
 
-            buildShadeTransportButtons()
             buildShadeTimeDisplay()
             buildShadeTitlebarButtons()
         }
-    }
-
-    // MARK: - Shade Transport Buttons
-
-    @ViewBuilder
-    private func buildShadeTransportButtons() -> some View {
-        HStack(spacing: 2) {
-            Button(action: { Task { await playbackCoordinator.previous() } }, label: {
-                SimpleSpriteImage("MAIN_PREVIOUS_BUTTON", width: 23, height: 18).scaleEffect(0.6)
-            })
-            .buttonStyle(.plain)
-            .focusable(false)
-
-            Button(action: { playbackCoordinator.togglePlayPause() }, label: {
-                SimpleSpriteImage("MAIN_PLAY_BUTTON", width: 23, height: 18).scaleEffect(0.6)
-            })
-            .buttonStyle(.plain)
-            .focusable(false)
-
-            Button(action: { playbackCoordinator.pause() }, label: {
-                SimpleSpriteImage("MAIN_PAUSE_BUTTON", width: 23, height: 18).scaleEffect(0.6)
-            })
-            .buttonStyle(.plain)
-            .focusable(false)
-
-            Button(action: { playbackCoordinator.stop() }, label: {
-                SimpleSpriteImage("MAIN_STOP_BUTTON", width: 23, height: 18).scaleEffect(0.6)
-            })
-            .buttonStyle(.plain)
-            .focusable(false)
-
-            Button(action: { Task { await playbackCoordinator.next() } }, label: {
-                SimpleSpriteImage("MAIN_NEXT_BUTTON", width: 22, height: 18).scaleEffect(0.6)
-            })
-            .buttonStyle(.plain)
-            .focusable(false)
-        }
-        .at(CGPoint(x: 45, y: 3))
     }
 
     // MARK: - Shade Time Display
