@@ -12,16 +12,23 @@ import SwiftUI
 ///   `MIN_NAME_WIDTH = 205`, `CHARACTER_WIDTH = 5`,
 ///   `addedWidth = playlistSize[0] * WINDOW_RESIZE_SEGMENT_WIDTH(25)`.
 ///   `nameLength = (205 + addedWidth) / 5`; slice + UTF8_ELLIPSIS when over.
-/// - Layout — `packages/webamp/css/playlist-window.css` 296-307:
-///   `#playlist-shade-track-title { top:4 left:5 }`,
-///   `#playlist-shade-time { top:4 right:30 }`.
+/// - Layout — `packages/webamp/css/playlist-window.css` 296-307 specifies
+///   `#playlist-shade-track-title { top:4 left:5 }` and
+///   `#playlist-shade-time { top:4 right:30 }`. MacAmp uses `left: 9` for the
+///   title and `right: 29` for the time — these were tuned by visual
+///   comparison against a classic-Winamp reference until the title and
+///   duration aligned with the original; Webamp's CSS values render the
+///   title noticeably tucked into the LEFT cap's dark stripe and the time
+///   one pixel further from the right buttons. Documented as a deliberate
+///   Webamp deviation.
 ///
-/// Background sprite fidelity: Webamp uses
-/// `PLAYLIST_SHADE_BACKGROUND_LEFT (25×14)` + repeating
-/// `PLAYLIST_SHADE_BACKGROUND (25×14)` + `PLAYLIST_SHADE_BACKGROUND_RIGHT (50×14)`
-/// caps (`js/skinSprites.ts` 237-258). MacAmp doesn't yet define those rects in
-/// `SkinSprites.swift`, so this view still uses the stretched full-mode
-/// `PLAYLIST_TITLE_BAR` sprite — to be replaced in a follow-up.
+/// Background composition matches Webamp's three-piece layout
+/// (`js/components/PlaylistWindow/PlaylistShade.tsx` DOM + `js/skinSprites.ts`
+/// 237-258): `PLAYLIST_SHADE_BACKGROUND_LEFT` (25×14) on the left edge,
+/// `PLAYLIST_SHADE_BACKGROUND` (25×14) tiled across the middle, and
+/// `PLAYLIST_SHADE_BACKGROUND_RIGHT[_SELECTED]` (50×14) on the right edge.
+/// Per `js/skinSelectors.ts` 92-97 only the right cap has a focused variant —
+/// the left and center are focus-invariant.
 struct PlaylistShadeView: View {
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(AudioPlayer.self) private var audioPlayer
@@ -73,21 +80,19 @@ struct PlaylistShadeView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            let suffix = isWindowActive ? "_SELECTED" : ""
-            SimpleSpriteImage("PLAYLIST_TITLE_BAR\(suffix)", width: 275, height: 14)
-                .frame(width: windowWidth, height: 14)
+            buildShadeBackground()
 
             PlaylistBitmapText(trimmedTrackText, fallbackColor: textColor, spacing: 0, fallbackSize: 8)
-                .at(x: 5, y: 4)
+                .at(x: 9, y: 4)
 
-            // Time anchors to right edge minus 30 px (Webamp CSS `right: 30`).
+            // Time anchors so its right edge lands at `windowWidth - 29`.
             // PlaylistTimeText lays out left-to-right, so position by the
-            // expected pixel width — `text.count * (CHARACTER_WIDTH + spacing)`
-            // — anchored so its RIGHT edge lands at `windowWidth - 30`.
+            // expected pixel width — `text.count * CHARACTER_WIDTH` — anchored
+            // so its RIGHT edge lands at the target.
             if !timeText.isEmpty {
                 let approxTimeWidth = CGFloat(timeText.count) * Self.characterWidth
                 PlaylistTimeText(timeText, spacing: 0)
-                    .at(x: windowWidth - 30 - approxTimeWidth, y: 4)
+                    .at(x: windowWidth - 29 - approxTimeWidth, y: 4)
             }
 
             PlaylistTitleBarButtons(
@@ -97,5 +102,29 @@ struct PlaylistShadeView: View {
             )
         }
         .frame(width: windowWidth, height: 14, alignment: .topLeading)
+    }
+
+    /// LEFT cap (25×14) + repeating CENTER (25×14) + RIGHT cap (50×14, focused
+    /// variant when active). The center tile count is ceil-divided so the last
+    /// tile may extend slightly past the cap-start; that's fine because the
+    /// RIGHT cap is drawn on top.
+    @ViewBuilder
+    private func buildShadeBackground() -> some View {
+        let leftCap: CGFloat = 25
+        let rightCap: CGFloat = 50
+        let centerWidth = max(0, windowWidth - leftCap - rightCap)
+        let centerTileCount = Int(ceil(centerWidth / leftCap))
+        let rightSprite = isWindowActive ? "PLAYLIST_SHADE_BACKGROUND_RIGHT_SELECTED" : "PLAYLIST_SHADE_BACKGROUND_RIGHT"
+
+        SimpleSpriteImage("PLAYLIST_SHADE_BACKGROUND_LEFT", width: 25, height: 14)
+            .at(x: 0, y: 0)
+
+        ForEach(0..<centerTileCount, id: \.self) { i in
+            SimpleSpriteImage("PLAYLIST_SHADE_BACKGROUND", width: 25, height: 14)
+                .at(x: leftCap + CGFloat(i) * 25, y: 0)
+        }
+
+        SimpleSpriteImage(rightSprite, width: 50, height: 14)
+            .at(x: windowWidth - rightCap, y: 0)
     }
 }

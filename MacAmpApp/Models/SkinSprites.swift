@@ -340,6 +340,16 @@ struct SkinSprites {
             Sprite(name: "PLAYLIST_BOTTOM_RIGHT_CORNER", x: 126, y: 72, width: 150, height: 38),
             Sprite(name: "PLAYLIST_SCROLL_HANDLE", x: 52, y: 53, width: 8, height: 18),
             Sprite(name: "PLAYLIST_SCROLL_HANDLE_SELECTED", x: 61, y: 53, width: 8, height: 18),
+
+            // Shaded-titlebar background tiles. Webamp composes the shade
+            // background as: LEFT cap (25×14) + repeating CENTER (25×14) +
+            // RIGHT cap (50×14, with _SELECTED variant for focused state).
+            // See `packages/webamp/js/skinSprites.ts` rows 237-258 +
+            // `js/skinSelectors.ts` 92-97.
+            Sprite(name: "PLAYLIST_SHADE_BACKGROUND_LEFT", x: 72, y: 42, width: 25, height: 14),
+            Sprite(name: "PLAYLIST_SHADE_BACKGROUND", x: 72, y: 57, width: 25, height: 14),
+            Sprite(name: "PLAYLIST_SHADE_BACKGROUND_RIGHT", x: 99, y: 57, width: 50, height: 14),
+            Sprite(name: "PLAYLIST_SHADE_BACKGROUND_RIGHT_SELECTED", x: 99, y: 42, width: 50, height: 14),
             Sprite(name: "PLAYLIST_ADD_URL", x: 0, y: 111, width: 22, height: 18),
             Sprite(name: "PLAYLIST_ADD_URL_SELECTED", x: 23, y: 111, width: 22, height: 18),
             Sprite(name: "PLAYLIST_ADD_DIR", x: 0, y: 130, width: 22, height: 18),
