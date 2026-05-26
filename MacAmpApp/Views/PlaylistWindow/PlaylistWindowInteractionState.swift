@@ -19,7 +19,12 @@ final class PlaylistWindowInteractionState {
     var selectedIndices: Set<Int> = []
     var cursorIndex: Int?
     var isShadeMode: Bool = false
-    var scrollOffset: Int = 0
+    /// Vertical scroll offset of the track list, in pixels. Shared between
+    /// the ScrollView (`PlaylistTrackListView`), the gold-thumb slider
+    /// (`PlaylistScrollSlider`), and the keyboard-cursor visibility check.
+    /// Continuous so mouse-wheel scrolling moves the thumb smoothly and
+    /// slider drags move the list smoothly.
+    var scrollOffsetPixels: CGFloat = 0
     var dragStartSize: Size2D?
     var isDragging: Bool = false
     private(set) var resizePreview = WindowResizePreviewOverlay()
@@ -164,16 +169,24 @@ final class PlaylistWindowInteractionState {
 
     private func ensureCursorVisible(visibleTrackCount: Int, playlistCount: Int) {
         guard let cursor = cursorIndex, visibleTrackCount > 0 else { return }
-        if cursor < scrollOffset {
-            scrollOffset = cursor
-        } else if cursor >= scrollOffset + visibleTrackCount {
-            scrollOffset = cursor - visibleTrackCount + 1
+        let rowHeight = PlaylistWindowSizeState.trackRowHeight
+        let cursorTop = CGFloat(cursor) * rowHeight
+        let cursorBottom = cursorTop + rowHeight
+        let viewportTop = scrollOffsetPixels
+        let viewportBottom = viewportTop + CGFloat(visibleTrackCount) * rowHeight
+        if cursorTop < viewportTop {
+            scrollOffsetPixels = cursorTop
+        } else if cursorBottom > viewportBottom {
+            scrollOffsetPixels = cursorBottom - CGFloat(visibleTrackCount) * rowHeight
         }
     }
 
-    func clampScrollOffset(maxOffset: Int) {
-        if scrollOffset > maxOffset {
-            scrollOffset = maxOffset
+    func clampScrollOffset(maxOffsetPixels: CGFloat) {
+        if scrollOffsetPixels > maxOffsetPixels {
+            scrollOffsetPixels = max(0, maxOffsetPixels)
+        }
+        if scrollOffsetPixels < 0 {
+            scrollOffsetPixels = 0
         }
     }
 }

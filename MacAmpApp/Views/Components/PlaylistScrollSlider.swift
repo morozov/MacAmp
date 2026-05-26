@@ -1,17 +1,17 @@
 import SwiftUI
 
-/// Winamp-style playlist scroll slider with gold thumb
-/// Follows bridge layer pattern: receives bindings, handles presentation only
+/// Winamp-style playlist scroll slider with gold thumb.
 ///
 /// Bridge Contract:
-/// - Mechanism: PlaylistManager provides `tracks.count`, `currentIndex`
-/// - Bridge: PlaylistWindowSizeState provides `visibleTrackCount`
-/// - Bridge: WinampPlaylistWindow owns `@State scrollOffset: Int`
-/// - Presentation: This component renders thumb, handles drag
+/// - Bridge: WinampPlaylistWindow owns `scrollOffsetPixels: CGFloat` and
+///   computes `maxScrollOffsetPixels` from playlist size and viewport height.
+/// - Presentation: this component renders the thumb at the right fractional
+///   position and writes back continuous pixel offsets on drag, so both
+///   mouse-wheel scrolls and slider drags stay smooth (no row-quantization
+///   step).
 struct PlaylistScrollSlider: View {
-    @Binding var scrollOffset: Int  // First visible track index
-    let totalTracks: Int
-    let visibleTracks: Int
+    @Binding var scrollOffsetPixels: CGFloat
+    let maxScrollOffsetPixels: CGFloat
 
     @Environment(SkinManager.self) private var skinManager
 
@@ -22,20 +22,15 @@ struct PlaylistScrollSlider: View {
 
     // MARK: - Computed Properties
 
-    /// Maximum scroll offset (0 when all tracks visible)
-    private var maxScrollOffset: Int {
-        max(0, totalTracks - visibleTracks)
+    /// Current scroll position as fraction (0.0 to 1.0).
+    private var scrollFraction: CGFloat {
+        guard maxScrollOffsetPixels > 0 else { return 0 }
+        return min(1, max(0, scrollOffsetPixels / maxScrollOffsetPixels))
     }
 
-    /// Current scroll position as fraction (0.0 to 1.0)
-    private var scrollPosition: CGFloat {
-        guard maxScrollOffset > 0 else { return 0 }
-        return CGFloat(scrollOffset) / CGFloat(maxScrollOffset)
-    }
-
-    /// Whether slider is disabled (all tracks visible)
+    /// Whether the slider is disabled (all content fits, nothing to scroll).
     private var isDisabled: Bool {
-        totalTracks <= visibleTracks
+        maxScrollOffsetPixels <= 0
     }
 
     // MARK: - Body
@@ -43,10 +38,10 @@ struct PlaylistScrollSlider: View {
     var body: some View {
         GeometryReader { geometry in
             let availableHeight = geometry.size.height - handleHeight
-            let handleOffset = scrollPosition * availableHeight
+            let handleOffset = scrollFraction * availableHeight
 
             ZStack(alignment: .top) {
-                // Track (transparent - scroll track is part of PLAYLIST_RIGHT_TILE)
+                // Track (transparent — scroll track is part of PLAYLIST_RIGHT_TILE)
                 Color.clear
 
                 // Handle (gold thumb)
@@ -63,11 +58,8 @@ struct PlaylistScrollSlider: View {
                     .onChanged { value in
                         isDragging = true
                         guard !isDisabled else { return }
-
-                        // Calculate new scroll offset from drag position
-                        let newPosition = value.location.y / geometry.size.height
-                        let clampedPosition = min(1, max(0, newPosition))
-                        scrollOffset = Int(round(clampedPosition * CGFloat(maxScrollOffset)))
+                        let clamped = min(1, max(0, value.location.y / geometry.size.height))
+                        scrollOffsetPixels = clamped * maxScrollOffsetPixels
                     }
                     .onEnded { _ in
                         isDragging = false
@@ -82,19 +74,18 @@ struct PlaylistScrollSlider: View {
 
 #Preview {
     struct PreviewWrapper: View {
-        @State private var scrollOffset = 0
+        @State private var scrollOffsetPixels: CGFloat = 0
 
         var body: some View {
             HStack {
                 PlaylistScrollSlider(
-                    scrollOffset: $scrollOffset,
-                    totalTracks: 50,
-                    visibleTracks: 10
+                    scrollOffsetPixels: $scrollOffsetPixels,
+                    maxScrollOffsetPixels: 500
                 )
                 .frame(height: 174)
                 .background(Color.black.opacity(0.3))
 
-                Text("Offset: \(scrollOffset)")
+                Text(String(format: "Offset: %.1f", scrollOffsetPixels))
             }
             .padding()
             .environment(SkinManager())

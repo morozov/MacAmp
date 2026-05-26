@@ -18,8 +18,12 @@ struct WinampPlaylistWindow: View {
         windowFocusState.isPlaylistKey
     }
 
-    private var maxScrollOffset: Int {
-        max(0, audioPlayer.playlist.count - sizeState.visibleTrackCount)
+    /// Pixel ceiling on the scroll offset — i.e. the contentOffset.y value
+    /// at which the bottom of the last row aligns with the bottom of the
+    /// viewport. Zero when the playlist fits without scrolling.
+    private var maxScrollOffsetPixels: CGFloat {
+        let totalContentHeight = CGFloat(audioPlayer.playlist.count) * PlaylistWindowSizeState.trackRowHeight
+        return max(0, totalContentHeight - sizeState.contentHeight)
     }
 
     private var playlistStyle: PlaylistStyle {
@@ -95,7 +99,7 @@ struct WinampPlaylistWindow: View {
             PlaylistTrackListView(
                 sizeState: sizeState,
                 playlistStyle: playlistStyle,
-                scrollOffset: $ui.scrollOffset,
+                scrollOffsetPixels: $ui.scrollOffsetPixels,
                 onTrackTap: { ui.handleTrackTap(index: $0) },
                 selectedIndices: ui.selectedIndices
             )
@@ -118,17 +122,16 @@ struct WinampPlaylistWindow: View {
         )
 
         PlaylistScrollSlider(
-            scrollOffset: $ui.scrollOffset,
-            totalTracks: audioPlayer.playlist.count,
-            visibleTracks: sizeState.visibleTrackCount
+            scrollOffsetPixels: $ui.scrollOffsetPixels,
+            maxScrollOffsetPixels: maxScrollOffsetPixels
         )
         .frame(height: sizeState.contentHeight - 4)
         .position(x: windowWidth - 15, y: PlaylistWindowSizeState.topBarHeight + (sizeState.contentHeight / 2))
         .onChange(of: audioPlayer.playlist.count) { _, _ in
-            ui.clampScrollOffset(maxOffset: maxScrollOffset)
+            ui.clampScrollOffset(maxOffsetPixels: maxScrollOffsetPixels)
         }
-        .onChange(of: sizeState.visibleTrackCount) { _, _ in
-            ui.clampScrollOffset(maxOffset: maxScrollOffset)
+        .onChange(of: sizeState.contentHeight) { _, _ in
+            ui.clampScrollOffset(maxOffsetPixels: maxScrollOffsetPixels)
         }
 
         PlaylistResizeHandle(

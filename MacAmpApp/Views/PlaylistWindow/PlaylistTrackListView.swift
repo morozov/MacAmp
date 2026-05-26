@@ -6,9 +6,11 @@ struct PlaylistTrackListView: View {
 
     let sizeState: PlaylistWindowSizeState
     let playlistStyle: PlaylistStyle
-    @Binding var scrollOffset: Int
+    @Binding var scrollOffsetPixels: CGFloat
     let onTrackTap: (Int) -> Void
     let selectedIndices: Set<Int>
+
+    @State private var scrollPosition = ScrollPosition()
 
     var body: some View {
         let trackWidth = sizeState.contentWidth
@@ -16,9 +18,8 @@ struct PlaylistTrackListView: View {
             VStack(spacing: 0) {
                 ForEach(Array(audioPlayer.playlist.enumerated()), id: \.element.id) { index, track in
                     trackRow(track: track, index: index)
-                        .frame(width: trackWidth, height: 13)
+                        .frame(width: trackWidth, height: PlaylistWindowSizeState.trackRowHeight)
                         .background(trackBackground(track: track, index: index))
-                        .id(index)
                         .overlay(
                             ClickCatcherView(
                                 onSingleClick: { onTrackTap(index) },
@@ -29,24 +30,26 @@ struct PlaylistTrackListView: View {
                         )
                 }
             }
-            .scrollTargetLayout()
         }
-        .scrollPosition(id: scrolledRowBinding, anchor: .top)
-    }
-
-    /// Two-way bridge between the ScrollView's first-visible-row id and the
-    /// `scrollOffset` Int the rest of the playlist UI (slider, keyboard nav)
-    /// reads and writes. Without this, mouse-wheel / trackpad scrolling moves
-    /// content without updating `scrollOffset`, so the gold thumb in
-    /// `PlaylistScrollSlider` stays pinned.
-    private var scrolledRowBinding: Binding<Int?> {
-        Binding(
-            get: { scrollOffset },
-            set: { newValue in
-                guard let newValue, newValue != scrollOffset else { return }
-                scrollOffset = newValue
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentOffset.y
+        } action: { _, newY in
+            // User-driven scroll. Tolerance avoids feedback loops from float
+            // round-trips when programmatic scrolls land on non-integer offsets.
+            if abs(scrollOffsetPixels - newY) > 0.5 {
+                scrollOffsetPixels = newY
             }
-        )
+        }
+        .onChange(of: scrollOffsetPixels) { _, newPixels in
+            scrollPosition.scrollTo(point: CGPoint(x: 0, y: newPixels))
+        }
+        .onAppear {
+            // Restore the persisted offset when the view first appears.
+            if scrollOffsetPixels > 0 {
+                scrollPosition.scrollTo(point: CGPoint(x: 0, y: scrollOffsetPixels))
+            }
+        }
     }
 
     @ViewBuilder
@@ -90,5 +93,4 @@ struct PlaylistTrackListView: View {
         }
         return Color.clear
     }
-
 }
