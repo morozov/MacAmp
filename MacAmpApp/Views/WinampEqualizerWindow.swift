@@ -10,7 +10,7 @@ struct WinampEqualizerWindow: View {
     @Environment(PlaybackCoordinator.self) var playbackCoordinator
     @Environment(WindowFocusState.self) var windowFocusState
 
-    @State private var isShadeMode: Bool = false
+    @AppStorage("equalizerIsShadeMode") private var isShadeMode: Bool = false
     @State private var showPresetPicker: Bool = false
 
     // Computed: Is this window currently focused?
