@@ -26,7 +26,12 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
 
     private var windows: [WindowKind: TrackedWindow] = [:]
     private var lastOrigins: [ObjectIdentifier: NSPoint] = [:]
+    private var lastFrames: [ObjectIdentifier: NSRect] = [:]
     private var isAdjusting = false
+
+    /// Edge-coincidence tolerance for "docked" relationships. AppKit rounds
+    /// frames to whole points so any sub-pixel difference is a true gap.
+    private static let dockTolerance: CGFloat = 1.0
 
     // Public methods to disable snap manager during programmatic resizing
     func beginProgrammaticAdjustment() {
@@ -38,7 +43,9 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
         // Update lastOrigins for all windows after programmatic adjustment
         for (_, tracked) in windows {
             if let w = tracked.window {
-                lastOrigins[ObjectIdentifier(w)] = w.frame.origin
+                let id = ObjectIdentifier(w)
+                lastOrigins[id] = w.frame.origin
+                lastFrames[id] = w.frame
             }
         }
     }
@@ -46,7 +53,9 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
     func register(window: NSWindow, kind: WindowKind) {
         windows[kind] = TrackedWindow(window: window, kind: kind)
         // Delegate is set via WindowDelegateMultiplexer in WindowCoordinator
-        lastOrigins[ObjectIdentifier(window)] = window.frame.origin
+        let id = ObjectIdentifier(window)
+        lastOrigins[id] = window.frame.origin
+        lastFrames[id] = window.frame
     }
 
     func clusterKinds(containing kind: WindowKind) -> Set<WindowKind>? {
@@ -157,9 +166,102 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
         // Update last origins for all tracked windows to current
         for (_, tracked) in windows {
             if let w = tracked.window {
-                lastOrigins[ObjectIdentifier(w)] = w.frame.origin
+                let id = ObjectIdentifier(w)
+                lastOrigins[id] = w.frame.origin
+                lastFrames[id] = w.frame
             }
         }
+    }
+
+    /// Cascade a top-anchored resize (shade toggle, double-size) down to any
+    /// windows docked to the resized window's bottom edge. The chain of docked
+    /// windows below moves by the same delta as the bottom edge so they stay
+    /// glued in place — matching classic Winamp window grouping where shading
+    /// a window pulls the stack beneath it up.
+    func windowDidResize(_ notification: Notification) {
+        guard !isAdjusting else { return }
+        guard let resized = notification.object as? NSWindow else { return }
+        let resizedID = ObjectIdentifier(resized)
+        let newFrame = resized.frame
+        guard let oldFrame = lastFrames[resizedID] else {
+            lastFrames[resizedID] = newFrame
+            return
+        }
+        lastFrames[resizedID] = newFrame
+
+        // Top-anchored means the visual top edge stayed put. AppKit's
+        // top-left in macOS bottom-left coords is `origin.y + height`.
+        let oldTop = oldFrame.origin.y + oldFrame.size.height
+        let newTop = newFrame.origin.y + newFrame.size.height
+        guard abs(oldTop - newTop) < Self.dockTolerance else { return }
+
+        // Positive when the bottom moved UP (window shrank from bottom),
+        // negative when it moved DOWN (window grew). Apply as-is to docked
+        // windows' origin.y — they sit *below* the resized window, so they
+        // need to follow the bottom edge in the same direction.
+        let delta = newFrame.origin.y - oldFrame.origin.y
+        guard abs(delta) > 0 else { return }
+
+        let toMove = transitivelyDockedBelow(
+            anchorBottomY: oldFrame.origin.y,
+            anchorXRange: (oldFrame.minX, oldFrame.maxX),
+            excludeID: resizedID
+        )
+
+        guard !toMove.isEmpty else { return }
+
+        beginProgrammaticAdjustment()
+        for id in toMove {
+            guard let w = window(for: id) else { continue }
+            var origin = w.frame.origin
+            origin.y += delta
+            w.setFrameOrigin(origin)
+            lastFrames[id] = w.frame
+            lastOrigins[id] = w.frame.origin
+        }
+        endProgrammaticAdjustment()
+    }
+
+    /// Walks the chain of windows whose top edge sits on the supplied bottom
+    /// edge (transitively — a window docked to one of those windows is also
+    /// included). Uses each candidate's *current* frame, valid here because
+    /// `windowDidResize` fires before any of the cascaded moves run.
+    private func transitivelyDockedBelow(
+        anchorBottomY: CGFloat,
+        anchorXRange: (CGFloat, CGFloat),
+        excludeID: ObjectIdentifier
+    ) -> [ObjectIdentifier] {
+        var result: [ObjectIdentifier] = []
+        var seen: Set<ObjectIdentifier> = [excludeID]
+        var frontier: [(bottomY: CGFloat, xRange: (CGFloat, CGFloat))] = [(anchorBottomY, anchorXRange)]
+
+        while let edge = frontier.popLast() {
+            for (_, tracked) in windows {
+                guard let w = tracked.window, w.isVisible else { continue }
+                let id = ObjectIdentifier(w)
+                guard !seen.contains(id) else { continue }
+                let f = w.frame
+                let wTop = f.origin.y + f.size.height
+                guard abs(wTop - edge.bottomY) < Self.dockTolerance else { continue }
+                guard xRangesOverlap(edge.xRange, (f.minX, f.maxX)) else { continue }
+
+                seen.insert(id)
+                result.append(id)
+                frontier.append((f.origin.y, (f.minX, f.maxX)))
+            }
+        }
+        return result
+    }
+
+    private func xRangesOverlap(_ a: (CGFloat, CGFloat), _ b: (CGFloat, CGFloat)) -> Bool {
+        a.0 < b.1 && b.0 < a.1
+    }
+
+    private func window(for id: ObjectIdentifier) -> NSWindow? {
+        for (_, tracked) in windows {
+            if let w = tracked.window, ObjectIdentifier(w) == id { return w }
+        }
+        return nil
     }
 
     // Determine if two boxes are connected (snapped) according to snap rules
@@ -332,7 +434,9 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
         dragContexts.removeValue(forKey: kind)
         for (_, tracked) in windows {
             if let w = tracked.window {
-                lastOrigins[ObjectIdentifier(w)] = w.frame.origin
+                let id = ObjectIdentifier(w)
+                lastOrigins[id] = w.frame.origin
+                lastFrames[id] = w.frame
             }
         }
     }
