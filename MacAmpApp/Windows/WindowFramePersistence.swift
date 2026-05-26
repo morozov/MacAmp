@@ -81,33 +81,46 @@ final class WindowFramePersistence {
     private func restoreMainWindow(scale: CGFloat) -> Bool {
         guard let main = registry.mainWindow,
               let stored = windowFrameStore.frame(for: .main) else { return false }
-        var frame = main.frame
-        frame.size = CGSize(width: WinampSizes.main.width * scale, height: WinampSizes.main.height * scale)
-        frame.origin = stored.origin
-        main.setFrame(frame, display: true)
+        let newSize = CGSize(width: WinampSizes.main.width * scale, height: WinampSizes.main.height * scale)
+        main.setFrame(topLeftAnchoredFrame(stored: stored, newSize: newSize), display: true)
         return true
     }
 
     private func restoreEQWindow(scale: CGFloat) -> Bool {
         guard let eq = registry.eqWindow,
               let stored = windowFrameStore.frame(for: .equalizer) else { return false }
-        var frame = eq.frame
-        frame.size = CGSize(width: WinampSizes.equalizer.width * scale, height: WinampSizes.equalizer.height * scale)
-        frame.origin = stored.origin
-        eq.setFrame(frame, display: true)
+        let newSize = CGSize(width: WinampSizes.equalizer.width * scale, height: WinampSizes.equalizer.height * scale)
+        eq.setFrame(topLeftAnchoredFrame(stored: stored, newSize: newSize), display: true)
         return true
+    }
+
+    /// Build a frame whose visual top-left matches the persisted frame's
+    /// visual top-left. Persisted state can be from a shaded window (small
+    /// height); restoring at that bottom-left with a forced full height would
+    /// push the visual top above where the user left it. Subsequent SwiftUI
+    /// `[.preferredContentSize]` resizes are top-anchored, so the placed
+    /// top-left survives the rest of restoration.
+    private func topLeftAnchoredFrame(stored: NSRect, newSize: CGSize) -> NSRect {
+        let persistedTopY = stored.origin.y + stored.size.height
+        return NSRect(
+            x: stored.origin.x,
+            y: persistedTopY - newSize.height,
+            width: newSize.width,
+            height: newSize.height
+        )
     }
 
     private func restorePlaylistWindow() -> Bool {
         guard let playlist = registry.playlistWindow,
-              var stored = windowFrameStore.frame(for: .playlist) else { return false }
-        let clampedWidth = max(PlaylistWindowSizeState.baseWidth, stored.size.width)
-        let clampedHeight = max(
-            PlaylistWindowSizeState.baseHeight,
-            min(LayoutDefaults.playlistMaxHeight, stored.size.height)
+              let stored = windowFrameStore.frame(for: .playlist) else { return false }
+        let newSize = CGSize(
+            width: max(PlaylistWindowSizeState.baseWidth, stored.size.width),
+            height: max(
+                PlaylistWindowSizeState.baseHeight,
+                min(LayoutDefaults.playlistMaxHeight, stored.size.height)
+            )
         )
-        stored.size = CGSize(width: clampedWidth, height: clampedHeight)
-        playlist.setFrame(stored, display: true)
+        playlist.setFrame(topLeftAnchoredFrame(stored: stored, newSize: newSize), display: true)
         return true
     }
 
