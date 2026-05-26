@@ -26,7 +26,19 @@ struct PlaylistBitmapText: View {
     }
 
     private func imageForChar(_ ch: Character) -> NSImage? {
-        let code = String(ch).utf16.first ?? 32
+        // TEXT.BMP only contains lowercase glyphs (see `SkinSprites.fontLookup`
+        // row 0: "abcdefghijklmnopqrstuvwxyz…"). Webamp folds the character
+        // through `deburr(char).toLowerCase().charCodeAt(0)` before mapping
+        // (`packages/webamp/js/components/Character.tsx`), so 'M' and 'É'
+        // both resolve to the lowercase-letter sprite. Match that — without
+        // it, every uppercase letter misses the lookup and falls back to the
+        // system font, making the rendering inconsistent with the main
+        // window's track-info area (which strips case via its own +32
+        // ASCII-offset trick).
+        let folded = String(ch)
+            .folding(options: .diacriticInsensitive, locale: nil)
+            .lowercased()
+        let code = folded.utf16.first ?? 32
         let key = "CHARACTER_\(code)"
         return skinManager.currentSkin?.images[key]
     }
