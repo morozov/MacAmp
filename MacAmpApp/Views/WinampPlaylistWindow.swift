@@ -126,7 +126,12 @@ struct WinampPlaylistWindow: View {
             maxScrollOffsetPixels: maxScrollOffsetPixels
         )
         .frame(height: sizeState.contentHeight - 4)
-        .position(x: windowWidth - 15, y: PlaylistWindowSizeState.topBarHeight + (sizeState.contentHeight / 2))
+        // Webamp's `PlaylistScrollBar` sits inside `.playlist-middle-right`
+        // (20px wide) with `marginLeft: 5; width: 8`, so the thumb occupies
+        // tile-local x = 5..13 — center at tile-local 9. In window coords:
+        // (windowWidth - 20) + 9 = windowWidth - 11. Skin-agnostic per
+        // Webamp's CSS, not derived from any particular sprite.
+        .position(x: windowWidth - 11, y: PlaylistWindowSizeState.topBarHeight + (sizeState.contentHeight / 2))
         .onChange(of: audioPlayer.playlist.count) { _, _ in
             ui.clampScrollOffset(maxOffsetPixels: maxScrollOffsetPixels)
         }
