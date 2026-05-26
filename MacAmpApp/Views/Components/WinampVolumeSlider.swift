@@ -79,13 +79,19 @@ struct WinampVolumeSlider: View {
     }
     
     private func updateVolume(from gesture: DragGesture.Value, in geometry: GeometryProxy) {
-        let width = geometry.size.width
-        let x = min(max(0, gesture.location.x), width)
-        let newVolume = max(0, min(1, Float(x / width)))
+        // Cursor maps to the thumb's center, so subtract half the thumb's
+        // width and divide by the thumb-travel range — not the full slider
+        // width. Otherwise the cursor aligns with the thumb's left edge at
+        // volume 0 and its right edge at volume 1.
+        let trackRange = max(0, geometry.size.width - thumbWidth)
+        guard trackRange > 0 else { return }
+        let adjustedX = gesture.location.x - thumbWidth / 2
+        let clampedX = min(max(0, adjustedX), trackRange)
+        let newVolume = max(0, min(1, Float(clampedX / trackRange)))
         // Skip writes that resolve to the same visible pixel position. This
         // eliminates gesture-tick churn when the user clicks-and-holds without
         // motion (DragGesture re-fires onChanged per run-loop tick).
-        guard abs(volume - newVolume) >= 1.0 / Float(sliderWidth) else { return }
+        guard abs(volume - newVolume) >= 1.0 / Float(trackRange) else { return }
         volume = newVolume
     }
 
