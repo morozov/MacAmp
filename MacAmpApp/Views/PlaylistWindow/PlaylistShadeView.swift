@@ -79,6 +79,15 @@ struct PlaylistShadeView: View {
     }
 
     var body: some View {
+        // Drag-capture area sits below the close/shade buttons (rightmost ~24
+        // px) and above the visual layers (sprites + text don't capture
+        // events). Without it the folded playlist can't be dragged — the
+        // full-mode `WinampTitlebarDragHandle` lives in
+        // `WinampPlaylistWindow.buildContentOverlay`, which is replaced by
+        // this view when shaded.
+        let buttonsWidth: CGFloat = 24
+        let dragWidth = max(0, windowWidth - buttonsWidth)
+
         ZStack(alignment: .topLeading) {
             buildShadeBackground()
 
@@ -94,6 +103,10 @@ struct PlaylistShadeView: View {
                 PlaylistTimeText(timeText, spacing: 0)
                     .at(x: windowWidth - 29 - approxTimeWidth, y: 4)
             }
+
+            TitlebarDragCaptureView(windowKind: .playlist)
+                .frame(width: dragWidth, height: 14)
+                .at(x: 0, y: 0)
 
             PlaylistTitleBarButtons(
                 windowWidth: windowWidth,
