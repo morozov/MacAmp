@@ -30,9 +30,11 @@ class WinampEqualizerWindowController: NSWindowController {
             .environment(playbackCoordinator)
             .environment(windowFocusState)
 
-        // FirstMouseHostingController's underlying NSHostingView is set up
-        // with `sizingOptions = [.preferredContentSize]`, so toggling shade
-        // mode resizes the window automatically.
+        // FirstMouseHostingController combines first-click delivery (so
+        // dragging the titlebar / slider on an inactive window works on the
+        // first mousedown) with SwiftUI-driven window resize (shade toggle
+        // propagates through the hosting view's intrinsic size to this
+        // controller's preferredContentSize).
         let hostingController = FirstMouseHostingController(rootView: rootView)
         let hostingView = hostingController.view
         hostingView.frame = NSRect(origin: .zero, size: window.contentLayoutRect.size)
