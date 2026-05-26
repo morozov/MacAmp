@@ -27,7 +27,7 @@ class WinampVideoWindowController: NSWindowController {
             .environment(playbackCoordinator)
             .environment(windowFocusState)
 
-        let hostingController = NSHostingController(rootView: rootView)
+        let hostingController = FirstMouseHostingController(rootView: rootView)
 
         // CRITICAL: Only set contentViewController - DO NOT set contentView
         // Setting contentView releases the hosting controller, breaking SwiftUI lifecycle
