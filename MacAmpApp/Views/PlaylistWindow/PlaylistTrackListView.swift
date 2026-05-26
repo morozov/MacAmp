@@ -12,31 +12,41 @@ struct PlaylistTrackListView: View {
 
     var body: some View {
         let trackWidth = sizeState.contentWidth
-        ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(Array(audioPlayer.playlist.enumerated()), id: \.element.id) { index, track in
-                        trackRow(track: track, index: index)
-                            .frame(width: trackWidth, height: 13)
-                            .background(trackBackground(track: track, index: index))
-                            .id(index)
-                            .overlay(
-                                ClickCatcherView(
-                                    onSingleClick: { onTrackTap(index) },
-                                    onDoubleClick: {
-                                        Task { await playbackCoordinator.play(track: track) }
-                                    }
-                                )
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                ForEach(Array(audioPlayer.playlist.enumerated()), id: \.element.id) { index, track in
+                    trackRow(track: track, index: index)
+                        .frame(width: trackWidth, height: 13)
+                        .background(trackBackground(track: track, index: index))
+                        .id(index)
+                        .overlay(
+                            ClickCatcherView(
+                                onSingleClick: { onTrackTap(index) },
+                                onDoubleClick: {
+                                    Task { await playbackCoordinator.play(track: track) }
+                                }
                             )
-                    }
+                        )
                 }
             }
-            .onChange(of: scrollOffset) { _, newOffset in
-                withAnimation(.easeOut(duration: 0.1)) {
-                    proxy.scrollTo(newOffset, anchor: .top)
-                }
-            }
+            .scrollTargetLayout()
         }
+        .scrollPosition(id: scrolledRowBinding, anchor: .top)
+    }
+
+    /// Two-way bridge between the ScrollView's first-visible-row id and the
+    /// `scrollOffset` Int the rest of the playlist UI (slider, keyboard nav)
+    /// reads and writes. Without this, mouse-wheel / trackpad scrolling moves
+    /// content without updating `scrollOffset`, so the gold thumb in
+    /// `PlaylistScrollSlider` stays pinned.
+    private var scrolledRowBinding: Binding<Int?> {
+        Binding(
+            get: { scrollOffset },
+            set: { newValue in
+                guard let newValue, newValue != scrollOffset else { return }
+                scrollOffset = newValue
+            }
+        )
     }
 
     @ViewBuilder
