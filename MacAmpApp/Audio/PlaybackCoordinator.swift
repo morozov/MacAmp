@@ -287,7 +287,28 @@ final class PlaybackCoordinator {
             pause()
         } else if isPaused {
             resume()
+        } else if let track = currentTrack {
+            // Idle with a selected track (e.g., just restored from playlist.m3u
+            // on launch, or after Stop). Play from the beginning.
+            Task { await play(track: track) }
         }
+    }
+
+    /// Set the playlist selection to the given track without starting playback.
+    /// Used by Spec 005 auto-restore and `Load List`'s currentIndex application
+    /// to reinstate the previously-current row without auto-resuming. `currentSource`
+    /// is intentionally left nil — `togglePlayPause` calls `play(track:)` when
+    /// idle-with-selection, which sets it correctly per the track type.
+    func selectTrack(_ track: Track) {
+        audioPlayer.selectTrackForPlayback(track)
+        currentTrack = track
+        currentTitle = track.isStream
+            ? track.title
+            : formattedLocalDisplayTitle(
+                trackTitle: track.title,
+                trackArtist: track.artist,
+                url: track.url
+            )
     }
 
     /// Navigate to next track in playlist

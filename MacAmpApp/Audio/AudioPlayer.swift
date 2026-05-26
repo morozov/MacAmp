@@ -355,6 +355,77 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         return true
     }
 
+    /// Unified materialization of parsed M3U entries into the playlist (Spec 005).
+    /// EXTINF is the source of truth — no async metadata loading runs for M3U-
+    /// loaded files. Sliced entries bypass per-URL dedup; whole-file entries
+    /// honor it; streams append directly. Used by auto-restore, `Load List`,
+    /// and the M3U branch of `Add Files`.
+    func addEntries(_ entries: [M3UEntry]) {
+        for entry in entries {
+            if let slice = entry.cueSlice {
+                let (artist, title) = Self.splitDisplayString(entry.title)
+                let track = Track(
+                    url: entry.url,
+                    title: title.isEmpty ? entry.url.lastPathComponent : title,
+                    artist: artist,
+                    duration: Double(entry.duration ?? Int(slice.duration)),
+                    cueSlice: slice
+                )
+                playlistController.addTrack(track)
+            } else if entry.isRemoteStream {
+                let streamTrack = Track(
+                    url: entry.url,
+                    title: entry.title ?? "Unknown Station",
+                    artist: "Internet Radio",
+                    duration: 0.0
+                )
+                playlistController.addTrack(streamTrack)
+            } else {
+                let normalizedURL = entry.url.standardizedFileURL
+                guard !playlistController.containsTrack(url: normalizedURL) else { continue }
+                let (artist, title) = Self.splitDisplayString(entry.title)
+                let track = Track(
+                    url: normalizedURL,
+                    title: title.isEmpty ? normalizedURL.lastPathComponent : title,
+                    artist: artist,
+                    duration: Double(entry.duration ?? 0)
+                )
+                playlistController.addTrack(track)
+            }
+        }
+    }
+
+    /// Set the playlist selection to the given track without loading or playing
+    /// it. Used by Spec 005 auto-restore and `Load List`'s currentIndex apply:
+    /// the row is highlighted, the title and duration are shown, `currentTime`
+    /// is `0`, and `playbackState` stays whatever it was (typically `.stopped`).
+    /// Pressing Play after this call invokes the normal play path against the
+    /// selected track, starting from the beginning.
+    func selectTrackForPlayback(_ track: Track) {
+        currentTrack = track
+        currentTitle = "\(track.artist) - \(track.title)"
+        currentDuration = track.duration
+        currentTrackURL = track.url
+        currentTime = 0
+        playbackProgress = 0
+        playlistController.updatePosition(with: track)
+    }
+
+    /// Split EXTINF display string `"Artist - Title"` into components. Returns
+    /// `(artist, title)`; if no ` - ` separator is present, the whole string
+    /// is the title and the artist defaults to `Unknown Artist`.
+    static func splitDisplayString(_ display: String?) -> (artist: String, title: String) {
+        guard let display, !display.isEmpty else {
+            return ("Unknown Artist", "")
+        }
+        if let range = display.range(of: " - ") {
+            let artist = String(display[..<range.lowerBound])
+            let title = String(display[range.upperBound...])
+            return (artist, title)
+        }
+        return ("Unknown Artist", display)
+    }
+
     func removeTrack(at index: Int) {
         let removedID: UUID? = playlistController.playlist.indices.contains(index)
             ? playlistController.playlist[index].id

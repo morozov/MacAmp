@@ -32,41 +32,60 @@ final class PlaylistWindowActions: NSObject {
         await coordinator.play(track: firstTrack)
     }
 
-    // MARK: - Unified M3U Entry Addition
+    // MARK: - Unified M3U Materialization
 
-    /// Add parsed M3U entries to the playlist. Shared by Add Files and Load List paths.
-    /// `.cue` entries are expanded into their slices; failures surface as alerts
-    /// (the user explicitly referenced the sheet from the M3U).
-    private func addEntries(_ entries: [M3UEntry], to audioPlayer: AudioPlayer) async {
-        for entry in entries {
-            if entry.isRemoteStream {
-                let streamTrack = Track(
-                    url: entry.url,
-                    title: entry.title ?? "Unknown Station",
-                    artist: "Internet Radio",
-                    duration: 0.0
-                )
-                audioPlayer.addStreamTrack(streamTrack)
-            } else if entry.url.pathExtension.lowercased() == "cue" {
+    /// Spec 005: route a parsed M3U through the same materializer used by
+    /// auto-restore. `.cue` URLs inside the M3U are expanded by re-entering
+    /// `parseAndAddCue` (failures surface loudly — the user explicitly
+    /// referenced the sheet). Returns the count of materialized entries so
+    /// the caller can map `currentIndex` against the resulting playlist.
+    @discardableResult
+    private func materializeM3U(_ parsed: M3UParseResult, audioPlayer: AudioPlayer) async -> Int {
+        var added = 0
+        for entry in parsed.entries {
+            if entry.cueSlice == nil
+                && !entry.isRemoteStream
+                && entry.url.pathExtension.lowercased() == "cue" {
+                let before = audioPlayer.playlist.count
                 await parseAndAddCue(entry.url, audioPlayer: audioPlayer, reportFailureLoudly: true)
+                added += audioPlayer.playlist.count - before
             } else {
-                audioPlayer.addTrack(url: entry.url)
+                let before = audioPlayer.playlist.count
+                audioPlayer.addEntries([entry])
+                added += audioPlayer.playlist.count - before
             }
         }
+        return added
     }
 
-    /// Load List apply: stale-generation check, clear, then expand entries.
-    /// The generation check happens before mutating state; once we commit, a newer
-    /// load arriving mid-await will clear and re-apply on its own turn.
-    private func applyLoadedEntries(
-        _ entries: [M3UEntry],
+    /// Load List apply: stale-generation check, clear, materialize, then apply
+    /// the parsed file's `currentIndex` per Spec 005 caller-responsibilities
+    /// table. Returns false if a newer Load List superseded this one.
+    private func applyLoadedPlaylist(
+        _ parsed: M3UParseResult,
         expectedGeneration: UInt64,
-        audioPlayer: AudioPlayer
+        audioPlayer: AudioPlayer,
+        coordinator: PlaybackCoordinator?
     ) async -> Bool {
         guard loadListGeneration == expectedGeneration else { return false }
         audioPlayer.clearPlaylist()
-        await addEntries(entries, to: audioPlayer)
+        await materializeM3U(parsed, audioPlayer: audioPlayer)
+        applyCurrentIndex(parsed.currentIndex, audioPlayer: audioPlayer, coordinator: coordinator)
         return true
+    }
+
+    /// Apply the parsed file's `currentIndex` against the current playlist:
+    /// when in bounds, select that track without starting playback. No-op when
+    /// nil or out-of-bounds.
+    private func applyCurrentIndex(
+        _ index: Int?,
+        audioPlayer: AudioPlayer,
+        coordinator: PlaybackCoordinator?
+    ) {
+        guard let coordinator,
+              let index,
+              audioPlayer.playlist.indices.contains(index) else { return }
+        coordinator.selectTrack(audioPlayer.playlist[index])
     }
 
     // MARK: - Add Files Panel
@@ -91,14 +110,22 @@ final class PlaylistWindowActions: NSObject {
                     let wasEmpty = audioPlayer.playlist.isEmpty
 
                     // handleSelectedURLs is async — awaits M3U parsing inline
-                    await self.handleSelectedURLs(urls, audioPlayer: audioPlayer)
+                    let hint = await self.handleSelectedURLs(urls, audioPlayer: audioPlayer)
 
-                    // Single auto-play check AFTER all files (sync + async) are added
-                    await self.autoPlayFirstTrack(
-                        audioPlayer: audioPlayer,
-                        coordinator: coordinator,
-                        wasEmpty: wasEmpty
-                    )
+                    // Spec 005: when N == 0 and the first M3U carried a
+                    // currentIndex, restore that selection without auto-play.
+                    // Otherwise fall through to the existing auto-play-first-track
+                    // behavior (gated on wasEmpty as before).
+                    if wasEmpty, let hint, let coordinator,
+                       audioPlayer.playlist.indices.contains(hint.absoluteIndex) {
+                        coordinator.selectTrack(audioPlayer.playlist[hint.absoluteIndex])
+                    } else {
+                        await self.autoPlayFirstTrack(
+                            audioPlayer: audioPlayer,
+                            coordinator: coordinator,
+                            wasEmpty: wasEmpty
+                        )
+                    }
                 }
             }
         }
@@ -106,11 +133,25 @@ final class PlaylistWindowActions: NSObject {
 
     // MARK: - File Handling (async — awaits M3U parsing)
 
-    private func handleSelectedURLs(_ urls: [URL], audioPlayer: AudioPlayer) async {
+    /// Hint surfaced by `handleSelectedURLs` for the caller's post-load decision.
+    /// Captures the absolute playlist index that the first processed M3U's
+    /// `#EXTMACAMP-CURRENT` resolves to (Spec 005, caller-responsibilities table).
+    private struct SelectionHint {
+        let absoluteIndex: Int
+    }
+
+    private func handleSelectedURLs(_ urls: [URL], audioPlayer: AudioPlayer) async -> SelectionHint? {
+        var firstHint: SelectionHint?
         for url in urls {
             let ext = url.pathExtension.lowercased()
             if ext == "m3u" || ext == "m3u8" {
-                await parseAndAddM3U(url, audioPlayer: audioPlayer)
+                let offset = audioPlayer.playlist.count
+                if let parsed = await parseAndAddM3U(url, audioPlayer: audioPlayer),
+                   firstHint == nil,
+                   let ci = parsed.currentIndex,
+                   audioPlayer.playlist.indices.contains(offset + ci) {
+                    firstHint = SelectionHint(absoluteIndex: offset + ci)
+                }
             } else if ext == "cue" {
                 await parseAndAddCue(url, audioPlayer: audioPlayer, reportFailureLoudly: true)
             } else if let sidecar = CueParser.sidecarCueURL(for: url) {
@@ -131,19 +172,24 @@ final class PlaylistWindowActions: NSObject {
                 audioPlayer.addTrack(url: url)
             }
         }
+        return firstHint
     }
 
-    /// Parse M3U off main actor, add entries on main actor. Async — caller can await.
-    private func parseAndAddM3U(_ url: URL, audioPlayer: AudioPlayer) async {
-        let result: Result<[M3UEntry], Error> = await Task.detached(priority: .userInitiated) {
+    /// Parse M3U off main actor, materialize on main actor. Returns the parse
+    /// result so callers can apply `currentIndex` per Spec 005, or nil on
+    /// parse failure (alert already shown).
+    private func parseAndAddM3U(_ url: URL, audioPlayer: AudioPlayer) async -> M3UParseResult? {
+        let result: Result<M3UParseResult, Error> = await Task.detached(priority: .userInitiated) {
             Result { try M3UParser.parse(fileURL: url) }
         }.value
 
         switch result {
-        case .success(let entries):
-            await addEntries(entries, to: audioPlayer)
+        case .success(let parsed):
+            await materializeM3U(parsed, audioPlayer: audioPlayer)
+            return parsed
         case .failure(let error):
             showErrorAlert("Failed to Load M3U Playlist", error: error)
+            return nil
         }
     }
 
@@ -383,14 +429,17 @@ final class PlaylistWindowActions: NSObject {
                     let result = Result { try M3UParser.parse(fileURL: url) }
 
                     switch result {
-                    case .success(let entries):
-                        let applied = await self.applyLoadedEntries(
-                            entries,
+                    case .success(let parsed):
+                        let applied = await self.applyLoadedPlaylist(
+                            parsed,
                             expectedGeneration: expectedGeneration,
-                            audioPlayer: audioPlayer
+                            audioPlayer: audioPlayer,
+                            coordinator: coordinator
                         )
-                        // Auto-play first track (only if we actually applied the results)
-                        if applied {
+                        // Spec 005: auto-play first track iff currentIndex was
+                        // absent (currentIndex apply already happened above and
+                        // is the dominant signal when present).
+                        if applied, parsed.currentIndex == nil {
                             await self.autoPlayFirstTrack(
                                 audioPlayer: audioPlayer,
                                 coordinator: coordinator,

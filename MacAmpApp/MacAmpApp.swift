@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 @main
 struct MacAmpApp: App {
@@ -10,6 +11,7 @@ struct MacAmpApp: App {
     @State private var streamPlayer: StreamPlayer
     @State private var playbackCoordinator: PlaybackCoordinator
     @State private var windowFocusState: WindowFocusState
+    @State private var playlistStateStore: PlaylistStateStore
 
     init() {
         let skinManager = SkinManager()
@@ -20,6 +22,34 @@ struct MacAmpApp: App {
         let streamPlayer = StreamPlayer()
         let playbackCoordinator = PlaybackCoordinator(audioPlayer: audioPlayer, streamPlayer: streamPlayer)
 
+        // Spec 005: restore the persisted playlist + current-track marker
+        // before the playlist window has a chance to render. The store itself
+        // is constructed AFTER population so its observation loop doesn't
+        // fire a redundant save during restore.
+        if let snapshot = PlaylistStateStore.restoreSnapshot() {
+            audioPlayer.addEntries(snapshot.entries)
+            if let idx = snapshot.currentIndex,
+               audioPlayer.playlist.indices.contains(idx) {
+                playbackCoordinator.selectTrack(audioPlayer.playlist[idx])
+            }
+        }
+
+        let playlistStateStore = PlaylistStateStore(
+            audioPlayer: audioPlayer,
+            playbackCoordinator: playbackCoordinator
+        )
+
+        // Spec 005: flush any pending debounced save before the process exits.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                playlistStateStore.flushSynchronously()
+            }
+        }
+
         _skinManager = State(initialValue: skinManager)
         _audioPlayer = State(initialValue: audioPlayer)
         _dockingController = State(initialValue: dockingController)
@@ -27,6 +57,7 @@ struct MacAmpApp: App {
         _radioLibrary = State(initialValue: radioLibrary)
         _streamPlayer = State(initialValue: streamPlayer)
         _playbackCoordinator = State(initialValue: playbackCoordinator)
+        _playlistStateStore = State(initialValue: playlistStateStore)
 
         // CRITICAL FIX #1: Skin auto-loading (from UnifiedDockView.ensureSkin)
         // Load initial skin before creating windows
