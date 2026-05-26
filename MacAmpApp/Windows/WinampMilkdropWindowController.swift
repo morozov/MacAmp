@@ -53,7 +53,7 @@ class WinampMilkdropWindowController: NSWindowController {
             .environment(bridge)
             .environment(presetMgr)
 
-        let hostingController = NSHostingController(rootView: rootView)
+        let hostingController = FirstMouseHostingController(rootView: rootView)
 
         AppLog.debug(.window, "WinampMilkdropWindowController: Creating window with size \(window.frame.size)")
 
