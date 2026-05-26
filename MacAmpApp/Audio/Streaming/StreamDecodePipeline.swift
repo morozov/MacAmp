@@ -419,8 +419,8 @@ final class StreamDecodePipeline {
 
         // Try M3U parsing (works for both .m3u and .m3u8)
         // Pass relativeTo: url so relative entries resolve against the playlist URL
-        if let entries = try? M3UParser.parse(content: content, relativeTo: url),
-           let firstStream = entries.first(where: { !$0.url.isFileURL }) {
+        if let parsed = try? M3UParser.parse(content: content, relativeTo: url),
+           let firstStream = parsed.entries.first(where: { !$0.url.isFileURL }) {
             return firstStream.url
         }
 
