@@ -16,6 +16,17 @@ struct MainWindowShadeLayer: View {
             SimpleSpriteImage("MAIN_SHADE_BACKGROUND", width: 275, height: 14)
                 .at(CGPoint(x: 0, y: 0))
 
+            // Drag-capture below the time display and titlebar buttons, so
+            // those keep their click handlers while the rest of the strip
+            // moves the window. Without it, MAIN_SHADE_BACKGROUND swallows
+            // every click and the outer `WinampTitlebarDragHandle` (which
+            // sits beneath this shade layer in `WinampMainWindow`) never
+            // sees the drag.
+            let buttonsWidth: CGFloat = 275 - Layout.minimizeButton.x
+            TitlebarDragCaptureView(windowKind: .main)
+                .frame(width: max(0, 275 - buttonsWidth), height: 14)
+                .at(CGPoint(x: 0, y: 0))
+
             buildShadeTimeDisplay()
             buildShadeTitlebarButtons()
         }
