@@ -52,30 +52,47 @@ struct PlaylistTrackListView: View {
         }
     }
 
+    /// Track-cell font. Webamp wires `${skin.font}, Arial, sans-serif` at
+    /// 9 px (`packages/webamp/js/components/PlaylistWindow/TrackCell.tsx` +
+    /// `playlist-window.css`), but classic Winamp's playlist preferences
+    /// default to Arial 12. Honoring the latter — what the user actually
+    /// configures — with skin's pledit.txt Font taking precedence when set.
+    private var trackFont: Font {
+        if let name = playlistStyle.fontName, !name.isEmpty {
+            return .custom(name, size: 12)
+        }
+        return .custom("Arial", size: 12)
+    }
+
     @ViewBuilder
     private func trackRow(track: Track, index: Int) -> some View {
         let textColor = trackTextColor(track: track)
+        // Padding values measured by OCRing the Winamp reference screenshot
+        // (image at 1:1 scale, content area 243 px wide):
+        //   leading: "1." text left edge at content_x=4
+        //   trailing: "M:SS" text right edge at content_x=240 (3 px from edge)
+        //   index↔title spacing: ~2 px (Winamp uses intrinsic widths, not a
+        //     fixed column, so the title shifts right by ~3-4 px when the
+        //     index crosses single→double digits — drop the explicit
+        //     `.frame(width:)` on index/duration to match)
         HStack(spacing: 2) {
             Text("\(index + 1).")
-                .font(.system(size: 9, design: .monospaced))
+                .font(trackFont)
                 .foregroundColor(textColor)
-                .frame(width: 18, alignment: .trailing)
 
             Text("\(track.title) - \(track.artist)")
-                .font(.system(size: 9))
+                .font(trackFont)
                 .foregroundColor(textColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
 
             Text(TimeFormatting.formatDuration(track.duration))
-                .font(.system(size: 9, design: .monospaced))
+                .font(trackFont)
                 .foregroundColor(textColor)
-                .frame(width: 38, alignment: .trailing)
-                .padding(.trailing, 3)
         }
-        .padding(.horizontal, 2)
+        .padding(.leading, 4)
+        .padding(.trailing, 3)
     }
 
     private func trackTextColor(track: Track) -> Color {

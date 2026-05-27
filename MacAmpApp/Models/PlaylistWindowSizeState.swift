@@ -36,8 +36,10 @@ final class PlaylistWindowSizeState {
     static let bottomLeftWidth: CGFloat = 125
     static let bottomRightWidth: CGFloat = 150
 
-    /// Track rendering
-    static let trackRowHeight: CGFloat = 13
+    /// Track rendering — sized for Arial 12 (Winamp's default playlist font
+    /// size). Webamp's CSS shrinks this to 13 because it pins font-size to
+    /// 9 px, but the user-facing Winamp preference is 12.
+    static let trackRowHeight: CGFloat = 17
 
     /// Content area padding (scroll track is inside right border)
     static let contentAreaTopPadding: CGFloat = 0
