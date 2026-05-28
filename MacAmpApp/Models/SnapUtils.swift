@@ -86,17 +86,25 @@ enum SnapUtils {
         return Diff(x: x, y: y)
     }
 
+    // Snap-attract a box to its bound's edges when still inside the bound but
+    // within SNAP_DISTANCE of an edge. Don't fire when the box is already
+    // outside — native macOS windows can be dragged partly off-screen at the
+    // sides and bottom, and the menu-bar top edge is handled separately via
+    // per-window AppKit clamping plus the cohesive-clamp pass in
+    // `WindowSnapManager.updateCustomDrag`. The fully-off-screen recovery
+    // (pull the cluster back to the nearest screen) lives in `snapWithinUnion`
+    // below and still runs.
     static func snapWithin(_ a: Box, _ bound: BoundingBox) -> Diff {
         var x: CGFloat?
         var y: CGFloat?
-        if a.x - SNAP_DISTANCE < 0 {
+        if a.x > 0 && a.x < SNAP_DISTANCE {
             x = 0
-        } else if a.x + a.width + SNAP_DISTANCE > bound.width {
+        } else if a.x + a.width < bound.width && a.x + a.width > bound.width - SNAP_DISTANCE {
             x = bound.width - a.width
         }
-        if a.y - SNAP_DISTANCE < 0 {
+        if a.y > 0 && a.y < SNAP_DISTANCE {
             y = 0
-        } else if a.y + a.height + SNAP_DISTANCE > bound.height {
+        } else if a.y + a.height < bound.height && a.y + a.height > bound.height - SNAP_DISTANCE {
             y = bound.height - a.height
         }
         return Diff(x: x, y: y)
