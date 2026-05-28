@@ -8,6 +8,17 @@ enum WindowKind: Hashable {
     case milkdrop   // NEW: Milkdrop visualization window (Butterchurn)
 }
 
+/// Cluster semantics for a custom drag.
+enum WindowDragScope {
+    /// Winamp behavior: the main window drags the full connected cluster; every
+    /// other window drags by itself (separating from the cluster, allowing
+    /// re-snapping on release).
+    case winampDefault
+    /// macOS Ctrl+Cmd-drag behavior: every window in the connected cluster
+    /// follows together, regardless of which window initiated the drag.
+    case cohesiveCluster
+}
+
 @MainActor
 final class WindowSnapManager: NSObject, NSWindowDelegate {
     static let shared = WindowSnapManager()
@@ -56,6 +67,10 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
         let id = ObjectIdentifier(window)
         lastOrigins[id] = window.frame.origin
         lastFrames[id] = window.frame
+    }
+
+    func kind(for window: NSWindow) -> WindowKind? {
+        windows.first(where: { $0.value.window === window })?.key
     }
 
     func clusterKinds(containing kind: WindowKind) -> Set<WindowKind>? {
@@ -334,22 +349,29 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
 
     private var dragContexts: [WindowKind: DragContext] = [:]
 
-    func beginCustomDrag(kind: WindowKind, startPointInScreen _: NSPoint) {
+    func beginCustomDrag(
+        kind: WindowKind,
+        startPointInScreen _: NSPoint,
+        scope: WindowDragScope = .winampDefault
+    ) {
         guard let window = windows[kind]?.window else { return }
         guard let (virtualSpace, idToBox) = buildBoxes() else { return }
         let draggedID = ObjectIdentifier(window)
         guard idToBox[draggedID] != nil else { return }
 
-        // WEBAMP BEHAVIOR: Window-specific cluster logic
-        // Main window → drags entire cluster (static)
-        // EQ/Playlist → drags only itself (separates from cluster, allows re-snapping)
+        // Cluster membership depends on drag scope.
+        // - winampDefault: main drags the full cluster; non-main windows detach.
+        // - cohesiveCluster: any initiating window drags the full cluster as one.
         let clusterIDs: Set<ObjectIdentifier>
-        if kind == .main {
-            // Main window: Capture full connected cluster
+        switch scope {
+        case .winampDefault:
+            if kind == .main {
+                clusterIDs = connectedCluster(start: draggedID, boxes: idToBox)
+            } else {
+                clusterIDs = [draggedID]
+            }
+        case .cohesiveCluster:
             clusterIDs = connectedCluster(start: draggedID, boxes: idToBox)
-        } else {
-            // EQ/Playlist: Move only this window (separates from cluster)
-            clusterIDs = [draggedID]
         }
 
         var baseBoxes: [ObjectIdentifier: Box] = [:]
