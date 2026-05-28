@@ -36,6 +36,13 @@ struct WinampWindowConfigurator {
 
         // Allow window to be moved via custom drag regions
         window.isMovable = true
+
+        // macOS 26 ships borderless windows with a stronger default appearance
+        // animation (a spring-style scale on first display) and animates implicit
+        // setFrame transitions. On pixel-perfect bitmap content that interpolates
+        // as a visible zoom in/out during launch, so opt every Winamp window out
+        // of system-driven appearance animations.
+        window.animationBehavior = .none
     }
 
     /// Install translucent backing layer to prevent 0-alpha holes and bleed-through
