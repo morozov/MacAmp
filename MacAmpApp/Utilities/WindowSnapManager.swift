@@ -264,21 +264,29 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
         return nil
     }
 
-    // Determine if two boxes are connected (snapped) according to snap rules
+    // Two boxes belong to the same cluster only when an edge actually touches —
+    // perpendicular ranges strictly overlap and parallel edges coincide within
+    // `dockTolerance`. Using `SnapUtils.near` / `overlapX` / `overlapY` here
+    // would leak the 15-pt snap-attraction radius into cluster membership, so
+    // a window left 10 pt away after the snap source disappeared (e.g. shown
+    // again after being hidden while the rest of the cluster moved) would
+    // still be treated as docked.
     private func boxesAreConnected(_ a: Box, _ b: Box) -> Bool {
-        // Connected vertically (stacked) when x overlaps and edges near
-        if SnapUtils.overlapX(a, b) {
-            if SnapUtils.near(SnapUtils.top(a), SnapUtils.bottom(b)) { return true }
-            if SnapUtils.near(SnapUtils.bottom(a), SnapUtils.top(b)) { return true }
-            if SnapUtils.near(SnapUtils.top(a), SnapUtils.top(b)) { return true }
-            if SnapUtils.near(SnapUtils.bottom(a), SnapUtils.bottom(b)) { return true }
+        let aLeft = SnapUtils.left(a), aRight = SnapUtils.right(a)
+        let aTop = SnapUtils.top(a), aBottom = SnapUtils.bottom(a)
+        let bLeft = SnapUtils.left(b), bRight = SnapUtils.right(b)
+        let bTop = SnapUtils.top(b), bBottom = SnapUtils.bottom(b)
+        let tol = Self.dockTolerance
+
+        // Stacked: x ranges actually overlap, one box's bottom meets the other's top.
+        if aLeft < bRight && bLeft < aRight {
+            if abs(aBottom - bTop) < tol { return true }
+            if abs(aTop - bBottom) < tol { return true }
         }
-        // Connected horizontally (side-by-side) when y overlaps and edges near
-        if SnapUtils.overlapY(a, b) {
-            if SnapUtils.near(SnapUtils.left(a), SnapUtils.right(b)) { return true }
-            if SnapUtils.near(SnapUtils.right(a), SnapUtils.left(b)) { return true }
-            if SnapUtils.near(SnapUtils.left(a), SnapUtils.left(b)) { return true }
-            if SnapUtils.near(SnapUtils.right(a), SnapUtils.right(b)) { return true }
+        // Side-by-side: y ranges actually overlap, one box's right meets the other's left.
+        if aTop < bBottom && bTop < aBottom {
+            if abs(aRight - bLeft) < tol { return true }
+            if abs(aLeft - bRight) < tol { return true }
         }
         return false
     }
