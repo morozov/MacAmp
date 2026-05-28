@@ -40,21 +40,37 @@ struct VisualizerView: View {
     var body: some View {
         let mode = settings.visualizerMode
 
-        Group {
-            switch mode {
-            case .none:
-                Rectangle().fill(backgroundColor)
-            case .oscilloscope:
-                OscilloscopeView()
-            case .spectrum:
-                HStack(spacing: barSpacing) {
-                    ForEach(0..<barCount, id: \.self) { index in
-                        SpectrumBar(
-                            height: barHeights[index],
-                            peakPosition: peakPositions[index],
-                            maxHeight: maxHeight
-                        )
-                        .frame(width: barWidth, height: maxHeight)
+        // Matches Webamp: visualizer canvas is omitted when stopped, and cleared
+        // (transparent) when the active mode is `.none`. In both cases the skin's
+        // MAIN.BMP must show through unobstructed (Vis.tsx: returns null on
+        // STOPPED, clearRect on NONE).
+        let isStopped = !audioPlayer.isPlaying && !audioPlayer.isPaused
+        let drawsContent = !isStopped && mode != .none
+
+        ZStack {
+            // Keep the area hit-testable so tapping cycles modes even when nothing
+            // is drawn (stopped, or `.none` mode).
+            Color.clear
+                .contentShape(Rectangle())
+
+            if drawsContent {
+                VisualizerGridBackground()
+
+                switch mode {
+                case .none:
+                    EmptyView()
+                case .oscilloscope:
+                    OscilloscopeView()
+                case .spectrum:
+                    HStack(spacing: barSpacing) {
+                        ForEach(0..<barCount, id: \.self) { index in
+                            SpectrumBar(
+                                height: barHeights[index],
+                                peakPosition: peakPositions[index],
+                                maxHeight: maxHeight
+                            )
+                            .frame(width: barWidth, height: maxHeight)
+                        }
                     }
                 }
             }
@@ -75,17 +91,10 @@ struct VisualizerView: View {
         }
         .onChange(of: audioPlayer.isEngineRendering) { _, isPlaying in
             if !isPlaying {
-                // Animate bars to zero when stopped
-                withAnimation(.easeOut(duration: 0.3)) {
-                    barHeights = Array(repeating: 0, count: barCount)
-                    peakPositions = Array(repeating: 0, count: barCount)
-                }
+                barHeights = Array(repeating: 0, count: barCount)
+                peakPositions = Array(repeating: 0, count: barCount)
             }
         }
-    }
-    
-    private var backgroundColor: Color {
-        skinManager.currentSkin?.visualizerColors.first ?? .black
     }
 
     private func updateBars() {
@@ -125,7 +134,41 @@ struct VisualizerView: View {
     }
 }
 
-/// Individual spectrum analyzer bar with VISCOLOR.TXT gradient
+/// Pre-rendered visualizer background (VISCOLOR color 0 fill + color 1 dot grid).
+/// Matches Webamp's `preRenderBg` in `js/components/Vis.tsx`: solid color[0]
+/// background, then color[1] 1x1 dots at every (x even, y odd) position.
+struct VisualizerGridBackground: View {
+    @Environment(SkinManager.self) var skinManager
+
+    var body: some View {
+        Canvas { context, size in
+            let colors = skinManager.currentSkin?.visualizerColors ?? []
+            let bgColor = colors.indices.contains(0) ? colors[0] : Color.black
+            let fgColor = colors.indices.contains(1) ? colors[1] : bgColor
+
+            context.fill(
+                Path(CGRect(origin: .zero, size: size)),
+                with: .color(bgColor)
+            )
+
+            let width = Int(size.width)
+            let height = Int(size.height)
+            for x in stride(from: 0, to: width, by: 2) {
+                for y in stride(from: 1, to: height, by: 2) {
+                    context.fill(
+                        Path(CGRect(x: CGFloat(x), y: CGFloat(y), width: 1, height: 1)),
+                        with: .color(fgColor)
+                    )
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Individual spectrum analyzer bar with VISCOLOR.TXT gradient.
+/// Background is provided by the parent's `VisualizerGridBackground`, so the
+/// bar itself draws only the active gradient and the peak dot.
 struct SpectrumBar: View {
     let height: CGFloat
     let peakPosition: CGFloat
@@ -136,9 +179,9 @@ struct SpectrumBar: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                // Background (VISCOLOR color 0 = black)
-                Rectangle()
-                    .fill(backgroundColor)
+                // Transparent anchor so the ZStack fills the GeometryReader and
+                // bottom-alignment keeps bars growing upward from the floor.
+                Color.clear
 
                 // Active bar with VISCOLOR gradient (colors 2-17)
                 Rectangle()
@@ -163,11 +206,6 @@ struct SpectrumBar: View {
             return fallback
         }
         return colors[index]
-    }
-
-    /// Background color from VISCOLOR (color 0 = black)
-    private var backgroundColor: Color {
-        getColor(0, fallback: Color.black.opacity(0.8))
     }
 
     /// Peak dot color from VISCOLOR (color 23 = peak dots)
@@ -261,7 +299,6 @@ struct OscilloscopeView: View {
             context.stroke(path, with: .color(color), lineWidth: 1)
         }
         .frame(width: VisualizerLayout.width, height: VisualizerLayout.height)
-        .background(backgroundColor)
         .onReceive(updateTimer) { _ in
             if audioPlayer.isEngineRendering {
                 waveformData = audioPlayer.getWaveformSamples(count: VisualizerLayout.oscilloscopeSampleCount)
@@ -269,10 +306,6 @@ struct OscilloscopeView: View {
                 waveformData = []
             }
         }
-    }
-
-    private var backgroundColor: Color {
-        skinManager.currentSkin?.visualizerColors.first ?? .black
     }
 
     private func oscilloscopeColor() -> Color {
