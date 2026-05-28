@@ -8,6 +8,17 @@ enum WindowKind: Hashable {
     case milkdrop   // NEW: Milkdrop visualization window (Butterchurn)
 }
 
+/// Cluster semantics for a custom drag.
+enum WindowDragScope {
+    /// Winamp behavior: the main window drags the full connected cluster; every
+    /// other window drags by itself (separating from the cluster, allowing
+    /// re-snapping on release).
+    case winampDefault
+    /// macOS Ctrl+Cmd-drag behavior: every window in the connected cluster
+    /// follows together, regardless of which window initiated the drag.
+    case cohesiveCluster
+}
+
 @MainActor
 final class WindowSnapManager: NSObject, NSWindowDelegate {
     static let shared = WindowSnapManager()
@@ -54,6 +65,10 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
         windows[kind] = TrackedWindow(window: window, kind: kind)
         // Delegate is set via WindowDelegateMultiplexer in WindowCoordinator
         lastFrames[ObjectIdentifier(window)] = window.frame
+    }
+
+    func kind(for window: NSWindow) -> WindowKind? {
+        windows.first(where: { $0.value.window === window })?.key
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -197,7 +212,11 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
 
     private var dragContexts: [WindowKind: DragContext] = [:]
 
-    func beginCustomDrag(kind: WindowKind, startPointInScreen _: NSPoint) {
+    func beginCustomDrag(
+        kind: WindowKind,
+        startPointInScreen _: NSPoint,
+        scope: WindowDragScope = .winampDefault
+    ) {
         guard let window = windows[kind]?.window, let virtualSpace = makeVirtualSpace() else { return }
         let draggedID = ObjectIdentifier(window)
         // Closed windows keep their saved frame and still link the chain, so they move with the group.
@@ -205,8 +224,10 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
         guard idToBox[draggedID] != nil else { return }
 
         // Main drags its docked group, other windows drag alone; Shift at mouse-down: Main alone, no window snapping.
+        // A cohesive drag moves the group from any window.
         let snapping = !NSEvent.modifierFlags.contains(.shift)
-        let clusterIDs: Set<ObjectIdentifier> = (kind == .main && snapping)
+        let dragsGroup = scope == .cohesiveCluster || (kind == .main && snapping)
+        let clusterIDs: Set<ObjectIdentifier> = dragsGroup
             ? DockGraph.cluster(from: draggedID, boxes: idToBox)
             : [draggedID]
 
