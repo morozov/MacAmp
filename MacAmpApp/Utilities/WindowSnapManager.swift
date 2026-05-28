@@ -440,19 +440,53 @@ final class WindowSnapManager: NSObject, NSWindowDelegate {
             y: topLeftDelta.y + snapDelta.y
         )
 
+        // Compute the requested AppKit origin for every cluster member.
+        var requestedOrigins: [ObjectIdentifier: NSPoint] = [:]
         for (id, baseBox) in context.baseBoxes {
-            guard let window = idToWindow[id] else { continue }
             var movedBox = baseBox
             movedBox.x += finalDelta.x
             movedBox.y += finalDelta.y
+            let originX = movedBox.x + context.virtualSpace.left
+            let originY = context.virtualSpace.top - (movedBox.y + movedBox.height)
+            requestedOrigins[id] = NSPoint(x: originX, y: originY)
+        }
 
+        // Pass 1: ask AppKit for those positions. Borderless+movable windows
+        // get silently clamped down when their top would cross the menu bar;
+        // the clamp shows up as drift between the requested and actual
+        // origin. Applied per-window, that drift is exactly what tears the
+        // cluster apart — main stops, EQ keeps going.
+        isAdjusting = true
+        for (id, requested) in requestedOrigins {
+            guard let window = idToWindow[id] else { continue }
+            let current = window.frame.origin
+            if abs(current.x - requested.x) >= 1 || abs(current.y - requested.y) >= 1 {
+                window.setFrameOrigin(requested)
+            }
+        }
+        isAdjusting = false
+
+        // Pass 2: pull the whole cluster back by the most-restrictive
+        // downward clamp so the rubber band stops the cluster as one unit.
+        // We only correct downward y drift (the menu-bar case) — other
+        // edges don't trigger AppKit clamping for borderless windows, and
+        // the user opted out of cohesive treatment there.
+        let topClampDy = requestedOrigins.compactMap { id, requested -> CGFloat? in
+            guard let window = idToWindow[id] else { return nil }
+            let dy = window.frame.origin.y - requested.y
+            return dy < 0 ? dy : nil
+        }.min() ?? 0
+
+        if topClampDy < -0.5 {
             isAdjusting = true
-            apply(
-                box: movedBox,
-                to: window,
-                virtualTop: context.virtualSpace.top,
-                virtualLeft: context.virtualSpace.left
-            )
+            for (id, requested) in requestedOrigins {
+                guard let window = idToWindow[id] else { continue }
+                let corrected = NSPoint(x: requested.x, y: requested.y + topClampDy)
+                let current = window.frame.origin
+                if abs(current.y - corrected.y) >= 1 {
+                    window.setFrameOrigin(corrected)
+                }
+            }
             isAdjusting = false
         }
 
