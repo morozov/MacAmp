@@ -390,6 +390,15 @@ final class StreamPlayer {
             }
             return
         }
+
+        // Backpressure resume: the decoder suspends the URLSession data task
+        // when the ring nears its cap; the matching resume needs a signal
+        // from the consumer side, which is the audio render thread — too
+        // hot to call URLSession from. Polling here is fine because the gap
+        // between the ring's high- and low-water marks is large compared to
+        // 100 ms of consumption.
+        pipeline.resumeIngestIfDrained(ringLevel: rb.availableFrames, capacity: rb.capacity)
+
         let nowRebuffering = rb.isRebuffering
         guard nowRebuffering != isMidStreamRebuffering else { return }
         isMidStreamRebuffering = nowRebuffering
