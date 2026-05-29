@@ -44,7 +44,11 @@ struct VisualizerView: View {
         // (transparent) when the active mode is `.none`. In both cases the skin's
         // MAIN.BMP must show through unobstructed (Vis.tsx: returns null on
         // STOPPED, clearRect on NONE).
-        let isStopped = !audioPlayer.isPlaying && !audioPlayer.isPaused
+        //
+        // `isPlaying` / `isPaused` are file-playback flags only — HTTP streams
+        // route through the engine bridge and leave both at false. Including
+        // `isBridgeActive` keeps the visualizer drawing while a stream plays.
+        let isStopped = !audioPlayer.isPlaying && !audioPlayer.isPaused && !audioPlayer.isBridgeActive
         let drawsContent = !isStopped && mode != .none
 
         ZStack {
