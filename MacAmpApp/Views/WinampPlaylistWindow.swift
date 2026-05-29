@@ -154,7 +154,8 @@ struct WinampPlaylistWindow: View {
         PlaylistBottomControlsView(
             windowWidth: windowWidth,
             windowHeight: windowHeight,
-            menuPresenter: menuPresenter
+            menuPresenter: menuPresenter,
+            selectedIndices: ui.selectedIndices
         )
 
         PlaylistTitleBarButtons(windowWidth: windowWidth)

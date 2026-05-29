@@ -8,10 +8,17 @@ struct PlaylistBottomControlsView: View {
     let windowWidth: CGFloat
     let windowHeight: CGFloat
     let menuPresenter: PlaylistMenuPresenter
+    let selectedIndices: Set<Int>
 
     private var totalPlaylistDuration: Double {
         audioPlayer.playlist.reduce(0.0) { total, track in
             total + track.duration
+        }
+    }
+
+    private var selectedTracksDuration: Double {
+        audioPlayer.playlist.enumerated().reduce(0.0) { sum, pair in
+            selectedIndices.contains(pair.offset) ? sum + pair.element.duration : sum
         }
     }
 
@@ -21,9 +28,13 @@ struct PlaylistBottomControlsView: View {
     }
 
     private var trackTimeText: String {
-        let current = TimeFormatting.formatDuration(audioPlayer.currentTime)
+        // Per Webamp `selectors.ts` getRunningTimeMessage and Winamp
+        // Src/Winamp/draw_pe.cpp lines 752-790 (the seltime / ttime branch),
+        // this field is selectedTracksSum/totalTracksSum — independent of
+        // playback. Left half collapses to "0:00" with nothing selected.
+        let selected = TimeFormatting.formatDuration(selectedTracksDuration)
         let total = TimeFormatting.formatDuration(totalPlaylistDuration)
-        return "\(current)/\(total)"
+        return "\(selected)/\(total)"
     }
 
     private var miniTimeMinutes: String {
