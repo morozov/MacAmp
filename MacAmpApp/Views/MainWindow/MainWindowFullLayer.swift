@@ -151,18 +151,11 @@ struct MainWindowFullLayer: View {
             .focusable(false)
             .at(Layout.shuffleButton)
 
-            Button(action: { audioPlayer.repeatMode = audioPlayer.repeatMode.next() }, label: {
+            Button(action: {
+                audioPlayer.repeatMode = audioPlayer.repeatMode.isActive ? .off : .all
+            }, label: {
                 let spriteKey = audioPlayer.repeatMode.isActive ? "MAIN_REPEAT_BUTTON_SELECTED" : "MAIN_REPEAT_BUTTON"
-                ZStack {
-                    SimpleSpriteImage(spriteKey, width: 28, height: 15)
-                    if audioPlayer.repeatMode == .one {
-                        Text("1")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.white)
-                            .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 0)
-                            .offset(x: 8, y: 0)
-                    }
-                }
+                SimpleSpriteImage(spriteKey, width: 28, height: 15)
             })
             .buttonStyle(.plain)
             .focusable(false)
