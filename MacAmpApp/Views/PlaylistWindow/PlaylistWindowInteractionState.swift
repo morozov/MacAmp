@@ -19,6 +19,14 @@ final class PlaylistWindowInteractionState {
 
     var selectedIndices: Set<Int> = []
     var cursorIndex: Int?
+    /// Range anchor for Shift-extension (mouse and keyboard). Tracks the row
+    /// from which the current range was started — moves on plain/Cmd click and
+    /// plain arrow navigation, stays put under Shift. Equivalent to Winamp's
+    /// `shiftsel_1` in `Src/Winamp/Peui.cpp:411`; reused for keyboard
+    /// extension per the TODO at `Src/Winamp/Pledit.cpp:1276` ("ideally need
+    /// to keep a record of the 'current selection' so we can then adjust from
+    /// there"), which Winamp itself never wired up.
+    var anchorIndex: Int?
     /// Vertical scroll offset of the track list, in pixels. Shared between
     /// the ScrollView (`PlaylistTrackListView`), the gold-thumb slider
     /// (`PlaylistScrollSlider`), and the keyboard-cursor visibility check.
@@ -67,15 +75,29 @@ final class PlaylistWindowInteractionState {
     }
 
     func handleTrackTap(index: Int) {
-        let modifiers = NSEvent.modifierFlags
-        if modifiers.contains(.shift) {
+        // Mirrors Winamp `do_lb` in Src/Winamp/Peui.cpp:413-456 (Winamp's
+        // Ctrl maps to Cmd on Mac, where Ctrl-click is reserved for the
+        // context menu). Plain or Cmd click moves the anchor; Shift-click
+        // leaves the anchor in place and selects an inclusive range from it.
+        let modifiers = NSEvent.modifierFlags.intersection([.command, .shift])
+        let isShift = modifiers.contains(.shift)
+        let isCmd = modifiers.contains(.command)
+
+        if isShift, let anchor = anchorIndex {
+            if !isCmd { selectedIndices = [] }
+            let lo = min(anchor, index)
+            let hi = max(anchor, index)
+            for i in lo...hi { selectedIndices.insert(i) }
+        } else if isCmd {
             if selectedIndices.contains(index) {
                 selectedIndices.remove(index)
             } else {
                 selectedIndices.insert(index)
             }
+            anchorIndex = index
         } else {
             selectedIndices = [index]
+            anchorIndex = index
         }
         cursorIndex = index
     }
@@ -98,6 +120,7 @@ final class PlaylistWindowInteractionState {
         if appModifiers == .command, event.keyCode == Self.aKeyCode {
             selectedIndices = Set(0..<playlistCount)
             cursorIndex = selectedIndices.min()
+            anchorIndex = 0
             return nil
         }
 
@@ -111,63 +134,79 @@ final class PlaylistWindowInteractionState {
             }
             selectedIndices = []
             cursorIndex = nil
+            anchorIndex = nil
             return nil
         }
 
         if event.keyCode == Self.escapeKeyCode {
             selectedIndices = []
             cursorIndex = nil
+            anchorIndex = nil
             return nil
         }
 
-        // Navigation keys — playlist-scoped, no modifier. Consume even on an
-        // empty playlist so an idle press doesn't beep.
-        if appModifiers.isEmpty {
+        // Navigation keys — playlist-scoped, Shift extends the range from the
+        // anchor (the "shrink on reverse direction" behavior `Pledit.cpp:1276`
+        // wanted but never implemented). Consume even on an empty playlist so
+        // an idle press doesn't beep.
+        let nonShiftModifiers = appModifiers.subtracting(.shift)
+        let isShiftHeld = appModifiers.contains(.shift)
+        if nonShiftModifiers.isEmpty {
             switch event.keyCode {
             case Self.upArrowKeyCode:
-                moveCursor(by: -1, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                moveCursor(by: -1, isShiftHeld: isShiftHeld, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
                 return nil
             case Self.downArrowKeyCode:
-                moveCursor(by: +1, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                moveCursor(by: +1, isShiftHeld: isShiftHeld, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
                 return nil
             case Self.pageUpKeyCode:
-                moveCursor(by: -max(1, visibleTrackCount), playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                moveCursor(by: -max(1, visibleTrackCount), isShiftHeld: isShiftHeld, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
                 return nil
             case Self.pageDownKeyCode:
-                moveCursor(by: +max(1, visibleTrackCount), playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                moveCursor(by: +max(1, visibleTrackCount), isShiftHeld: isShiftHeld, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
                 return nil
             case Self.homeKeyCode:
-                setCursor(to: 0, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+                setCursor(to: 0, isShiftHeld: isShiftHeld, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
                 return nil
             case Self.endKeyCode:
-                setCursor(to: playlistCount - 1, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
-                return nil
-            case Self.returnKeyCode, Self.keypadEnterKeyCode:
-                if let target = cursorIndex ?? selectedIndices.min() {
-                    playTrackAt(target)
-                }
+                setCursor(to: playlistCount - 1, isShiftHeld: isShiftHeld, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
                 return nil
             default:
                 break
             }
         }
 
+        if appModifiers.isEmpty,
+           event.keyCode == Self.returnKeyCode || event.keyCode == Self.keypadEnterKeyCode {
+            if let target = cursorIndex ?? selectedIndices.min() {
+                playTrackAt(target)
+            }
+            return nil
+        }
+
         return event
     }
 
-    private func moveCursor(by delta: Int, playlistCount: Int, visibleTrackCount: Int) {
+    private func moveCursor(by delta: Int, isShiftHeld: Bool, playlistCount: Int, visibleTrackCount: Int) {
         guard playlistCount > 0 else { return }
         // Cold start (no cursor): Down/PgDn/End land on the first row, Up/PgUp
         // land on the last row — matches Finder list-view convention.
         let current: Int = cursorIndex ?? (delta > 0 ? -1 : playlistCount)
-        setCursor(to: current + delta, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
+        setCursor(to: current + delta, isShiftHeld: isShiftHeld, playlistCount: playlistCount, visibleTrackCount: visibleTrackCount)
     }
 
-    private func setCursor(to index: Int, playlistCount: Int, visibleTrackCount: Int) {
+    private func setCursor(to index: Int, isShiftHeld: Bool, playlistCount: Int, visibleTrackCount: Int) {
         guard playlistCount > 0 else { return }
         let clamped = max(0, min(playlistCount - 1, index))
         cursorIndex = clamped
-        selectedIndices = [clamped]
+        if isShiftHeld, let anchor = anchorIndex {
+            let lo = min(anchor, clamped)
+            let hi = max(anchor, clamped)
+            selectedIndices = Set(lo...hi)
+        } else {
+            selectedIndices = [clamped]
+            anchorIndex = clamped
+        }
         ensureCursorVisible(visibleTrackCount: visibleTrackCount, playlistCount: playlistCount)
     }
 
