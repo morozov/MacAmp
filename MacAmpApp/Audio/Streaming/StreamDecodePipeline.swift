@@ -93,11 +93,38 @@ final class StreamDecodePipeline {
     private var dataTask: URLSessionDataTask?
     private var delegateProxy: SessionDelegateProxy?
 
+    /// True while the URLSession data task is suspended for backpressure.
+    /// Set by `suspendIngestIfNeeded` when the decoder reports a near-full
+    /// ring; cleared by `resumeIngestIfDrained` when the main-actor poll
+    /// sees the ring drop below `ingestResumeRatio`. Suspending the task
+    /// stops URLSession from delivering more bytes, which propagates as
+    /// TCP backpressure to the server.
+    private var isIngestSuspended: Bool = false
+
+    func suspendIngestIfNeeded() {
+        guard !isIngestSuspended, let dataTask, dataTask.state == .running else { return }
+        dataTask.suspend()
+        isIngestSuspended = true
+        AppLog.debug(.audio, "StreamDecodePipeline: ingest suspended (ring near cap)")
+    }
+
+    func resumeIngestIfDrained(ringLevel: Int, capacity: Int) {
+        guard isIngestSuspended else { return }
+        // The matching suspend high-water mark and this resume low-water mark
+        // live as constants on DecodeContext (same file, file-private access).
+        let resumeMark = Int(Double(capacity) * DecodeContext.ingestResumeRatio)
+        guard ringLevel < resumeMark else { return }
+        dataTask?.resume()
+        isIngestSuspended = false
+        AppLog.debug(.audio, "StreamDecodePipeline: ingest resumed (ring drained)")
+    }
+
     // MARK: - Generation Token
 
     /// Incremented on each start() AND stop(). All callbacks check generation
     /// to reject stale data from previous streams.
     private var generation: UInt64 = 0
+
 
     // MARK: - Prebuffer Tracking
 
@@ -181,6 +208,12 @@ final class StreamDecodePipeline {
                     guard let self, gen == self.generation else { return }
                     self.onPrebufferReady?()
                 }
+            },
+            onBackpressureRequest: { [weak self] gen in
+                Task { @MainActor [weak self] in
+                    guard let self, gen == self.generation else { return }
+                    self.suspendIngestIfNeeded()
+                }
             }
         )
         decodeContext = context
@@ -240,7 +273,15 @@ final class StreamDecodePipeline {
     func pauseByUser() async {
         guard case .playing = state else { return }
         if Task.isCancelled { return }
-        dataTask?.suspend()
+        if isIngestSuspended {
+            // The data task is already suspended for backpressure. URLSession
+            // suspends are reference-counted, so a second suspend here would
+            // require a matching second resume to actually deliver data again.
+            // Hand the suspension over to user-pause and clear our flag.
+            isIngestSuspended = false
+        } else {
+            dataTask?.suspend()
+        }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             guard let ctx = decodeContext else { cont.resume(); return }
             ctx.setPausedByUser(true) { cont.resume() }
@@ -301,6 +342,7 @@ final class StreamDecodePipeline {
         ringBuffer = nil
         audioWorkgroup = nil
         formatReadyFired = false
+        isIngestSuspended = false
     }
 
     private func setState(_ newState: StreamState) {
@@ -559,6 +601,16 @@ private final class DecodeContext: @unchecked Sendable {
     /// allowed to resume reading after a mid-stream underrun. Matches
     /// MPV's `--cache-pause-wait` default.
     static let rebufferRefillSeconds: Double = 1.0
+    /// Buffer fill ratio at which we suspend the URLSession data task.
+    /// 0.9 = nine-tenths full. Decoder writes can climb a few more
+    /// percent of capacity before the suspension takes effect (it's
+    /// applied via a main-actor hop), so the high-water mark is left
+    /// with some headroom under the cap.
+    static let ingestSuspendRatio: Double = 0.9
+    /// Buffer fill ratio at which we resume the URLSession data task.
+    /// Hysteresis: the gap to `ingestSuspendRatio` prevents
+    /// suspend/resume thrashing when the buffer hovers near the cap.
+    static let ingestResumeRatio: Double = 0.5
 
     /// Thresholds in frames at the stream's detected sample rate.
     /// `detectedSampleRate` is set in `formatChanged(...)` before any
@@ -578,6 +630,12 @@ private final class DecodeContext: @unchecked Sendable {
     private let onMetadata: @Sendable (ICYFramer.ICYMetadata, UInt64) -> Void
     private let onError: @Sendable (String, UInt64) -> Void
     private let onPrebufferReady: @Sendable (UInt64) -> Void
+    /// Fired from the decode queue when the ring buffer crosses the
+    /// ingest-suspend high-water mark. Pipeline suspends the URLSession
+    /// data task in response, which propagates as TCP backpressure to the
+    /// server. Resumption is driven from the main-actor poll on
+    /// StreamPlayer's elapsed timer.
+    private let onBackpressureRequest: @Sendable (UInt64) -> Void
 
     init(
         decodeQueue: DispatchQueue,
@@ -587,7 +645,8 @@ private final class DecodeContext: @unchecked Sendable {
         onFormatReady: @escaping @Sendable (Float64, UInt64) -> Void,
         onMetadata: @escaping @Sendable (ICYFramer.ICYMetadata, UInt64) -> Void,
         onError: @escaping @Sendable (String, UInt64) -> Void,
-        onPrebufferReady: @escaping @Sendable (UInt64) -> Void
+        onPrebufferReady: @escaping @Sendable (UInt64) -> Void,
+        onBackpressureRequest: @escaping @Sendable (UInt64) -> Void
     ) {
         self.decodeQueue = decodeQueue
         self.ringBuffer = ringBuffer
@@ -596,6 +655,7 @@ private final class DecodeContext: @unchecked Sendable {
         self.onMetadata = onMetadata
         self.onError = onError
         self.onPrebufferReady = onPrebufferReady
+        self.onBackpressureRequest = onBackpressureRequest
 
         decodeQueue.async { [self] in
             let parser = AudioFileStreamParser(formatHint: formatHint)
@@ -791,6 +851,16 @@ private final class DecodeContext: @unchecked Sendable {
             // this flag flips back. UI polling picks up the transition.
             if ringBuffer.isRebuffering, ringBuffer.availableFrames >= rebufferRefillThreshold {
                 ringBuffer.setRebuffering(false)
+            }
+
+            // Request URLSession suspension when the ring is near the cap so
+            // a server that's burst-ahead of the bitrate can't outrun the
+            // render thread and start dropping data via the ring's drop-oldest
+            // path (which would manifest to the user as "same pitch, faster"
+            // because the readHead keeps getting pushed forward).
+            let suspendMark = Int(Double(ringBuffer.capacity) * Self.ingestSuspendRatio)
+            if ringBuffer.availableFrames >= suspendMark {
+                onBackpressureRequest(generation)
             }
         }
     }
