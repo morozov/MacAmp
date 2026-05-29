@@ -21,25 +21,19 @@ struct PlaylistBottomControlsView: View {
     }
 
     private var trackTimeText: String {
-        guard audioPlayer.currentTrack != nil,
-              audioPlayer.currentDuration > 0 else {
-            return ":"
-        }
-
         let current = TimeFormatting.formatDuration(audioPlayer.currentTime)
         let total = TimeFormatting.formatDuration(totalPlaylistDuration)
-        return "\(current) / \(total)"
+        return "\(current)/\(total)"
     }
 
-    private var remainingTimeText: String {
-        guard audioPlayer.isPlaying,
-              audioPlayer.currentTrack != nil,
-              audioPlayer.currentDuration > 0 else {
-            return ""
-        }
+    private var miniTimeMinutes: String {
+        let total = max(0, Int(remainingTime))
+        return String(format: "%02d", min(total / 60, 99))
+    }
 
-        let remaining = TimeFormatting.formatDuration(remainingTime)
-        return "-\(remaining)"
+    private var miniTimeSeconds: String {
+        let total = max(0, Int(remainingTime))
+        return String(format: "%02d", total % 60)
     }
 
     var body: some View {
@@ -108,16 +102,42 @@ struct PlaylistBottomControlsView: View {
 
     @ViewBuilder
     private func buildTimeDisplays() -> some View {
-        let rightSectionStart = windowWidth - 150
-        let timeY1 = windowHeight - 26
-        let timeY2 = windowHeight - 13
+        // Per Src/Winamp/draw_pe.cpp `draw_pe_infostr` (lines 73-103), the
+        // running-time field is 18 × 5-px glyphs with no gap, anchored at
+        // top-left (config_pe_width-143, config_pe_height-28). Per
+        // `draw_pe_timedisp` (lines 562-611), the MiniTime field anchors at
+        // (config_pe_width-86, config_pe_height-15) as discrete slots: minus
+        // at offset 4 (width 3), minutes at offset 9 (width 10), seconds at
+        // offset 22 (width 10). The colon at offset 19-21 is part of the
+        // PLAYLIST_BOTTOM_RIGHT_CORNER sprite — leave that gap uncovered.
+        // SwiftUI .position centers, so add half-frame to land each top-left
+        // at Winamp's coordinates.
+        let glyphHeight: CGFloat = 6
+        let glyphWidth: CGFloat = 5
+        let runningWidth = glyphWidth * 18
+        let runningLeft = windowWidth - 143
+        let runningTop = windowHeight - 28
+        let miniLeft = windowWidth - 86
+        let miniTop = windowHeight - 15
+        let miniMidY = miniTop + glyphHeight / 2
 
-        PlaylistTimeText(trackTimeText)
-            .position(x: rightSectionStart + 51, y: timeY1)
+        PlaylistTimeText(trackTimeText, spacing: 0)
+            .frame(width: runningWidth, height: glyphHeight, alignment: .leading)
+            .position(x: runningLeft + runningWidth / 2,
+                      y: runningTop + glyphHeight / 2)
 
-        if !remainingTimeText.isEmpty {
-            PlaylistTimeText(remainingTimeText)
-                .position(x: rightSectionStart + 78, y: timeY2)
+        if audioPlayer.isPlaying {
+            PlaylistTimeText("-", spacing: 0)
+                .frame(width: 3, height: glyphHeight, alignment: .leading)
+                .position(x: miniLeft + 4 + 1.5, y: miniMidY)
         }
+
+        PlaylistTimeText(miniTimeMinutes, spacing: 0)
+            .frame(width: 10, height: glyphHeight, alignment: .leading)
+            .position(x: miniLeft + 9 + 5, y: miniMidY)
+
+        PlaylistTimeText(miniTimeSeconds, spacing: 0)
+            .frame(width: 10, height: glyphHeight, alignment: .leading)
+            .position(x: miniLeft + 22 + 5, y: miniMidY)
     }
 }
