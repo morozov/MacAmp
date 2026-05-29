@@ -100,32 +100,47 @@ final class PlaylistWindowActions: NSObject {
         openPanel.canChooseDirectories = false
         openPanel.title = "Add Files to Playlist"
         openPanel.message = "Select audio files, video files, or playlists"
+        runOpenPanel(openPanel, audioPlayer: audioPlayer, playbackCoordinator: playbackCoordinator)
+    }
 
+    func presentAddDirectoryPanel(audioPlayer: AudioPlayer, playbackCoordinator: PlaybackCoordinator? = nil) {
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = false
+        openPanel.canChooseDirectories = true
+        openPanel.allowsMultipleSelection = true
+        openPanel.title = "Add Folder to Playlist"
+        openPanel.message = "Select a folder of audio files"
+        runOpenPanel(openPanel, audioPlayer: audioPlayer, playbackCoordinator: playbackCoordinator)
+    }
+
+    private func runOpenPanel(
+        _ openPanel: NSOpenPanel,
+        audioPlayer: AudioPlayer,
+        playbackCoordinator: PlaybackCoordinator?
+    ) {
         openPanel.begin { response in
-            if response == .OK {
-                let urls = openPanel.urls
-                Task { @MainActor [weak self, urls, audioPlayer, playbackCoordinator] in
-                    guard let self else { return }
-                    let coordinator = playbackCoordinator ?? self.playbackCoordinator
-                    let wasEmpty = audioPlayer.playlist.isEmpty
+            guard response == .OK else { return }
+            let urls = openPanel.urls
+            Task { @MainActor [weak self, urls, audioPlayer, playbackCoordinator] in
+                guard let self else { return }
+                let coordinator = playbackCoordinator ?? self.playbackCoordinator
+                let wasEmpty = audioPlayer.playlist.isEmpty
 
-                    // handleSelectedURLs is async — awaits M3U parsing inline
-                    let hint = await self.handleSelectedURLs(urls, audioPlayer: audioPlayer)
+                let hint = await self.handleSelectedURLs(urls, audioPlayer: audioPlayer)
 
-                    // Spec 005: when N == 0 and the first M3U carried a
-                    // currentIndex, restore that selection without auto-play.
-                    // Otherwise fall through to the existing auto-play-first-track
-                    // behavior (gated on wasEmpty as before).
-                    if wasEmpty, let hint, let coordinator,
-                       audioPlayer.playlist.indices.contains(hint.absoluteIndex) {
-                        coordinator.selectTrack(audioPlayer.playlist[hint.absoluteIndex])
-                    } else {
-                        await self.autoPlayFirstTrack(
-                            audioPlayer: audioPlayer,
-                            coordinator: coordinator,
-                            wasEmpty: wasEmpty
-                        )
-                    }
+                // Spec 005: when N == 0 and the first M3U carried a
+                // currentIndex, restore that selection without auto-play.
+                // Otherwise fall through to the existing auto-play-first-track
+                // behavior (gated on wasEmpty as before).
+                if wasEmpty, let hint, let coordinator,
+                   audioPlayer.playlist.indices.contains(hint.absoluteIndex) {
+                    coordinator.selectTrack(audioPlayer.playlist[hint.absoluteIndex])
+                } else {
+                    await self.autoPlayFirstTrack(
+                        audioPlayer: audioPlayer,
+                        coordinator: coordinator,
+                        wasEmpty: wasEmpty
+                    )
                 }
             }
         }
@@ -142,7 +157,12 @@ final class PlaylistWindowActions: NSObject {
 
     private func handleSelectedURLs(_ urls: [URL], audioPlayer: AudioPlayer) async -> SelectionHint? {
         var firstHint: SelectionHint?
-        for url in urls {
+        // Expand any directories upfront, off-main, so a large folder pick
+        // doesn't freeze the UI on the FileManager enumeration.
+        let resolved = await Task.detached(priority: .userInitiated) {
+            Self.expandDirectories(urls)
+        }.value
+        for url in resolved {
             let ext = url.pathExtension.lowercased()
             if ext == "m3u" || ext == "m3u8" {
                 let offset = audioPlayer.playlist.count
@@ -238,6 +258,55 @@ final class PlaylistWindowActions: NSObject {
         }
     }
 
+    // MARK: - Directory Expansion
+
+    /// Walk any directories in `urls` and replace them with their contained
+    /// audio / playlist / CUE files. Non-directory URLs pass through in
+    /// order; per-directory contents are appended sorted by Finder-style
+    /// localized name so the playlist order is predictable. Nonisolated so
+    /// it can run off the main actor.
+    nonisolated static func expandDirectories(_ urls: [URL]) -> [URL] {
+        var result: [URL] = []
+        for url in urls {
+            if isDirectory(url) {
+                result.append(contentsOf: enumerateMediaFiles(in: url))
+            } else {
+                result.append(url)
+            }
+        }
+        return result
+    }
+
+    nonisolated private static func isDirectory(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    nonisolated private static func enumerateMediaFiles(in directory: URL) -> [URL] {
+        let keys: [URLResourceKey] = [.isRegularFileKey, .contentTypeKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var results: [URL] = []
+        for case let file as URL in enumerator {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)),
+                  values.isRegularFile == true else { continue }
+
+            let ext = file.pathExtension.lowercased()
+            if ext == "m3u" || ext == "m3u8" || ext == "cue" {
+                results.append(file)
+            } else if let type = values.contentType,
+                      type.conforms(to: .audio) || type.conforms(to: .movie) {
+                results.append(file)
+            }
+        }
+
+        return results.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
     // MARK: - Add Menu Actions
 
     @objc func addURL(_ sender: NSMenuItem) {
@@ -288,7 +357,8 @@ final class PlaylistWindowActions: NSObject {
     }
 
     @objc func addDirectory(_ sender: NSMenuItem) {
-        addFile(sender)
+        guard let audioPlayer = sender.representedObject as? AudioPlayer else { return }
+        presentAddDirectoryPanel(audioPlayer: audioPlayer, playbackCoordinator: playbackCoordinator)
     }
 
     @objc func addFile(_ sender: NSMenuItem) {
