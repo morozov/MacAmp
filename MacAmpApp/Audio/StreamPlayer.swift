@@ -282,6 +282,15 @@ final class StreamPlayer {
 
     private(set) var currentSampleRate: Float64 = 0
 
+    /// Channel count of the source stream (1 = mono, 2 = stereo).
+    /// Routes through to the pipeline's parser-derived value.
+    var currentChannelCount: Int { pipeline.currentChannelCount }
+
+    /// Average encoded bitrate (bits/second), derived from the decoder's
+    /// compressed-bytes-in / PCM-frames-out totals — the data we're already
+    /// processing, not a separate header or stream probe.
+    var currentBitrate: Int { pipeline.currentBitrate }
+
     // MARK: - Pipeline Callbacks
 
     private func setupPipelineCallbacks() {

@@ -39,12 +39,15 @@ struct MainWindowIndicatorsLayer: View {
 
     @ViewBuilder
     private func buildMonoStereoIndicator() -> some View {
+        // Read from PlaybackCoordinator so the indicators work for both
+        // local files and streams without each call site repeating the
+        // file-vs-stream branch.
+        let channels = playbackCoordinator.currentChannelCount
         ZStack {
-            let hasTrack = audioPlayer.currentTrack != nil
-            SimpleSpriteImage(hasTrack && audioPlayer.channelCount == 1 ? "MAIN_MONO_SELECTED" : "MAIN_MONO",
+            SimpleSpriteImage(channels == 1 ? "MAIN_MONO_SELECTED" : "MAIN_MONO",
                             width: 27, height: 12)
                 .at(x: 212, y: 41)
-            SimpleSpriteImage(hasTrack && audioPlayer.channelCount == 2 ? "MAIN_STEREO_SELECTED" : "MAIN_STEREO",
+            SimpleSpriteImage(channels == 2 ? "MAIN_STEREO_SELECTED" : "MAIN_STEREO",
                             width: 29, height: 12)
                 .at(x: 239, y: 41)
         }
@@ -52,8 +55,13 @@ struct MainWindowIndicatorsLayer: View {
 
     @ViewBuilder
     private func buildBitrateDisplay() -> some View {
-        if audioPlayer.currentTrack != nil && audioPlayer.bitrate > 0 {
-            let bitrateText = "\(audioPlayer.bitrate)"
+        // Streams report bits/second; files report kbps already. Normalize
+        // to kbps for display by dividing if the value is large enough to
+        // be in bits/second (>= 1000).
+        let raw = playbackCoordinator.currentBitrate
+        let kbps = raw >= 1000 ? raw / 1000 : raw
+        if kbps > 0 {
+            let bitrateText = "\(kbps)"
             HStack(spacing: 0) {
                 ForEach(Array(bitrateText.enumerated()), id: \.offset) { _, character in
                     if let ascii = character.asciiValue {
@@ -67,8 +75,9 @@ struct MainWindowIndicatorsLayer: View {
 
     @ViewBuilder
     private func buildSampleRateDisplay() -> some View {
-        if audioPlayer.currentTrack != nil && audioPlayer.sampleRate > 0 {
-            let sampleRateText = "\(audioPlayer.sampleRate / 1000)"
+        let sampleRate = playbackCoordinator.currentSampleRate
+        if sampleRate > 0 {
+            let sampleRateText = "\(sampleRate / 1000)"
             HStack(spacing: 0) {
                 ForEach(Array(sampleRateText.enumerated()), id: \.offset) { _, character in
                     if let ascii = character.asciiValue {

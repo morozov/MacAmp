@@ -125,6 +125,16 @@ final class StreamDecodePipeline {
     /// to reject stale data from previous streams.
     private var generation: UInt64 = 0
 
+    // MARK: - Stream Format (parser-derived, main-actor mirrors)
+
+    /// Channel count from the parser's ASBD `mChannelsPerFrame`. 0 until
+    /// the first `onChannelCountAvailable` fires. Cleared in `stopInternal`.
+    private(set) var currentChannelCount: Int = 0
+
+    /// Bitrate (bits/second) derived from the decoder's running totals of
+    /// compressed bytes in and PCM frames out. 0 until the first decode.
+    /// Cleared in `stopInternal`.
+    private(set) var currentBitrate: Int = 0
 
     // MARK: - Prebuffer Tracking
 
@@ -213,6 +223,18 @@ final class StreamDecodePipeline {
                 Task { @MainActor [weak self] in
                     guard let self, gen == self.generation else { return }
                     self.suspendIngestIfNeeded()
+                }
+            },
+            onChannelCountAvailable: { [weak self] channels, gen in
+                Task { @MainActor [weak self] in
+                    guard let self, gen == self.generation else { return }
+                    self.currentChannelCount = channels
+                }
+            },
+            onBitrateUpdate: { [weak self] bitsPerSecond, gen in
+                Task { @MainActor [weak self] in
+                    guard let self, gen == self.generation else { return }
+                    self.currentBitrate = bitsPerSecond
                 }
             }
         )
@@ -343,6 +365,8 @@ final class StreamDecodePipeline {
         audioWorkgroup = nil
         formatReadyFired = false
         isIngestSuspended = false
+        currentChannelCount = 0
+        currentBitrate = 0
     }
 
     private func setState(_ newState: StreamState) {
@@ -576,6 +600,10 @@ private final class DecodeContext: @unchecked Sendable {
     private var prebufferedFrames: Int = 0
     private var formatReadyFired: Bool = false
     private var detectedSampleRate: Float64 = 0
+    /// Last bitrate value reported to the pipeline. Used to dedupe the
+    /// per-decode update so a stable VBR average doesn't fire the callback
+    /// on every packet.
+    private var lastReportedBitrate: Int = 0
     private var isShutdown: Bool = false
 
     /// While true, `handleIncomingData` and `handlePackets` short-circuit. Set on the decode queue.
@@ -636,6 +664,15 @@ private final class DecodeContext: @unchecked Sendable {
     /// server. Resumption is driven from the main-actor poll on
     /// StreamPlayer's elapsed timer.
     private let onBackpressureRequest: @Sendable (UInt64) -> Void
+    /// Fired with the stream's channel count from the parser's ASBD
+    /// (`mChannelsPerFrame`). Mono streams report 1, stereo 2. Fires once
+    /// per stream, alongside the first `onFormatReady`.
+    private let onChannelCountAvailable: @Sendable (Int, UInt64) -> Void
+    /// Fired with the running average bitrate (bits per second) computed
+    /// from the decoder's compressed-bytes-in / PCM-frames-out totals.
+    /// Throttled to fire when the value changes; stabilizes within a few
+    /// packets of decoded audio.
+    private let onBitrateUpdate: @Sendable (Int, UInt64) -> Void
 
     init(
         decodeQueue: DispatchQueue,
@@ -646,7 +683,9 @@ private final class DecodeContext: @unchecked Sendable {
         onMetadata: @escaping @Sendable (ICYFramer.ICYMetadata, UInt64) -> Void,
         onError: @escaping @Sendable (String, UInt64) -> Void,
         onPrebufferReady: @escaping @Sendable (UInt64) -> Void,
-        onBackpressureRequest: @escaping @Sendable (UInt64) -> Void
+        onBackpressureRequest: @escaping @Sendable (UInt64) -> Void,
+        onChannelCountAvailable: @escaping @Sendable (Int, UInt64) -> Void,
+        onBitrateUpdate: @escaping @Sendable (Int, UInt64) -> Void
     ) {
         self.decodeQueue = decodeQueue
         self.ringBuffer = ringBuffer
@@ -656,6 +695,8 @@ private final class DecodeContext: @unchecked Sendable {
         self.onError = onError
         self.onPrebufferReady = onPrebufferReady
         self.onBackpressureRequest = onBackpressureRequest
+        self.onChannelCountAvailable = onChannelCountAvailable
+        self.onBitrateUpdate = onBitrateUpdate
 
         decodeQueue.async { [self] in
             let parser = AudioFileStreamParser(formatHint: formatHint)
@@ -796,6 +837,14 @@ private final class DecodeContext: @unchecked Sendable {
         // Report the DECODER's output rate (not stream rate) so the source node format matches
         detectedSampleRate = newDecoder.sampleRate
 
+        // Surface the stream's channel count from the ASBD — the source node
+        // is always rendered stereo, but the indicator UI shows the source's
+        // actual layout (mono vs stereo) per the parser.
+        let channels = Int(asbd.mChannelsPerFrame)
+        if channels > 0 {
+            onChannelCountAvailable(channels, generation)
+        }
+
         AppLog.info(.audio, "DecodeContext: Decoder created — \(asbd.mSampleRate)Hz → \(newDecoder.sampleRate)Hz")
     }
 
@@ -851,6 +900,14 @@ private final class DecodeContext: @unchecked Sendable {
             // this flag flips back. UI polling picks up the transition.
             if ringBuffer.isRebuffering, ringBuffer.availableFrames >= rebufferRefillThreshold {
                 ringBuffer.setRebuffering(false)
+            }
+
+            // Surface the decoder's running bitrate average. Fires only on
+            // change so the main-actor mirror update isn't spammed.
+            let bps = decoder.averageBitrateBps
+            if bps > 0 && bps != lastReportedBitrate {
+                lastReportedBitrate = bps
+                onBitrateUpdate(bps, generation)
             }
 
             // Request URLSession suspension when the ring is near the cap so
