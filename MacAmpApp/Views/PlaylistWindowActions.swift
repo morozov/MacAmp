@@ -376,8 +376,6 @@ final class PlaylistWindowActions: NSObject {
             )
 
             audioPlayer.addStreamTrack(streamTrack)
-
-            showAlert("Stream Added", "Added '\(stationName)' to playlist.\n\nClick to play!")
         }
     }
 
