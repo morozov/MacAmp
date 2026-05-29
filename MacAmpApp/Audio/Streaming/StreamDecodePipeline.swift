@@ -131,10 +131,16 @@ final class StreamDecodePipeline {
     /// the first `onChannelCountAvailable` fires. Cleared in `stopInternal`.
     private(set) var currentChannelCount: Int = 0
 
-    /// Bitrate (bits/second) derived from the decoder's running totals of
-    /// compressed bytes in and PCM frames out. 0 until the first decode.
-    /// Cleared in `stopInternal`.
-    private(set) var currentBitrate: Int = 0
+    /// Sample rate from the parser's ASBD `mSampleRate`. 0 until the first
+    /// `onFormatReady` fires.
+    private(set) var currentSampleRate: Float64 = 0
+
+    /// Render-driven bitrate computation. Frame coordinate is the ring
+    /// buffer's `writeHead`/`readHead`. Markers are appended on the
+    /// main actor as decoded batches land in the ring; `currentBitrate`
+    /// reads against the ring's `readHead` so the displayed value tracks
+    /// what is *currently being played*, not the bursty decode timing.
+    let bitrateTracker = BitrateTracker()
 
     // MARK: - Prebuffer Tracking
 
@@ -193,6 +199,7 @@ final class StreamDecodePipeline {
                 Task { @MainActor [weak self] in
                     guard let self, gen == self.generation, !self.formatReadyFired else { return }
                     self.formatReadyFired = true
+                    self.currentSampleRate = sampleRate
                     self.setState(.playing)
                     self.onFormatReady?(sampleRate)
                     AppLog.info(.audio, "StreamDecodePipeline: Format ready — \(sampleRate)Hz")
@@ -231,10 +238,22 @@ final class StreamDecodePipeline {
                     self.currentChannelCount = channels
                 }
             },
-            onBitrateUpdate: { [weak self] bitsPerSecond, gen in
+            onBitrateMarker: { [weak self] framePosition, bytes, sampleRate, gen in
                 Task { @MainActor [weak self] in
                     guard let self, gen == self.generation else { return }
-                    self.currentBitrate = bitsPerSecond
+                    // Defensively keep `currentSampleRate` in sync. In
+                    // practice `onFormatReady` always lands first, but
+                    // Swift concurrency doesn't formally guarantee
+                    // same-actor FIFO ordering across separate Tasks, and
+                    // the streamed sampleRate here is authoritative.
+                    if self.currentSampleRate == 0 {
+                        self.currentSampleRate = sampleRate
+                    }
+                    self.bitrateTracker.appendMarker(
+                        framePosition: framePosition,
+                        cumulativeCompressedBytes: bytes
+                    )
+                    self.pruneBitrateMarkers(sampleRate: sampleRate)
                 }
             }
         )
@@ -366,7 +385,22 @@ final class StreamDecodePipeline {
         formatReadyFired = false
         isIngestSuspended = false
         currentChannelCount = 0
-        currentBitrate = 0
+        currentSampleRate = 0
+        bitrateTracker.reset()
+    }
+
+    /// Trim the tracker so its working set stays bounded to roughly one
+    /// playback window. Called from the marker append callback — the
+    /// ring's read head is the basis for "the past" from the listener's
+    /// perspective. `sampleRate` is passed in (rather than read from
+    /// `currentSampleRate`) so pruning doesn't depend on the format-ready
+    /// Task having already landed on the main actor.
+    private func pruneBitrateMarkers(sampleRate: Float64) {
+        guard let ringBuffer, sampleRate > 0 else { return }
+        let readPos = ringBuffer.readHeadFrames
+        let windowFrames = UInt64(sampleRate * BitrateTracker.windowSeconds)
+        let windowStart = readPos > windowFrames ? readPos &- windowFrames : 0
+        bitrateTracker.pruneBelow(framePosition: windowStart)
     }
 
     private func setState(_ newState: StreamState) {
@@ -600,10 +634,6 @@ private final class DecodeContext: @unchecked Sendable {
     private var prebufferedFrames: Int = 0
     private var formatReadyFired: Bool = false
     private var detectedSampleRate: Float64 = 0
-    /// Last bitrate value reported to the pipeline. Used to dedupe the
-    /// per-decode update so a stable VBR average doesn't fire the callback
-    /// on every packet.
-    private var lastReportedBitrate: Int = 0
     private var isShutdown: Bool = false
 
     /// While true, `handleIncomingData` and `handlePackets` short-circuit. Set on the decode queue.
@@ -668,11 +698,16 @@ private final class DecodeContext: @unchecked Sendable {
     /// (`mChannelsPerFrame`). Mono streams report 1, stereo 2. Fires once
     /// per stream, alongside the first `onFormatReady`.
     private let onChannelCountAvailable: @Sendable (Int, UInt64) -> Void
-    /// Fired with the running average bitrate (bits per second) computed
-    /// from the decoder's compressed-bytes-in / PCM-frames-out totals.
-    /// Throttled to fire when the value changes; stabilizes within a few
-    /// packets of decoded audio.
-    private let onBitrateUpdate: @Sendable (Int, UInt64) -> Void
+    /// Fired after each decode batch has been written to the ring buffer.
+    /// Carries the ring's `writeHead` after the batch, the decoder's
+    /// cumulative compressed-bytes total, and the stream's sample rate
+    /// (so the main-actor handler can prune without depending on the
+    /// separately-set `currentSampleRate` having already landed). The
+    /// pipeline accumulates these into the bitrate marker queue and
+    /// computes the displayed bitrate from the markers straddling the
+    /// ring's `readHead`, so the value tracks what is *currently being
+    /// played* rather than what was just decoded.
+    private let onBitrateMarker: @Sendable (UInt64, UInt64, Float64, UInt64) -> Void
 
     init(
         decodeQueue: DispatchQueue,
@@ -685,7 +720,7 @@ private final class DecodeContext: @unchecked Sendable {
         onPrebufferReady: @escaping @Sendable (UInt64) -> Void,
         onBackpressureRequest: @escaping @Sendable (UInt64) -> Void,
         onChannelCountAvailable: @escaping @Sendable (Int, UInt64) -> Void,
-        onBitrateUpdate: @escaping @Sendable (Int, UInt64) -> Void
+        onBitrateMarker: @escaping @Sendable (UInt64, UInt64, Float64, UInt64) -> Void
     ) {
         self.decodeQueue = decodeQueue
         self.ringBuffer = ringBuffer
@@ -696,7 +731,7 @@ private final class DecodeContext: @unchecked Sendable {
         self.onPrebufferReady = onPrebufferReady
         self.onBackpressureRequest = onBackpressureRequest
         self.onChannelCountAvailable = onChannelCountAvailable
-        self.onBitrateUpdate = onBitrateUpdate
+        self.onBitrateMarker = onBitrateMarker
 
         decodeQueue.async { [self] in
             let parser = AudioFileStreamParser(formatHint: formatHint)
@@ -902,13 +937,18 @@ private final class DecodeContext: @unchecked Sendable {
                 ringBuffer.setRebuffering(false)
             }
 
-            // Surface the decoder's running bitrate average. Fires only on
-            // change so the main-actor mirror update isn't spammed.
-            let bps = decoder.averageBitrateBps
-            if bps > 0 && bps != lastReportedBitrate {
-                lastReportedBitrate = bps
-                onBitrateUpdate(bps, generation)
-            }
+            // Emit a bitrate marker tying the ring buffer's post-write frame
+            // position to the decoder's cumulative compressed-bytes total.
+            // The pipeline computes the displayed bitrate from the markers
+            // straddling the ring's read head, so the value reflects what
+            // is actually being played — not the bursty decode timing
+            // imposed by URLSession backpressure.
+            onBitrateMarker(
+                ringBuffer.writeHeadFrames,
+                decoder.totalCompressedBytes,
+                detectedSampleRate,
+                generation
+            )
 
             // Request URLSession suspension when the ring is near the cap so
             // a server that's burst-ahead of the bitrate can't outrun the

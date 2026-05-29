@@ -6,7 +6,7 @@ import os
 
 @Observable
 @MainActor
-final class AudioPlayer { // swiftlint:disable:this type_body_length
+final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_length
     private enum Keys {
         static let volume = "volume"
         static let balance = "balance"
@@ -171,8 +171,59 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         set { equalizer.appliedAutoPresetTrack = newValue }
     }
     var channelCount: Int = 2
+    /// Lifetime-average bitrate from file metadata, in kbps. Shown by
+    /// `TrackInfoView` as static track info. The render-driven displayed
+    /// bitrate (which fluctuates for VBR) goes through `bitrateTracker`
+    /// and the `BitrateSource` protocol.
     var bitrate: Int = 0
     var sampleRate: Int = 0
+
+    // MARK: - BitrateSource
+
+    /// Per-track render-driven bitrate tracker. Seeded synchronously from
+    /// the file's lifetime-average bitrate when a track loads, then
+    /// replaced by per-packet VBR markers when the detailed background
+    /// scan finishes.
+    let bitrateTracker = BitrateTracker()
+
+    /// Sample rate the tracker's frame positions are expressed in — the
+    /// file's source `mSampleRate` from `kAudioFilePropertyDataFormat`,
+    /// returned by `LocalFilePacketScanner`. Used for both
+    /// `renderSampleRate` and the rate-conversion of `renderFramePosition`
+    /// so the marker query and the render position always share one
+    /// coordinate system (matters for HE-AAC SBR files, where the source
+    /// rate differs from `AVAudioFile.processingFormat.sampleRate`).
+    @ObservationIgnored private var bitrateScanSampleRate: Float64 = 0
+
+    /// Identifies the in-flight scan task so a slow scan for a previous
+    /// track can be ignored if the user switches tracks before it finishes.
+    @ObservationIgnored private var bitrateScanGeneration: UInt64 = 0
+
+    /// Per-frame declared bitrate for the current MP3, populated when the
+    /// detailed scan finishes. When present it drives `currentBitrate` from
+    /// the frame-header bitrate; nil for non-MP3 files and while scanning,
+    /// where the windowed `bitrateTracker` readout is used.
+    @ObservationIgnored private var declaredBitrate: DeclaredBitrateSteps?
+
+    var renderFramePosition: UInt64 {
+        guard bitrateScanSampleRate > 0, let engine else { return 0 }
+        return UInt64(engine.currentPlaybackSeconds * bitrateScanSampleRate)
+    }
+
+    var renderSampleRate: Float64 { bitrateScanSampleRate }
+
+    /// Bitrate (bits/second) of the frame currently playing. For MP3 this is
+    /// the declared frame-header bitrate; for other formats it falls back to
+    /// the marker-based windowed average.
+    var currentBitrate: Int {
+        if let bps = declaredBitrate?.bitsPerSecond(at: renderFramePosition) {
+            return bps
+        }
+        return bitrateTracker.bitrate(
+            renderFramePosition: renderFramePosition,
+            sampleRate: renderSampleRate
+        )
+    }
 
     // MARK: - Init / Deinit
 
@@ -578,6 +629,13 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
                     self?.sampleRate = props.sampleRate
                 }
             }
+
+            // Skip the scan when reusing the file across CUE slices — the
+            // tracker's markers and `bitrateScanSampleRate` from the prior
+            // slice are still valid (same packet table).
+            if !canReuseLoadedFile {
+                scanBitrateMarkers(for: track.url)
+            }
         } catch {
             AppLog.error(.audio, "Failed to open file: \(error)")
             engine.clearFile()
@@ -725,6 +783,44 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         AppLog.debug(.audio, "Stop")
     }
 
+    /// Two-phase scan: a synchronous seed derived from the already-loaded
+    /// `AVAudioFile` (frame count) and the file's on-disk size gives the
+    /// tracker a 2-marker lifetime-average bitrate immediately — both
+    /// inputs are available the instant `engine.loadFile` returns, so the
+    /// seed never depends on Core Audio properties (`EstimatedDuration`,
+    /// `AudioDataByteCount`) that may not be populated on first open of a
+    /// VBR file. A detached detailed scan then replaces the seed with
+    /// per-packet VBR markers. Generation-checked so a slow scan can't
+    /// overwrite a newer track's markers.
+    private func scanBitrateMarkers(for url: URL) {
+        bitrateScanGeneration &+= 1
+        let generation = bitrateScanGeneration
+        declaredBitrate = nil
+
+        if let audioFile = engine?.audioFile {
+            let rate = audioFile.processingFormat.sampleRate
+            let totalFrames = UInt64(max(0, audioFile.length))
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value ?? 0
+            bitrateScanSampleRate = rate
+            bitrateTracker.replaceMarkers(
+                BitrateTracker.seedMarkers(totalFrames: totalFrames, totalCompressedBytes: fileSize)
+            )
+        } else {
+            bitrateScanSampleRate = 0
+            bitrateTracker.reset()
+        }
+
+        Task.detached(priority: .utility) {
+            guard let result = LocalFilePacketScanner.scan(url: url) else { return }
+            await MainActor.run { [weak self] in
+                guard let self, generation == self.bitrateScanGeneration else { return }
+                self.bitrateScanSampleRate = result.sampleRate
+                self.bitrateTracker.replaceMarkers(result.markers)
+                self.declaredBitrate = result.declaredBitrate
+            }
+        }
+    }
+
     func eject() {
         stop()
         transition(to: .stopped(.ejected))
@@ -738,9 +834,10 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         playbackProgress = 0.0
         appliedAutoPresetTrack = nil
         engine.clearFile()
-        bitrate = 0
-        sampleRate = 0
-        channelCount = 2
+        bitrateTracker.reset()
+        bitrateScanGeneration &+= 1
+        bitrateScanSampleRate = 0
+        declaredBitrate = nil
         AppLog.info(.audio, "Eject - cleared playlist and reset playback state")
     }
 

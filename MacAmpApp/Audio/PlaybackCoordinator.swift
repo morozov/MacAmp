@@ -103,13 +103,14 @@ final class PlaybackCoordinator {
         }
     }
 
-    /// Bitrate in bits/second. `0` when nothing is playing. Files come from
-    /// track metadata (already kbps — see indicator view for normalization);
-    /// streams come from the decoder's running average over the actual
-    /// compressed bytes and PCM frames it has processed.
+    /// Bitrate (bits/second) of the audio currently being rendered. Local
+    /// MP3 files report the declared frame-header bitrate of the frame
+    /// playing now — steady for CBR, jumping per frame for VBR; HTTP streams
+    /// and other local formats report the windowed average over the most
+    /// recent `BitrateTracker.windowSeconds`. `0` when nothing is playing.
     var currentBitrate: Int {
         switch currentSource {
-        case .localTrack: return audioPlayer.bitrate
+        case .localTrack: return audioPlayer.currentBitrate
         case .radioStation: return streamPlayer.currentBitrate
         case nil: return 0
         }

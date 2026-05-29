@@ -31,7 +31,7 @@ import os
 /// Should be used via PlaybackCoordinator for proper coordination with AudioPlayer.
 @MainActor
 @Observable
-final class StreamPlayer {
+final class StreamPlayer: BitrateSource {
     // MARK: - State
 
     private(set) var isPlaying: Bool = false
@@ -286,10 +286,13 @@ final class StreamPlayer {
     /// Routes through to the pipeline's parser-derived value.
     var currentChannelCount: Int { pipeline.currentChannelCount }
 
-    /// Average encoded bitrate (bits/second), derived from the decoder's
-    /// compressed-bytes-in / PCM-frames-out totals — the data we're already
-    /// processing, not a separate header or stream probe.
-    var currentBitrate: Int { pipeline.currentBitrate }
+    // MARK: - BitrateSource
+
+    var bitrateTracker: BitrateTracker { pipeline.bitrateTracker }
+
+    var renderFramePosition: UInt64 { ringBuffer?.readHeadFrames ?? 0 }
+
+    var renderSampleRate: Float64 { pipeline.currentSampleRate }
 
     // MARK: - Pipeline Callbacks
 

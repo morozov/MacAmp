@@ -28,6 +28,22 @@ final class AudioEngineController {
     private var progressTimer: Timer?
     private var playheadOffset: Double = 0
 
+    /// Seconds elapsed in the loaded file at the current render time. 0
+    /// when nothing is loaded or playback hasn't begun. Rate-agnostic —
+    /// callers multiply by whichever sample rate their frame coordinate
+    /// uses (e.g. `AudioPlayer` uses the file's source `mSampleRate`,
+    /// which can differ from `AVAudioFile.processingFormat.sampleRate`
+    /// for HE-AAC SBR files).
+    var currentPlaybackSeconds: Double {
+        guard let nodeTime = playerNode.lastRenderTime,
+              let playerTime = playerNode.playerTime(forNodeTime: nodeTime),
+              playerTime.sampleRate > 0 else {
+            return 0
+        }
+        let seconds = Double(playerTime.sampleTime) / playerTime.sampleRate + playheadOffset
+        return max(0, seconds)
+    }
+
     // MARK: - Stream Bridge State
 
     private var streamSourceNode: AVAudioSourceNode?
