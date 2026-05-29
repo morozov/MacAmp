@@ -122,6 +122,39 @@ final class PlaylistController {
         }
     }
 
+    /// Relocate a contiguous range of tracks to land starting at `destination`,
+    /// expressed in pre-move coordinates. Currently-playing track follows its
+    /// row via id-pinning so callers don't have to model index arithmetic.
+    func moveTracks(from range: Range<Int>, to destination: Int) {
+        guard !range.isEmpty,
+              range.lowerBound >= 0,
+              range.upperBound <= playlist.count,
+              destination >= 0,
+              destination <= playlist.count - range.count else { return }
+        if destination >= range.lowerBound && destination < range.upperBound { return }
+        if destination == range.lowerBound { return }
+
+        let pinnedTrackID = currentIndex.flatMap {
+            playlist.indices.contains($0) ? playlist[$0].id : nil
+        }
+
+        let moved = Array(playlist[range])
+        playlist.removeSubrange(range)
+        // After removal, indices >= range.upperBound shift down by range.count.
+        // Map pre-move `destination` to the post-removal insertion point.
+        let insertionPoint = destination < range.lowerBound
+            ? destination
+            : destination - range.count
+        playlist.insert(contentsOf: moved, at: insertionPoint)
+
+        if let pinnedTrackID,
+           let newIndex = playlist.firstIndex(where: { $0.id == pinnedTrackID }) {
+            currentIndex = newIndex
+        }
+
+        AppLog.debug(.audio, "Moved tracks \(range) to \(insertionPoint), \(playlist.count) total")
+    }
+
     /// Remove a track at the specified index
     func removeTrack(at index: Int) {
         guard playlist.indices.contains(index) else { return }
