@@ -547,9 +547,32 @@ private final class DecodeContext: @unchecked Sendable {
     /// Queue-confined: only accessed from decodeQueue.
     var audioWorkgroup: os_workgroup_t?
 
-    private static let prebufferThreshold: Int = 16384
-    /// ~185 ms @ 44.1 kHz — snappier than initial buffering.
-    private static let resumePrebufferThreshold: Int = 8192
+    /// Seconds of decoded audio required before the first
+    /// `onFormatReady` fires (initial startup latency). Matches VLC's
+    /// `--network-caching` default — a one-second startup feels prompt
+    /// while still giving the network a tick to settle.
+    static let initialPrebufferSeconds: Double = 1.0
+    /// Seconds of decoded audio required before `onPrebufferReady` fires
+    /// after a user-initiated pause→resume.
+    static let resumePrebufferSeconds: Double = 1.0
+    /// Seconds of decoded audio required before the render thread is
+    /// allowed to resume reading after a mid-stream underrun. Matches
+    /// MPV's `--cache-pause-wait` default.
+    static let rebufferRefillSeconds: Double = 1.0
+
+    /// Thresholds in frames at the stream's detected sample rate.
+    /// `detectedSampleRate` is set in `formatChanged(...)` before any
+    /// packet is decoded, so by the time `prebufferedFrames` advances
+    /// the rate is always non-zero.
+    private var prebufferThreshold: Int {
+        Int((detectedSampleRate > 0 ? detectedSampleRate : 44100) * Self.initialPrebufferSeconds)
+    }
+    private var resumePrebufferThreshold: Int {
+        Int((detectedSampleRate > 0 ? detectedSampleRate : 44100) * Self.resumePrebufferSeconds)
+    }
+    private var rebufferRefillThreshold: Int {
+        Int((detectedSampleRate > 0 ? detectedSampleRate : 44100) * Self.rebufferRefillSeconds)
+    }
 
     private let onFormatReady: @Sendable (Float64, UInt64) -> Void
     private let onMetadata: @Sendable (ICYFramer.ICYMetadata, UInt64) -> Void
@@ -753,14 +776,21 @@ private final class DecodeContext: @unchecked Sendable {
             let framesWritten = ringBuffer.write(from: pcmBuffer, frameCount: frameCount)
             prebufferedFrames += framesWritten
 
-            if !formatReadyFired && prebufferedFrames >= Self.prebufferThreshold {
+            if !formatReadyFired && prebufferedFrames >= prebufferThreshold {
                 formatReadyFired = true
                 onFormatReady(detectedSampleRate, generation)
             }
 
-            if !prebufferReadyFiredOnResume && prebufferedFrames >= Self.resumePrebufferThreshold {
+            if !prebufferReadyFiredOnResume && prebufferedFrames >= resumePrebufferThreshold {
                 prebufferReadyFiredOnResume = true
                 onPrebufferReady(generation)
+            }
+
+            // Exit mid-stream rebuffering once the render thread has enough
+            // fresh audio to work with. The render block stays silent until
+            // this flag flips back. UI polling picks up the transition.
+            if ringBuffer.isRebuffering, ringBuffer.availableFrames >= rebufferRefillThreshold {
+                ringBuffer.setRebuffering(false)
             }
         }
     }

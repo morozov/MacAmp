@@ -32,6 +32,14 @@ final class LockFreeRingBuffer: @unchecked Sendable {
     private let underrunCount = ManagedAtomic<UInt64>(0)
     private let overrunCount = ManagedAtomic<UInt64>(0)
 
+    /// Mid-stream rebuffering state. Set to 1 by the render thread when a
+    /// complete underrun occurs during steady-state playback (the buffer
+    /// drained to zero while the engine was pulling). Cleared by the decode
+    /// thread when the buffer has refilled past its rebuffer threshold.
+    /// While set, the render block outputs silence rather than reading —
+    /// matches the MPV/VLC pause-and-rebuffer pattern.
+    private let rebufferingState = ManagedAtomic<UInt8>(0)
+
     init(capacity: Int = 4096, channelCount: Int = 2) {
         precondition(capacity > 0, "Capacity must be positive")
         precondition(channelCount > 0, "Channel count must be positive")
@@ -174,6 +182,9 @@ final class LockFreeRingBuffer: @unchecked Sendable {
         if newGeneration {
             generation.wrappingIncrement(by: 1, ordering: .releasing)
         }
+        // Reset rebuffer state so the next session doesn't inherit a stale "still
+        // rebuffering" from the prior one.
+        rebufferingState.store(0, ordering: .releasing)
     }
 
     /// Current generation. Reader checks this to detect format changes.
@@ -204,6 +215,19 @@ final class LockFreeRingBuffer: @unchecked Sendable {
             underruns: underrunCount.load(ordering: .relaxed),
             overruns: overrunCount.load(ordering: .relaxed)
         )
+    }
+
+    /// True while the render block is outputting silence because of a
+    /// mid-stream underrun. Safe to read from any thread.
+    var isRebuffering: Bool {
+        rebufferingState.load(ordering: .acquiring) != 0
+    }
+
+    /// Toggle the rebuffering state. The render thread sets it on a complete
+    /// underrun; the decode thread clears it once enough fresh audio is
+    /// queued. Atomic, lock-free.
+    func setRebuffering(_ on: Bool) {
+        rebufferingState.store(on ? 1 : 0, ordering: .releasing)
     }
 
     #if DEBUG

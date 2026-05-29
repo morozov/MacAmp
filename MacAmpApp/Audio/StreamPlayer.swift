@@ -65,6 +65,20 @@ final class StreamPlayer {
     private static let maxReconnectAttempts = 10
     private static let maxBackoffSeconds: Double = 16.0
 
+    /// Ring buffer capacity in frames. Sized for ~10 s of audio at the
+    /// highest sample rate we'd realistically see on internet radio (48 kHz);
+    /// 22 kHz streams hold proportionally more. ~3.84 MB per stream
+    /// (480000 frames × 2 channels × 4 bytes), allocated once per session.
+    private static let ringBufferCapacityFrames: Int = 480_000
+
+    /// Fast-path threshold for the resume short-circuit: skip waiting on
+    /// `prebufferReadyContinuation` if the pipeline has already accumulated
+    /// roughly the pipeline's own `resumePrebufferSeconds` of audio (~1 s
+    /// at 44.1 kHz). The pipeline fires the continuation at its own
+    /// sample-rate-derived threshold; this is just a "don't bother waiting"
+    /// check.
+    private static let resumeFastPathFrames: Int = 44_100
+
     // MARK: - Pause / Resume State
 
     /// True between `pause()` and the next `resume()`/`play()`/`stop()`. Suppresses
@@ -73,6 +87,11 @@ final class StreamPlayer {
 
     /// Drained by `pipeline.onPrebufferReady`, the warmup timeout sub-task, or `cancelResumeWarmup`.
     @ObservationIgnored private var prebufferReadyContinuation: CheckedContinuation<Void, Never>?
+
+    /// Last polled value of `LockFreeRingBuffer.isRebuffering`. Tracked so the
+    /// 100 ms elapsed-timer tick can detect transitions and update
+    /// `isBuffering` only on a real change.
+    @ObservationIgnored private var isMidStreamRebuffering: Bool = false
 
     @ObservationIgnored private var resumeWarmupTask: Task<Void, Never>?
 
@@ -127,7 +146,7 @@ final class StreamPlayer {
         streamTitle = nil
         streamArtist = nil
 
-        let rb = LockFreeRingBuffer(capacity: 32768, channelCount: 2)
+        let rb = LockFreeRingBuffer(capacity: Self.ringBufferCapacityFrames, channelCount: 2)
         ringBuffer = rb
 
         pipeline.start(url: station.streamURL, ringBuffer: rb)
@@ -184,7 +203,7 @@ final class StreamPlayer {
             switch self.pipeline.state {
             case .paused:
                 // Arm warmup AFTER the resume barrier — earlier and `startResumeWarmup`'s
-                // `availableFrames >= 8192` short-circuit would fire on stale pre-pause PCM.
+                // resume-fast-path short-circuit would fire on stale pre-pause PCM.
                 await self.pipeline.resumeByUser()
                 if Task.isCancelled || self.userPaused { return }
                 self.startResumeWarmup()
@@ -194,7 +213,7 @@ final class StreamPlayer {
                 // Fresh DecodeContext won't fire onPrebufferReady (it's for live-context
                 // resume), so don't arm warmup; let onStateChange handle the .playing flip.
                 if let station = self.currentStation {
-                    let rb = LockFreeRingBuffer(capacity: 32768, channelCount: 2)
+                    let rb = LockFreeRingBuffer(capacity: Self.ringBufferCapacityFrames, channelCount: 2)
                     self.ringBuffer = rb
                     #if DEBUG
                     self.pipelineStartInvocationCountForTesting += 1
@@ -353,10 +372,34 @@ final class StreamPlayer {
                 guard let self, let startedAt = self.elapsedStartedAt else { return }
                 let elapsed = Self.durationSeconds(startedAt.duration(to: .now))
                 self.elapsedTime = self.elapsedAccumulated + elapsed
+                self.pollMidStreamRebufferState()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         elapsedTimer = timer
+    }
+
+    /// Mid-stream rebuffer transitions originate on the audio render thread
+    /// (set) and the decode thread (clear). The 100 ms elapsed-timer tick is
+    /// a cheap, lock-free bridge to the main-actor `isBuffering` flag the UI
+    /// observes — adequate latency for a "buffering" indicator.
+    private func pollMidStreamRebufferState() {
+        guard let rb = ringBuffer else {
+            if isMidStreamRebuffering {
+                isMidStreamRebuffering = false
+            }
+            return
+        }
+        let nowRebuffering = rb.isRebuffering
+        guard nowRebuffering != isMidStreamRebuffering else { return }
+        isMidStreamRebuffering = nowRebuffering
+        // Only flip the user-visible flag when we're in the steady-playing
+        // state. During connect / initial buffering / resume warmup the
+        // existing state machine owns isBuffering and we mustn't fight it.
+        if isPlaying {
+            isBuffering = nowRebuffering
+            onStreamStateChanged?()
+        }
     }
 
     private func stopElapsedTimer() {
@@ -468,7 +511,7 @@ final class StreamPlayer {
 
             guard !Task.isCancelled, let station = self.currentStation else { return }
 
-            let rb = LockFreeRingBuffer(capacity: 32768, channelCount: 2)
+            let rb = LockFreeRingBuffer(capacity: Self.ringBufferCapacityFrames, channelCount: 2)
             self.ringBuffer = rb
             self.pipeline.start(url: station.streamURL, ringBuffer: rb)
         }
@@ -542,7 +585,7 @@ final class StreamPlayer {
             }
 
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                if let rb = self.ringBuffer, rb.availableFrames >= 8192 {
+                if let rb = self.ringBuffer, rb.availableFrames >= Self.resumeFastPathFrames {
                     cont.resume()
                     return
                 }
@@ -560,7 +603,7 @@ final class StreamPlayer {
                 return
             }
 
-            let havePrebuffer = (self.ringBuffer?.availableFrames ?? 0) >= 8192
+            let havePrebuffer = (self.ringBuffer?.availableFrames ?? 0) >= Self.resumeFastPathFrames
 
             if !havePrebuffer {
                 self.isResumeWarming = false
@@ -570,7 +613,7 @@ final class StreamPlayer {
                     // Bridge teardown BEFORE fresh start — `activateStreamBridge` short-circuits
                     // on `!isBridgeActive`, otherwise the engine stays bound to the dead ring.
                     self.onStreamTerminated?()
-                    let fresh = LockFreeRingBuffer(capacity: 32768, channelCount: 2)
+                    let fresh = LockFreeRingBuffer(capacity: Self.ringBufferCapacityFrames, channelCount: 2)
                     self.ringBuffer = fresh
                     #if DEBUG
                     self.pipelineStartInvocationCountForTesting += 1
@@ -582,6 +625,12 @@ final class StreamPlayer {
                 }
                 return
             }
+
+            // Clear any rebuffer state carried over from before the pause.
+            // If the user paused mid-rebuffer and resumed now, the flag
+            // would otherwise keep the render block silent indefinitely.
+            self.ringBuffer?.setRebuffering(false)
+            self.isMidStreamRebuffering = false
 
             self.silenceGateForwarder?(false)
             self.isBuffering = false
