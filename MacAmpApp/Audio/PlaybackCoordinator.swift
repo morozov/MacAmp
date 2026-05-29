@@ -91,6 +91,39 @@ final class PlaybackCoordinator {
         }
     }
 
+    // MARK: - Format Indicators (routed by current source)
+
+    /// Sample rate (Hz) of the currently playing audio.
+    /// `0` when nothing is playing or the value isn't known yet.
+    var currentSampleRate: Int {
+        switch currentSource {
+        case .localTrack: return audioPlayer.sampleRate
+        case .radioStation: return Int(streamPlayer.currentSampleRate)
+        case nil: return 0
+        }
+    }
+
+    /// Bitrate in bits/second. `0` when nothing is playing. Files come from
+    /// track metadata (already kbps — see indicator view for normalization);
+    /// streams come from the decoder's running average over the actual
+    /// compressed bytes and PCM frames it has processed.
+    var currentBitrate: Int {
+        switch currentSource {
+        case .localTrack: return audioPlayer.bitrate
+        case .radioStation: return streamPlayer.currentBitrate
+        case nil: return 0
+        }
+    }
+
+    /// Channel count (1 = mono, 2 = stereo).
+    var currentChannelCount: Int {
+        switch currentSource {
+        case .localTrack: return audioPlayer.channelCount
+        case .radioStation: return streamPlayer.currentChannelCount
+        case nil: return 0
+        }
+    }
+
     // MARK: - Playlist Position
 
     /// Track position string ("3/15") — nil when no playlist track is active.

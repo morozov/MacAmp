@@ -61,6 +61,22 @@ final class AudioConverterDecoder: QueueConfined {
     private var outputBuffer: UnsafeMutablePointer<Float>
     private let outputBufferSize: Int
 
+    /// Running totals used to derive the average encoded bitrate. Updated in
+    /// `enqueue` (compressed bytes) and `decode` (PCM frames). Lifetime
+    /// matches the decoder's — i.e., the totals span the current decode
+    /// session and stay valid until `clearQueue` / `dispose`.
+    private var totalCompressedBytes: UInt64 = 0
+    private var totalDecodedFrames: UInt64 = 0
+
+    /// Average bitrate (bits per second) over all data this decoder has
+    /// processed, computed as `compressedBytes × 8 × sampleRate / pcmFrames`.
+    /// Returns 0 until at least one packet has been decoded.
+    var averageBitrateBps: Int {
+        guard totalDecodedFrames > 0, sampleRate > 0 else { return 0 }
+        let bps = Double(totalCompressedBytes) * 8.0 * sampleRate / Double(totalDecodedFrames)
+        return Int(bps)
+    }
+
     // MARK: - Initialization
 
     /// - Parameters:
@@ -130,6 +146,16 @@ final class AudioConverterDecoder: QueueConfined {
     func enqueue(data: Data, descriptions: [AudioStreamPacketDescription]) {
         assertConfinement()
         packetQueue.append((data: data, descriptions: descriptions))
+        // Track compressed bytes for the bitrate average. VBR streams expose
+        // per-packet sizes via descriptions; CBR provides one chunk and
+        // `data.count` is authoritative.
+        if descriptions.isEmpty {
+            totalCompressedBytes &+= UInt64(data.count)
+        } else {
+            for desc in descriptions {
+                totalCompressedBytes &+= UInt64(desc.mDataByteSize)
+            }
+        }
     }
 
     /// Drop queued + in-flight packets across a stream discontinuity (e.g. user pause).
@@ -143,6 +169,8 @@ final class AudioConverterDecoder: QueueConfined {
         }
         packetQueue.removeAll()
         freeCurrentInput()
+        totalCompressedBytes = 0
+        totalDecodedFrames = 0
     }
 
     // MARK: - Decoding
@@ -179,6 +207,9 @@ final class AudioConverterDecoder: QueueConfined {
         switch status {
         case noErr, Self.noMoreInputData:
             let frameCount = Int(outputFrameCount)
+            if frameCount > 0 {
+                totalDecodedFrames &+= UInt64(frameCount)
+            }
             return frameCount > 0 ? (UnsafePointer(outputBuffer), frameCount) : nil
 
         default:
