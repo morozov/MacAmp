@@ -27,12 +27,15 @@
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.music</string>
 
-    <!-- App Transport Security: Allow HTTP for media streaming -->
-    <!-- Required for internet radio stations that use HTTP instead of HTTPS -->
+    <!-- App Transport Security: allow HTTP for internet radio. Stream stations
+         are open-ended (can't enumerate exception domains) and many use plain
+         HTTP, so AllowsArbitraryLoads is the only practical option.
+         AllowsArbitraryLoadsInMedia covers AVFoundation only; the URLSession-
+         based StreamDecodePipeline needs the broader key too. -->
     <key>NSAppTransportSecurity</key>
     <dict>
-        <!-- Allow HTTP connections for audio/video streaming only -->
-        <!-- This is App Store approved for media apps -->
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
         <key>NSAllowsArbitraryLoadsInMedia</key>
         <true/>
     </dict>
