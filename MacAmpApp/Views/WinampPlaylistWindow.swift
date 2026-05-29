@@ -52,21 +52,19 @@ struct WinampPlaylistWindow: View {
     var body: some View {
         GeometryReader { _ in
             ZStack {
-                if !ui.isShadeMode {
+                if !settings.isPlaylistWindowShaded {
                     buildCompleteBackground()
                     buildContentOverlay()
                 } else {
                     PlaylistShadeView(
                         windowWidth: windowWidth,
-                        isWindowActive: isWindowActive,
-                        onShadeToggle: { ui.isShadeMode.toggle() },
-                        onClose: { WindowCoordinator.shared?.hidePlaylistWindow() }
+                        isWindowActive: isWindowActive
                     )
                 }
             }
-            .frame(width: windowWidth, height: ui.isShadeMode ? 14 : windowHeight)
+            .frame(width: windowWidth, height: settings.isPlaylistWindowShaded ? 14 : windowHeight)
         }
-        .frame(width: windowWidth, height: ui.isShadeMode ? 14 : windowHeight)
+        .frame(width: windowWidth, height: settings.isPlaylistWindowShaded ? 14 : windowHeight)
         .background(Color.black)
         .onAppear {
             ui.installKeyboardMonitor(
@@ -159,11 +157,7 @@ struct WinampPlaylistWindow: View {
             menuPresenter: menuPresenter
         )
 
-        PlaylistTitleBarButtons(
-            windowWidth: windowWidth,
-            onShadeToggle: { ui.isShadeMode.toggle() },
-            onClose: { WindowCoordinator.shared?.hidePlaylistWindow() }
-        )
+        PlaylistTitleBarButtons(windowWidth: windowWidth)
 
         PlaylistScrollSlider(
             scrollOffsetPixels: $ui.scrollOffsetPixels,

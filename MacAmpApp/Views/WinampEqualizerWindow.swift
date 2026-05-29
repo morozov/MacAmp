@@ -9,9 +9,11 @@ struct WinampEqualizerWindow: View {
     @Environment(AppSettings.self) var settings
     @Environment(PlaybackCoordinator.self) var playbackCoordinator
     @Environment(WindowFocusState.self) var windowFocusState
+    @Environment(UserActionDispatcher.self) var dispatcher
 
-    @AppStorage("equalizerIsShadeMode") private var isShadeMode: Bool = false
     @State private var showPresetPicker: Bool = false
+
+    private var isShadeMode: Bool { settings.isEqualizerWindowShaded }
 
     // Computed: Is this window currently focused?
     private var isWindowActive: Bool {
@@ -131,20 +133,14 @@ struct WinampEqualizerWindow: View {
     @ViewBuilder
     private func buildTitlebarButtons() -> some View {
         Group {
-            // Shade button
-            Button(action: {
-                isShadeMode.toggle()
-            }) {
+            Button(action: { dispatcher.perform(.shadeEqualizerWindow) }) {
                 SimpleSpriteImage("MAIN_SHADE_BUTTON", width: 9, height: 9)
             }
             .buttonStyle(.plain)
             .focusable(false)
             .at(EQCoords.shadeButton)
 
-            // Close button
-            Button(action: {
-                WindowCoordinator.shared?.hideEQWindow()
-            }) {
+            Button(action: { dispatcher.perform(.toggleEqualizerWindow) }) {
                 SimpleSpriteImage("MAIN_CLOSE_BUTTON", width: 9, height: 9)
             }
             .buttonStyle(.plain)
@@ -152,14 +148,11 @@ struct WinampEqualizerWindow: View {
             .at(EQCoords.closeButton)
         }
     }
-    
+
     @ViewBuilder
     private func buildControlButtons() -> some View {
         Group {
-            // ON button
-            Button(action: {
-                audioPlayer.toggleEq(isOn: !audioPlayer.isEqOn)
-            }) {
+            Button(action: { dispatcher.perform(.toggleEqualizerEnabled) }) {
                 let spriteKey = audioPlayer.isEqOn ? "EQ_ON_BUTTON_SELECTED" : "EQ_ON_BUTTON"
                 SimpleSpriteImage(spriteKey, width: 26, height: 12)
             }
@@ -167,10 +160,7 @@ struct WinampEqualizerWindow: View {
             .focusable(false)
             .at(EQCoords.onButton)
 
-            // AUTO button
-            Button(action: {
-                audioPlayer.setAutoEQEnabled(!audioPlayer.eqAutoEnabled)
-            }) {
+            Button(action: { dispatcher.perform(.toggleEqualizerAuto) }) {
                 let spriteKey = audioPlayer.eqAutoEnabled ? "EQ_AUTO_BUTTON_SELECTED" : "EQ_AUTO_BUTTON"
                 SimpleSpriteImage(spriteKey, width: 32, height: 12)
             }

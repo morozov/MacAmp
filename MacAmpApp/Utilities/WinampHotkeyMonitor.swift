@@ -1,31 +1,35 @@
 import AppKit
 
-/// App-level keyDown monitor implementing Winamp's plain-key hotkeys.
-/// Mirrors `packages/webamp/js/hotkeys.ts` for the non-modifier shortcuts:
-/// Z/X/C/V/B for prev/play/pause/stop/next, L open file, R repeat, S shuffle,
-/// ←/→ seek ±5s, ↑/↓ volume ±1%. Plus Webamp's Alt+W/E/G window toggles
-/// remapped to Option+W/E/G for Mac-native modifier semantics.
+/// App-level keyDown monitor for Winamp's plain-key shortcuts. The monitor
+/// only translates a `NSEvent` into a `UserAction` and forwards it to the
+/// shared `UserActionDispatcher` — every action implementation lives in
+/// the dispatcher, so the hotkey path can't drift from a button or menu
+/// path for the same action.
 ///
-/// Modifier-key menu shortcuts (⌘D double-size, ⌘T time mode, ⌘A always-on-top
-/// / select-all) stay in `AppCommands.swift` so they appear in the menu UI.
+/// Mirrors `packages/webamp/js/hotkeys.ts` for the non-modifier keys:
+/// Z/X/C/V/B (prev/play/pause/stop/next), L (open file), R (cycle
+/// repeat), S (toggle shuffle), ←/→ (seek ±5s), ↑/↓ (volume ±1%). Plus
+/// Webamp's Alt+W/E/G window toggles remapped to Option+W/E/G for
+/// Mac-native modifier semantics.
+///
+/// ⌘-modifier shortcuts (⌘D double-size, ⌘T time mode, ⌘A always-on-top,
+/// etc.) live in `AppCommands` so they appear in the menus.
 @MainActor
 final class WinampHotkeyMonitor {
-    private let audioPlayer: AudioPlayer
-    private let playbackCoordinator: PlaybackCoordinator
-    private let dockingController: DockingController
-    private let presentOpenPanel: () -> Void
+    private let dispatcher: UserActionDispatcher
     private var monitor: Any?
 
-    init(
-        audioPlayer: AudioPlayer,
-        playbackCoordinator: PlaybackCoordinator,
-        dockingController: DockingController,
-        presentOpenPanel: @escaping () -> Void
-    ) {
-        self.audioPlayer = audioPlayer
-        self.playbackCoordinator = playbackCoordinator
-        self.dockingController = dockingController
-        self.presentOpenPanel = presentOpenPanel
+    private let plainKeyActions: [Character: UserAction]
+    private let optionKeyActions: [Character: UserAction]
+
+    init(dispatcher: UserActionDispatcher) {
+        self.dispatcher = dispatcher
+        self.plainKeyActions = Dictionary(
+            uniqueKeysWithValues: WinampKeyBindings.plainKeyBindings.map { ($0.key, $0.action) }
+        )
+        self.optionKeyActions = Dictionary(
+            uniqueKeysWithValues: WinampKeyBindings.optionKeyBindings.map { ($0.key, $0.action) }
+        )
         install()
     }
 
@@ -51,79 +55,33 @@ final class WinampHotkeyMonitor {
         let appShortcutModifiers = event.modifierFlags.intersection([.command, .option, .control])
 
         if appShortcutModifiers == .option {
-            return handleOptionKey(event)
+            return dispatchLetter(event, table: optionKeyActions)
         }
         guard appShortcutModifiers.isEmpty else { return event }
 
+        // Arrow keys map to parameterized actions inline — they have no
+        // menu rendering, so they don't carry a `WinampKeyBinding`.
         switch event.keyCode {
-        case 123: seekBy(-5); return nil   // ←
-        case 124: seekBy(+5); return nil   // →
-        case 125: adjustVolume(by: -1); return nil  // ↓
-        case 126: adjustVolume(by: +1); return nil  // ↑
+        case 123: dispatcher.perform(.seekBy(seconds: -5)); return nil
+        case 124: dispatcher.perform(.seekBy(seconds: +5)); return nil
+        case 125: dispatcher.perform(.adjustVolume(percent: -1)); return nil
+        case 126: dispatcher.perform(.adjustVolume(percent: +1)); return nil
         default:
             break
         }
 
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "z":
-            Task { await playbackCoordinator.previous() }
-        case "x":
-            startPlayback()
-        case "c":
-            playbackCoordinator.togglePlayPause()
-        case "v":
-            playbackCoordinator.stop()
-        case "b":
-            Task { await playbackCoordinator.next() }
-        case "l":
-            presentOpenPanel()
-        case "r":
-            audioPlayer.repeatMode = audioPlayer.repeatMode.next()
-        case "s":
-            audioPlayer.shuffleEnabled.toggle()
-        default:
+        return dispatchLetter(event, table: plainKeyActions)
+    }
+
+    private func dispatchLetter(_ event: NSEvent, table: [Character: UserAction]) -> NSEvent? {
+        guard let chars = event.charactersIgnoringModifiers?.lowercased(),
+              let key = chars.first,
+              chars.count == 1,
+              let action = table[key] else {
             return event
         }
+        dispatcher.perform(action)
         return nil
-    }
-
-    private func handleOptionKey(_ event: NSEvent) -> NSEvent? {
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "w":
-            dockingController.toggleMain()
-        case "e":
-            dockingController.togglePlaylist()
-        case "g":
-            dockingController.toggleEqualizer()
-        default:
-            return event
-        }
-        return nil
-    }
-
-    /// Webamp's `play()` thunk: keep playing if already playing, resume if
-    /// paused, otherwise start the current/first track. Open-file fallback for
-    /// the truly-empty case stays with plain `L`.
-    private func startPlayback() {
-        if playbackCoordinator.isPaused {
-            playbackCoordinator.togglePlayPause()
-        } else if !playbackCoordinator.isPlaying {
-            audioPlayer.play()
-        }
-    }
-
-    private func seekBy(_ seconds: Double) {
-        guard case .localTrack = playbackCoordinator.currentSource else { return }
-        let newTime = max(0, audioPlayer.currentTime + seconds)
-        audioPlayer.seek(to: newTime)
-    }
-
-    private func adjustVolume(by deltaPercent: Int) {
-        let currentPct = Int((audioPlayer.volume * 100).rounded())
-        let newPct = max(0, min(100, currentPct + deltaPercent))
-        guard newPct != currentPct else { return }
-        playbackCoordinator.setVolume(Float(newPct) / 100)
-        playbackCoordinator.commitVolume()
     }
 
     private func isEditingText(in window: NSWindow?) -> Bool {

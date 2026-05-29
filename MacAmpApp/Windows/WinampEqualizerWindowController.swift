@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 class WinampEqualizerWindowController: NSWindowController {
-    convenience init(skinManager: SkinManager, audioPlayer: AudioPlayer, dockingController: DockingController, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState) {
+    convenience init(skinManager: SkinManager, audioPlayer: AudioPlayer, dockingController: DockingController, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState, userActionDispatcher: UserActionDispatcher) {
         // ORACLE BLOCKING ISSUE #1 FIX: Truly borderless windows
         // .borderless = 0, so [.borderless, .titled] keeps .titled mask!
         // For custom Winamp chrome, use .borderless ONLY (no system chrome)
@@ -29,6 +29,7 @@ class WinampEqualizerWindowController: NSWindowController {
             .environment(radioLibrary)
             .environment(playbackCoordinator)
             .environment(windowFocusState)
+            .environment(userActionDispatcher)
 
         // FirstMouseHostingController combines first-click delivery (so
         // dragging the titlebar / slider on an inactive window works on the

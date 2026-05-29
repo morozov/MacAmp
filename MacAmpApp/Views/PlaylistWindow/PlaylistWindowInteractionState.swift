@@ -16,15 +16,9 @@ final class PlaylistWindowInteractionState {
     private static let endKeyCode: UInt16 = 119
     private static let returnKeyCode: UInt16 = 36
     private static let keypadEnterKeyCode: UInt16 = 76
-    private static let isShadeModeKey = "playlistIsShadeMode"
 
     var selectedIndices: Set<Int> = []
     var cursorIndex: Int?
-    var isShadeMode: Bool = UserDefaults.standard.bool(forKey: PlaylistWindowInteractionState.isShadeModeKey) {
-        didSet {
-            UserDefaults.standard.set(isShadeMode, forKey: Self.isShadeModeKey)
-        }
-    }
     /// Vertical scroll offset of the track list, in pixels. Shared between
     /// the ScrollView (`PlaylistTrackListView`), the gold-thumb slider
     /// (`PlaylistScrollSlider`), and the keyboard-cursor visibility check.

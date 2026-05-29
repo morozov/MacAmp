@@ -6,6 +6,7 @@ struct MainWindowShadeLayer: View {
     @Environment(AppSettings.self) private var settings
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(WindowFocusState.self) private var windowFocusState
+    @Environment(UserActionDispatcher.self) private var dispatcher
 
     let interactionState: WinampMainWindowInteractionState
 
@@ -65,7 +66,7 @@ struct MainWindowShadeLayer: View {
         .frame(width: 56, height: 13, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture {
-            settings.toggleTimeDisplayMode()
+            dispatcher.perform(.toggleTimeDisplayMode)
         }
         .at(Layout.timeDisplay)
         .scaleEffect(0.7)
@@ -77,27 +78,21 @@ struct MainWindowShadeLayer: View {
     @ViewBuilder
     private func buildShadeTitlebarButtons() -> some View {
         Group {
-            Button(action: {
-                WindowCoordinator.shared?.hideApp()
-            }, label: {
+            Button(action: { dispatcher.perform(.minimizeApp) }, label: {
                 SimpleSpriteImage("MAIN_MINIMIZE_BUTTON", width: 9, height: 9)
             })
             .buttonStyle(.plain)
             .focusable(false)
             .at(Layout.minimizeButton)
 
-            Button(action: {
-                settings.isMainWindowShaded.toggle()
-            }, label: {
+            Button(action: { dispatcher.perform(.shadeMainWindow) }, label: {
                 SimpleSpriteImage("MAIN_SHADE_BUTTON", width: 9, height: 9)
             })
             .buttonStyle(.plain)
             .focusable(false)
             .at(Layout.shadeButton)
 
-            Button(action: {
-                NSApplication.shared.terminate(nil)
-            }, label: {
+            Button(action: { dispatcher.perform(.quitApp) }, label: {
                 SimpleSpriteImage("MAIN_CLOSE_BUTTON", width: 9, height: 9)
             })
             .buttonStyle(.plain)

@@ -9,7 +9,7 @@ class WinampMilkdropWindowController: NSWindowController {
     /// Butterchurn preset manager (owned by controller for lifecycle management)
     let presetManager: ButterchurnPresetManager
 
-    convenience init(skinManager: SkinManager, audioPlayer: AudioPlayer, dockingController: DockingController, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState) {
+    convenience init(skinManager: SkinManager, audioPlayer: AudioPlayer, dockingController: DockingController, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState, userActionDispatcher: UserActionDispatcher) {
         AppLog.debug(.window, "WinampMilkdropWindowController: init() called")
 
         // Create Butterchurn bridge (owned by controller for lifecycle management)
@@ -51,6 +51,7 @@ class WinampMilkdropWindowController: NSWindowController {
             .environment(radioLibrary)
             .environment(playbackCoordinator)
             .environment(windowFocusState)
+            .environment(userActionDispatcher)
             .environment(bridge)
             .environment(presetMgr)
 

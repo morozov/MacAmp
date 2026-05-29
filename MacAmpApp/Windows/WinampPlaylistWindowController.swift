@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 class WinampPlaylistWindowController: NSWindowController {
-    convenience init(skinManager: SkinManager, audioPlayer: AudioPlayer, dockingController: DockingController, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState) {
+    convenience init(skinManager: SkinManager, audioPlayer: AudioPlayer, dockingController: DockingController, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState, userActionDispatcher: UserActionDispatcher) {
         // Playlist is segment-resized through PlaylistResizeHandle, which drives
         // sizeState and lets `[.preferredContentSize]` propagate the new size to
         // the NSWindow. The `.resizable` styleMask would also expose macOS's
@@ -38,6 +38,7 @@ class WinampPlaylistWindowController: NSWindowController {
             .environment(radioLibrary)
             .environment(playbackCoordinator)
             .environment(windowFocusState)
+            .environment(userActionDispatcher)
 
         // FirstMouseHostingController combines first-click delivery (so
         // dragging the titlebar / slider on an inactive window works on the

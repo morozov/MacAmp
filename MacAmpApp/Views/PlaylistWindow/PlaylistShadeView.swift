@@ -36,8 +36,6 @@ struct PlaylistShadeView: View {
 
     let windowWidth: CGFloat
     let isWindowActive: Bool
-    let onShadeToggle: () -> Void
-    let onClose: () -> Void
 
     /// Webamp constants (`packages/webamp/js/constants.ts`).
     private static let minNameWidth: CGFloat = 205
@@ -108,11 +106,7 @@ struct PlaylistShadeView: View {
                 .frame(width: dragWidth, height: 14)
                 .at(x: 0, y: 0)
 
-            PlaylistTitleBarButtons(
-                windowWidth: windowWidth,
-                onShadeToggle: onShadeToggle,
-                onClose: onClose
-            )
+            PlaylistTitleBarButtons(windowWidth: windowWidth)
         }
         .frame(width: windowWidth, height: 14, alignment: .topLeading)
     }

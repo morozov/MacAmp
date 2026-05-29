@@ -10,6 +10,7 @@ struct WinampMainWindow: View {
     @Environment(AppSettings.self) private var settings
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(WindowFocusState.self) private var windowFocusState
+    @Environment(\.openWindow) private var openWindow
 
     @State private var interactionState = WinampMainWindowInteractionState()
     @State private var optionsPresenter = MainWindowOptionsMenuPresenter()
@@ -34,11 +35,7 @@ struct WinampMainWindow: View {
             .at(CGPoint(x: 0, y: 0))
 
             if !settings.isMainWindowShaded {
-                MainWindowFullLayer(
-                    interactionState: interactionState,
-                    optionsPresenter: optionsPresenter,
-                    openFileDialog: openFileDialog
-                )
+                MainWindowFullLayer(interactionState: interactionState)
             } else {
                 MainWindowShadeLayer(interactionState: interactionState)
             }
@@ -78,6 +75,12 @@ struct WinampMainWindow: View {
                 settings.showOptionsMenuTrigger = false
             }
         }
+        .onChange(of: settings.showPreferencesTrigger) { _, newValue in
+            if newValue {
+                openWindow(id: "preferences")
+                settings.showPreferencesTrigger = false
+            }
+        }
         .onAppear {
             interactionState.isViewVisible = true
             interactionState.displayTitleProvider = { [playbackCoordinator, weak interactionState] in
@@ -102,9 +105,6 @@ struct WinampMainWindow: View {
         }
     }
 
-    func openFileDialog() {
-        PlaylistWindowActions.shared.presentAddFilesPanel(audioPlayer: audioPlayer, playbackCoordinator: playbackCoordinator)
-    }
 }
 
 #Preview {

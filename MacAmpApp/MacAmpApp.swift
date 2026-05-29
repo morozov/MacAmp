@@ -12,6 +12,8 @@ struct MacAmpApp: App {
     @State private var playbackCoordinator: PlaybackCoordinator
     @State private var windowFocusState: WindowFocusState
     @State private var playlistStateStore: PlaylistStateStore
+    @State private var userActionDispatcher: UserActionDispatcher
+    @State private var mediaRemoteController: MediaRemoteController
 
     init() {
         let skinManager = SkinManager()
@@ -50,6 +52,20 @@ struct MacAmpApp: App {
             }
         }
 
+        let userActionDispatcher = UserActionDispatcher(
+            audioPlayer: audioPlayer,
+            playbackCoordinator: playbackCoordinator,
+            dockingController: dockingController,
+            settings: settings,
+            presentOpenPanel: { [audioPlayer, playbackCoordinator] in
+                PlaylistWindowActions.shared.presentAddFilesPanel(
+                    audioPlayer: audioPlayer,
+                    playbackCoordinator: playbackCoordinator
+                )
+            }
+        )
+        let mediaRemoteController = MediaRemoteController(dispatcher: userActionDispatcher)
+
         _skinManager = State(initialValue: skinManager)
         _audioPlayer = State(initialValue: audioPlayer)
         _dockingController = State(initialValue: dockingController)
@@ -58,6 +74,8 @@ struct MacAmpApp: App {
         _streamPlayer = State(initialValue: streamPlayer)
         _playbackCoordinator = State(initialValue: playbackCoordinator)
         _playlistStateStore = State(initialValue: playlistStateStore)
+        _userActionDispatcher = State(initialValue: userActionDispatcher)
+        _mediaRemoteController = State(initialValue: mediaRemoteController)
 
         // CRITICAL FIX #1: Skin auto-loading (from UnifiedDockView.ensureSkin)
         // Load initial skin before creating windows
@@ -77,7 +95,8 @@ struct MacAmpApp: App {
             settings: settings,
             radioLibrary: radioLibrary,
             playbackCoordinator: playbackCoordinator,
-            windowFocusState: windowFocusState
+            windowFocusState: windowFocusState,
+            userActionDispatcher: userActionDispatcher
         )
         WindowCoordinator.shared = coordinator
         WindowCoordinatorBox.shared.value = coordinator
@@ -116,7 +135,12 @@ struct MacAmpApp: App {
 
         // Commands are defined once here and apply to all window groups
         .commands {
-            AppCommands(dockingController: dockingController, audioPlayer: audioPlayer, settings: settings, playbackCoordinator: playbackCoordinator)
+            AppCommands(
+                dockingController: dockingController,
+                audioPlayer: audioPlayer,
+                settings: settings,
+                dispatcher: userActionDispatcher
+            )
             SkinsCommands(skinManager: skinManager)
         }
     }

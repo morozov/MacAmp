@@ -39,6 +39,10 @@ final class AppSettings {
         static let isDoubleSizeMode = "isDoubleSizeMode"
         static let isAlwaysOnTop = "isAlwaysOnTop"
         static let isMainWindowShaded = "isMainWindowShaded"
+        // Original per-view keys preserved so existing user state survives the
+        // move from `PlaylistWindowInteractionState`/`@AppStorage` into AppSettings.
+        static let isPlaylistWindowShaded = "playlistIsShadeMode"
+        static let isEqualizerWindowShaded = "equalizerIsShadeMode"
         static let showVideoWindow = "showVideoWindow"
         static let showMilkdropWindow = "showMilkdropWindow"
         static let showEqualizerWindow = "showEqualizerWindow"
@@ -78,6 +82,8 @@ final class AppSettings {
         self.isDoubleSizeMode = UserDefaults.standard.bool(forKey: Keys.isDoubleSizeMode)
         self.isAlwaysOnTop = UserDefaults.standard.bool(forKey: Keys.isAlwaysOnTop)
         self.isMainWindowShaded = UserDefaults.standard.bool(forKey: Keys.isMainWindowShaded)
+        self.isPlaylistWindowShaded = UserDefaults.standard.bool(forKey: Keys.isPlaylistWindowShaded)
+        self.isEqualizerWindowShaded = UserDefaults.standard.bool(forKey: Keys.isEqualizerWindowShaded)
         self.showVideoWindow = UserDefaults.standard.bool(forKey: Keys.showVideoWindow)
         self.showMilkdropWindow = UserDefaults.standard.bool(forKey: Keys.showMilkdropWindow)
         // Default to visible — preserves existing first-launch behavior where
@@ -227,6 +233,22 @@ final class AppSettings {
         }
     }
 
+    /// Whether the playlist window is in shade (14px compact) mode.
+    /// Persisted under the original `playlistIsShadeMode` key.
+    var isPlaylistWindowShaded: Bool = false {
+        didSet {
+            UserDefaults.standard.set(isPlaylistWindowShaded, forKey: Keys.isPlaylistWindowShaded)
+        }
+    }
+
+    /// Whether the equalizer window is in shade mode.
+    /// Persisted under the original `equalizerIsShadeMode` key.
+    var isEqualizerWindowShaded: Bool = false {
+        didSet {
+            UserDefaults.standard.set(isEqualizerWindowShaded, forKey: Keys.isEqualizerWindowShaded)
+        }
+    }
+
     // MARK: - Time Display Mode
 
     /// Time display mode for elapsed vs remaining time
@@ -255,6 +277,11 @@ final class AppSettings {
 
     /// I - Track Info Dialog (transient, not persisted)
     var showTrackInfoDialog: Bool = false
+
+    /// Trigger the Preferences window. Set true to request; an observer
+    /// (currently `WinampMainWindow`, which has SwiftUI's `openWindow`
+    /// in scope) opens the window and resets the flag.
+    var showPreferencesTrigger: Bool = false
 
     // MARK: - Video Window (TASK 2: Day 6)
 
