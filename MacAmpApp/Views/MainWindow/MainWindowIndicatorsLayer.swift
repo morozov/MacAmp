@@ -9,6 +9,13 @@ struct MainWindowIndicatorsLayer: View {
 
     private typealias Layout = WinampMainWindowLayout
 
+    /// Interval between bitrate-display refreshes. 10 Hz — slower than
+    /// the visualizer's 30 Hz because the digit-by-digit numeric readout
+    /// reads as noise when it ticks faster than the eye can settle on it.
+    /// ~100 ms also matches `LocalFilePacketScanner`'s marker stride, so
+    /// neighboring ticks generally land in distinct windows.
+    private static let bitrateRefreshInterval: TimeInterval = 1.0 / 10.0
+
     var body: some View {
         // Play/Pause indicator
         buildPlayPauseIndicator()
@@ -55,21 +62,31 @@ struct MainWindowIndicatorsLayer: View {
 
     @ViewBuilder
     private func buildBitrateDisplay() -> some View {
-        // Streams report bits/second; files report kbps already. Normalize
-        // to kbps for display by dividing if the value is large enough to
-        // be in bits/second (>= 1000).
-        let raw = playbackCoordinator.currentBitrate
-        let kbps = raw >= 1000 ? raw / 1000 : raw
-        if kbps > 0 {
-            let bitrateText = "\(kbps)"
-            HStack(spacing: 0) {
-                ForEach(Array(bitrateText.enumerated()), id: \.offset) { _, character in
-                    if let ascii = character.asciiValue {
-                        SimpleSpriteImage("CHARACTER_\(ascii)", width: 5, height: 6)
+        // `PlaybackCoordinator.currentBitrate` is a computed query into a
+        // non-`@Observable` `BitrateTracker`, so SwiftUI's observation
+        // tracking doesn't see it change. `TimelineView` schedules a
+        // periodic re-evaluation that survives parent re-renders (unlike
+        // a `let` `Timer.publish(...)` on the View struct, which gets
+        // re-initialized on each render and can lose its tick at slower
+        // intervals). Both sources report bits/second.
+        //
+        // Gated on play/pause so an idle app doesn't schedule 10 Hz
+        // wake-ups for a closure that would render nothing.
+        if playbackCoordinator.isPlaying || playbackCoordinator.isPaused {
+            TimelineView(.periodic(from: .now, by: Self.bitrateRefreshInterval)) { _ in
+                let kbps = playbackCoordinator.currentBitrate / 1000
+                if kbps > 0 {
+                    let bitrateText = "\(kbps)"
+                    HStack(spacing: 0) {
+                        ForEach(Array(bitrateText.enumerated()), id: \.offset) { _, character in
+                            if let ascii = character.asciiValue {
+                                SimpleSpriteImage("CHARACTER_\(ascii)", width: 5, height: 6)
+                            }
+                        }
                     }
+                    .at(x: 111, y: 43)
                 }
             }
-            .at(x: 111, y: 43)
         }
     }
 

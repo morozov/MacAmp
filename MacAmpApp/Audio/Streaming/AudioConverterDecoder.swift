@@ -61,21 +61,18 @@ final class AudioConverterDecoder: QueueConfined {
     private var outputBuffer: UnsafeMutablePointer<Float>
     private let outputBufferSize: Int
 
-    /// Running totals used to derive the average encoded bitrate. Updated in
-    /// `enqueue` (compressed bytes) and `decode` (PCM frames). Lifetime
-    /// matches the decoder's — i.e., the totals span the current decode
-    /// session and stay valid until `clearQueue` / `dispose`.
-    private var totalCompressedBytes: UInt64 = 0
-    private var totalDecodedFrames: UInt64 = 0
-
-    /// Average bitrate (bits per second) over all data this decoder has
-    /// processed, computed as `compressedBytes × 8 × sampleRate / pcmFrames`.
-    /// Returns 0 until at least one packet has been decoded.
-    var averageBitrateBps: Int {
-        guard totalDecodedFrames > 0, sampleRate > 0 else { return 0 }
-        let bps = Double(totalCompressedBytes) * 8.0 * sampleRate / Double(totalDecodedFrames)
-        return Int(bps)
-    }
+    /// Cumulative compressed bytes the decoder has pulled from its queue
+    /// (and handed to AudioConverter), monotonic for the decoder's entire
+    /// lifetime. Counted in `advanceToNextPacket` rather than `enqueue`
+    /// so packets dropped by `clearQueue` on pause — which never reach
+    /// the input callback — don't show up here paired with zero produced
+    /// frames; without that alignment, the first post-resume marker
+    /// would carry up to ~one window of queued-but-undecoded bytes and
+    /// inflate the bitrate computed across the pause. *Not* reset by
+    /// `clearQueue`, which would create a non-monotonic discontinuity
+    /// that straddles the playback window for ~1 s after resume
+    /// (display drops to 0). Lives until `dispose()`.
+    private(set) var totalCompressedBytes: UInt64 = 0
 
     // MARK: - Initialization
 
@@ -146,16 +143,8 @@ final class AudioConverterDecoder: QueueConfined {
     func enqueue(data: Data, descriptions: [AudioStreamPacketDescription]) {
         assertConfinement()
         packetQueue.append((data: data, descriptions: descriptions))
-        // Track compressed bytes for the bitrate average. VBR streams expose
-        // per-packet sizes via descriptions; CBR provides one chunk and
-        // `data.count` is authoritative.
-        if descriptions.isEmpty {
-            totalCompressedBytes &+= UInt64(data.count)
-        } else {
-            for desc in descriptions {
-                totalCompressedBytes &+= UInt64(desc.mDataByteSize)
-            }
-        }
+        // Bytes are counted when the input callback pulls a packet
+        // (`advanceToNextPacket`), not here — see `totalCompressedBytes`.
     }
 
     /// Drop queued + in-flight packets across a stream discontinuity (e.g. user pause).
@@ -169,8 +158,9 @@ final class AudioConverterDecoder: QueueConfined {
         }
         packetQueue.removeAll()
         freeCurrentInput()
-        totalCompressedBytes = 0
-        totalDecodedFrames = 0
+        // Deliberately do NOT reset `totalCompressedBytes` — keeping it
+        // monotonic across pause/resume preserves the bitrate marker
+        // invariant (see field doc).
     }
 
     // MARK: - Decoding
@@ -207,9 +197,6 @@ final class AudioConverterDecoder: QueueConfined {
         switch status {
         case noErr, Self.noMoreInputData:
             let frameCount = Int(outputFrameCount)
-            if frameCount > 0 {
-                totalDecodedFrames &+= UInt64(frameCount)
-            }
             return frameCount > 0 ? (UnsafePointer(outputBuffer), frameCount) : nil
 
         default:
@@ -235,6 +222,19 @@ final class AudioConverterDecoder: QueueConfined {
         freeCurrentInput()
 
         let packet = packetQueue.removeFirst()
+
+        // Account this packet's compressed bytes against the decoder's
+        // lifetime total. Doing it here (rather than in `enqueue`) keeps
+        // the count paired with frames the converter will actually
+        // produce — packets dropped by `clearQueue` between enqueue and
+        // pull are never seen and never counted.
+        if packet.descriptions.isEmpty {
+            totalCompressedBytes &+= UInt64(packet.data.count)
+        } else {
+            for desc in packet.descriptions {
+                totalCompressedBytes &+= UInt64(desc.mDataByteSize)
+            }
+        }
 
         // Copy packet data into stable allocation
         currentInputSize = packet.data.count

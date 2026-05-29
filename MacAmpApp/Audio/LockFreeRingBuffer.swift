@@ -209,6 +209,20 @@ final class LockFreeRingBuffer: @unchecked Sendable {
         return Int(distance)
     }
 
+    /// Total frames the producer has ever written. Monotonic, wraps only on
+    /// `UInt64` overflow. Relaxed load — suitable for telemetry/UI, not for
+    /// synchronization.
+    var writeHeadFrames: UInt64 {
+        writeHead.load(ordering: .relaxed)
+    }
+
+    /// Total frames the consumer has ever read. Monotonic, wraps only on
+    /// `UInt64` overflow. Relaxed load — suitable for telemetry/UI, not for
+    /// synchronization.
+    var readHeadFrames: UInt64 {
+        readHead.load(ordering: .relaxed)
+    }
+
     /// Read telemetry counters (safe to call from any thread).
     func telemetry() -> (underruns: UInt64, overruns: UInt64) {
         (
