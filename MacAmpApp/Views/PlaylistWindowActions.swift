@@ -342,6 +342,10 @@ final class PlaylistWindowActions: NSObject {
 
         let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
         input.placeholderString = "http://stream.example.com/radio.mp3"
+        input.usesSingleLineMode = true
+        input.lineBreakMode = .byClipping
+        input.cell?.wraps = false
+        input.cell?.isScrollable = true
         alert.accessoryView = input
 
         alert.addButton(withTitle: "Add")
