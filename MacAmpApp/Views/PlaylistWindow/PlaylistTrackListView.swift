@@ -9,6 +9,7 @@ struct PlaylistTrackListView: View {
     @Binding var scrollOffsetPixels: CGFloat
     let onTrackTap: (Int) -> Void
     let selectedIndices: Set<Int>
+    let dropIndex: Int?
 
     @State private var scrollPosition = ScrollPosition()
 
@@ -29,6 +30,21 @@ struct PlaylistTrackListView: View {
                             )
                         )
                 }
+            }
+        }
+        .overlay(alignment: .top) {
+            // Webamp shows no drop indicator (DropTarget.tsx relies on the
+            // system link cursor alone). This is a deliberate deviation: a
+            // 2-pt bar at the insertion point uses the skin's selected-row
+            // color so it reads against any palette.
+            if let dropIndex {
+                let y = CGFloat(dropIndex) * PlaylistWindowSizeState.trackRowHeight
+                    - scrollOffsetPixels
+                Rectangle()
+                    .fill(playlistStyle.selectedBackgroundColor)
+                    .frame(width: trackWidth, height: 2)
+                    .offset(y: y - 1)
+                    .allowsHitTesting(false)
             }
         }
         .scrollPosition($scrollPosition)

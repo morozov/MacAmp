@@ -445,6 +445,10 @@ final class AudioPlayer { // swiftlint:disable:this type_body_length
         }
     }
 
+    func moveTracks(from range: Range<Int>, to destination: Int) {
+        playlistController.moveTracks(from: range, to: destination)
+    }
+
     func replacePlaylist(with tracks: [Track]) {
         playlistGeneration &+= 1
         playlistController.clear()

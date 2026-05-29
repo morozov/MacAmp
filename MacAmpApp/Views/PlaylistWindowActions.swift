@@ -151,14 +151,19 @@ final class PlaylistWindowActions: NSObject {
     /// Hint surfaced by `handleSelectedURLs` for the caller's post-load decision.
     /// Captures the absolute playlist index that the first processed M3U's
     /// `#EXTMACAMP-CURRENT` resolves to (Spec 005, caller-responsibilities table).
-    private struct SelectionHint {
+    struct SelectionHint {
         let absoluteIndex: Int
     }
 
-    private func handleSelectedURLs(_ urls: [URL], audioPlayer: AudioPlayer) async -> SelectionHint? {
+    func handleSelectedURLs(
+        _ urls: [URL],
+        audioPlayer: AudioPlayer,
+        at insertIndex: Int? = nil
+    ) async -> SelectionHint? {
+        let appendStart = audioPlayer.playlist.count
         var firstHint: SelectionHint?
-        // Expand any directories upfront, off-main, so a large folder pick
-        // doesn't freeze the UI on the FileManager enumeration.
+        // Expand any directories upfront, off-main, so a large drop doesn't
+        // freeze the UI on the FileManager enumeration.
         let resolved = await Task.detached(priority: .userInitiated) {
             Self.expandDirectories(urls)
         }.value
@@ -192,6 +197,22 @@ final class PlaylistWindowActions: NSObject {
                 audioPlayer.addTrack(url: url)
             }
         }
+
+        // Each branch above appends; lift the new tail to the requested
+        // position so a single moveTracks captures the entire batch (rather
+        // than threading an `at:` cursor through every add path).
+        if let insertIndex,
+           insertIndex < appendStart,
+           audioPlayer.playlist.count > appendStart {
+            let appended = appendStart..<audioPlayer.playlist.count
+            audioPlayer.moveTracks(from: appended, to: insertIndex)
+            // Re-base the M3U currentIndex hint into the post-move playlist.
+            if let hint = firstHint {
+                let shift = insertIndex - appendStart
+                firstHint = SelectionHint(absoluteIndex: hint.absoluteIndex + shift)
+            }
+        }
+
         return firstHint
     }
 

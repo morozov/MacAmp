@@ -26,6 +26,15 @@ struct WinampPlaylistWindow: View {
         return max(0, totalContentHeight - sizeState.contentHeight)
     }
 
+    /// Translate an AppKit drop point (in the drop container's flipped
+    /// coordinates, y from top) to a playlist insertion index. Webamp's
+    /// formula: round to nearest half-row crossing, accounting for the
+    /// current scroll offset, then clamp into the valid range.
+    private func dropIndex(at point: CGPoint) -> Int {
+        let raw = Int(((point.y + ui.scrollOffsetPixels) / PlaylistWindowSizeState.trackRowHeight).rounded())
+        return max(0, min(audioPlayer.playlist.count, raw))
+    }
+
     private var playlistStyle: PlaylistStyle {
         skinManager.currentSkin?.playlistStyle ?? .winampDefault
     }
@@ -93,18 +102,53 @@ struct WinampPlaylistWindow: View {
         let contentCenterX = PlaylistWindowSizeState.leftBorderWidth + (contentWidth / 2)
         let contentCenterY = PlaylistWindowSizeState.topBarHeight + (contentHeight / 2)
 
-        ZStack {
-            playlistStyle.backgroundColor
+        PlaylistDropContainer(
+            content: ZStack {
+                playlistStyle.backgroundColor
 
-            PlaylistTrackListView(
-                sizeState: sizeState,
-                playlistStyle: playlistStyle,
-                scrollOffsetPixels: $ui.scrollOffsetPixels,
-                onTrackTap: { ui.handleTrackTap(index: $0) },
-                selectedIndices: ui.selectedIndices
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        }
+                PlaylistTrackListView(
+                    sizeState: sizeState,
+                    playlistStyle: playlistStyle,
+                    scrollOffsetPixels: $ui.scrollOffsetPixels,
+                    onTrackTap: { ui.handleTrackTap(index: $0) },
+                    selectedIndices: ui.selectedIndices,
+                    dropIndex: ui.dropIndex
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            },
+            onEntered: { point in
+                ui.dropIndex = dropIndex(at: point)
+            },
+            onUpdated: { point in
+                ui.dropIndex = dropIndex(at: point)
+            },
+            onEnded: {
+                // Fires for accept, reject, cancel, drag-outside — covers
+                // every termination so the marker never lingers.
+                ui.dropIndex = nil
+            },
+            onPerform: { point, urls in
+                let targetIndex = dropIndex(at: point)
+                ui.dropIndex = nil
+                Task { @MainActor in
+                    let wasEmpty = audioPlayer.playlist.isEmpty
+                    let actions = PlaylistWindowActions.shared
+                    let coordinator = actions.playbackCoordinator
+                    let hint = await actions.handleSelectedURLs(
+                        urls,
+                        audioPlayer: audioPlayer,
+                        at: targetIndex
+                    )
+                    guard wasEmpty, let coordinator else { return }
+                    if let hint, audioPlayer.playlist.indices.contains(hint.absoluteIndex) {
+                        coordinator.selectTrack(audioPlayer.playlist[hint.absoluteIndex])
+                    } else if let first = audioPlayer.playlist.first {
+                        await coordinator.play(track: first)
+                    }
+                }
+                return true
+            }
+        )
         .frame(width: contentWidth, height: contentHeight)
         .position(x: contentCenterX, y: contentCenterY)
         .clipped()

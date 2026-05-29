@@ -31,6 +31,10 @@ final class PlaylistWindowInteractionState {
     /// Continuous so mouse-wheel scrolling moves the thumb smoothly and
     /// slider drags move the list smoothly.
     var scrollOffsetPixels: CGFloat = 0
+    /// Pre-move insertion index for an in-flight Finder drop, or nil when
+    /// nothing is being dragged over the playlist. Drives the row-gap
+    /// highlight in `PlaylistTrackListView`.
+    var dropIndex: Int?
     var dragStartSize: Size2D?
     var isDragging: Bool = false
     private(set) var resizePreview = WindowResizePreviewOverlay()
