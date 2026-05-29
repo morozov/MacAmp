@@ -335,12 +335,30 @@ final class AudioEngineController {
                 return noErr
             }
 
+            // Mid-stream rebuffering: emit silence without attempting a read
+            // until the decode side has refilled the ring past its rebuffer
+            // threshold. Pattern matches MPV's cache-pause / VLC's rebuffer.
+            if ringBuffer.isRebuffering {
+                memset(floatPtr, 0, frames * channelCount * MemoryLayout<Float>.size)
+                isSilence.pointee = ObjCBool(true)
+                return noErr
+            }
+
             let framesRead = ringBuffer.read(into: floatPtr, frameCount: frames)
 
             if framesRead < frames {
                 let remainingSamples = (frames - framesRead) * channelCount
                 let offset = framesRead * channelCount
                 memset(floatPtr + offset, 0, remainingSamples * MemoryLayout<Float>.size)
+            }
+
+            // A complete underrun mid-playback enters the rebuffer state. The
+            // decode side will clear it once the ring is refilled. Partial
+            // underruns (got some frames, not enough) stay on the existing
+            // zero-fill-the-tail path — those are normal jitter at the
+            // sub-buffer-size scale and don't justify pausing output.
+            if framesRead == 0 {
+                ringBuffer.setRebuffering(true)
             }
 
             isSilence.pointee = ObjCBool(framesRead == 0)
