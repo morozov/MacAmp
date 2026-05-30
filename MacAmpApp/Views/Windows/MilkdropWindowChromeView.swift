@@ -19,6 +19,7 @@ struct MilkdropWindowChromeView<Content: View>: View {
     @Environment(WindowFocusState.self) private var windowFocusState
     @Environment(ButterchurnBridge.self) private var bridge
     @Environment(UserActionDispatcher.self) private var dispatcher
+    @Environment(SkinManager.self) private var skinManager
 
     private var isWindowActive: Bool { windowFocusState.isMilkdropKey }
 
@@ -229,41 +230,30 @@ struct MilkdropWindowChromeView<Content: View>: View {
             .position(x: pixelSize.width - 10, y: pixelSize.height - 10)
     }
 
-    /// MILKDROP HD letters HStack - renders text as two-piece sprites with space
-    /// Letter widths: M=8, I=4, L=5, K=7, D=6, R=7, O=6, P=6, space=5, H=6, gap=1, D=6
-    /// Total: 49 (MILKDROP) + 5 (space) + 6 (H) + 1 (gap) + 6 (D) = 67px
-    /// Gap: (75px center - 67px text) / 2 = 4px each side
+    /// MILKDROP HD letters HStack — letter widths come from `Skin.genLetterWidths`,
+    /// populated at skin-load time by `SkinManager.extractGenTextLetters`. The
+    /// inter-word space (5 px) is fixed; letter-to-letter spacing is zero,
+    /// matching Webamp's `gen-text-letter` CSS.
     private var milkdropLetters: some View {
         HStack(spacing: 0) {
-            // MILKDROP
-            makeLetter("M", width: 8)
-            makeLetter("I", width: 4)
-            makeLetter("L", width: 5)
-            makeLetter("K", width: 7)
-            makeLetter("D", width: 6)
-            makeLetter("R", width: 7)
-            makeLetter("O", width: 6)
-            makeLetter("P", width: 6)
-            // Space (5px gap between words)
-            Color.clear.frame(width: 5, height: 8)
-            // HD (1px spacer between H and D to prevent touching)
-            makeLetter("H", width: 6)
-            Color.clear.frame(width: 1, height: 8)
-            makeLetter("D", width: 6)
+            ForEach(Array("MILKDROP HD".enumerated()), id: \.offset) { _, char in
+                if char == " " {
+                    Color.clear.frame(width: 5, height: 7)
+                } else {
+                    makeLetter(String(char))
+                }
+            }
         }
     }
 
-    /// Renders a single GEN letter as two vertically-stacked sprites (TOP + BOTTOM)
-    /// Selected state: TOP height=6, BOTTOM height=2
-    /// Normal state: TOP height=6, BOTTOM height=1
+    /// Renders a single GEN letter as one 7-tall sprite. Width is dynamic per
+    /// skin (proportional font); falls back to a generous 8 px if a skin's
+    /// GEN.bmp lacks a usable letter strip.
     @ViewBuilder
-    private func makeLetter(_ letter: String, width: CGFloat) -> some View {
+    private func makeLetter(_ letter: String) -> some View {
         let prefix = isWindowActive ? "GEN_TEXT_SELECTED_" : "GEN_TEXT_"
-        let bottomHeight: CGFloat = isWindowActive ? 2 : 1
-
-        VStack(spacing: 0) {
-            SimpleSpriteImage("\(prefix)\(letter)_TOP", width: width, height: 6)
-            SimpleSpriteImage("\(prefix)\(letter)_BOTTOM", width: width, height: bottomHeight)
-        }
+        let name = "\(prefix)\(letter)"
+        let width = skinManager.currentSkin?.genLetterWidths[name] ?? 8
+        SimpleSpriteImage(name, width: width, height: 7)
     }
 }
