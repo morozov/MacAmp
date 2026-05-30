@@ -24,6 +24,7 @@ struct VideoWindowChromeView<Content: View>: View {
 
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(WindowFocusState.self) private var windowFocusState
+    @Environment(UserActionDispatcher.self) private var dispatcher
 
     // Computed: Is this window currently focused?
     private var isWindowActive: Bool {
@@ -241,6 +242,16 @@ struct VideoWindowChromeView<Content: View>: View {
 
     @ViewBuilder
     private func buildVideoWindowButtons() -> some View {
+        // Close button (X) — overlay over the close glyph baked into the
+        // VIDEO_TITLEBAR_TOP_RIGHT sprite. Position mirrors the playlist's
+        // close button (`PlaylistTitleBarButtons`): 9×9, x = right − 11, y = 7.
+        Button(action: { dispatcher.perform(.toggleVideoWindow) }, label: {
+            Color.clear.frame(width: 9, height: 9).contentShape(Rectangle())
+        })
+        .buttonStyle(.plain)
+        .focusable(false)
+        .position(x: pixelSize.width - 6.5, y: 7.5)
+
         // 1X button - clickable region over baked-on sprite
         Button(action: {
             WindowSnapManager.shared.beginProgrammaticAdjustment()
