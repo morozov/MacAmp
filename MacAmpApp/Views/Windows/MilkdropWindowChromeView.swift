@@ -18,6 +18,7 @@ struct MilkdropWindowChromeView<Content: View>: View {
     // MARK: - Environment
     @Environment(WindowFocusState.self) private var windowFocusState
     @Environment(ButterchurnBridge.self) private var bridge
+    @Environment(UserActionDispatcher.self) private var dispatcher
 
     private var isWindowActive: Bool { windowFocusState.isMilkdropKey }
 
@@ -46,6 +47,16 @@ struct MilkdropWindowChromeView<Content: View>: View {
 
             // Dynamic bottom bar
             buildDynamicBottomBar()
+
+            // Close button (X) — overlay over the close glyph baked into the
+            // GEN_TOP_RIGHT sprite. Position mirrors the playlist's close
+            // button (`PlaylistTitleBarButtons`): 9×9, x = right − 11, y = 7.
+            Button(action: { dispatcher.perform(.toggleMilkdropWindow) }, label: {
+                Color.clear.frame(width: 9, height: 9).contentShape(Rectangle())
+            })
+            .buttonStyle(.plain)
+            .focusable(false)
+            .position(x: pixelSize.width - 6.5, y: 7.5)
 
             // Resize handle (bottom-right corner)
             buildResizeHandle()
