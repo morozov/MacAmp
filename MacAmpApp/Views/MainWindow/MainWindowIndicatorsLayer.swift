@@ -76,18 +76,25 @@ struct MainWindowIndicatorsLayer: View {
             TimelineView(.periodic(from: .now, by: Self.bitrateRefreshInterval)) { _ in
                 let kbps = playbackCoordinator.currentBitrate / 1000
                 if kbps > 0 {
-                    let bitrateText = "\(kbps)"
+                    let cells = BitrateFormatting.mainWindowCells(kbps: kbps)
                     HStack(spacing: 0) {
-                        ForEach(Array(bitrateText.enumerated()), id: \.offset) { _, character in
-                            if let ascii = character.asciiValue {
-                                SimpleSpriteImage("CHARACTER_\(ascii)", width: 5, height: 6)
-                            }
+                        ForEach(Array(cells.enumerated()), id: \.offset) { _, character in
+                            SimpleSpriteImage("CHARACTER_\(Self.glyphCode(for: character))", width: 5, height: 6)
                         }
                     }
                     .at(x: 111, y: 43)
                 }
             }
         }
+    }
+
+    /// Map a readout character to its `CHARACTER_<code>` sprite suffix. The
+    /// small font sheet only carries lowercase letters, so the `H`/`C` bitrate
+    /// suffixes fold to their lowercase code points, matching how
+    /// `MainWindowTrackInfoLayer` renders uppercase text.
+    private static func glyphCode(for character: Character) -> UInt8 {
+        guard let ascii = character.asciiValue else { return 32 }
+        return character.isLetter && character.isUppercase ? ascii + 32 : ascii
     }
 
     @ViewBuilder
