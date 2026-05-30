@@ -92,7 +92,7 @@ final class WindowCoordinator {
         framePersistence = WindowFramePersistence(registry: registry, settings: settings)
 
         // Create visibility controller
-        visibility = WindowVisibilityController(registry: registry, settings: settings)
+        visibility = WindowVisibilityController(registry: registry, settings: settings, framePersistence: framePersistence)
 
         // Create resize controller
         resizeController = WindowResizeController(registry: registry, persistence: framePersistence)

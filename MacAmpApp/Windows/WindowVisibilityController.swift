@@ -7,13 +7,15 @@ import Observation
 final class WindowVisibilityController {
     private let registry: WindowRegistry
     private let settings: AppSettings
+    private let framePersistence: WindowFramePersistence
 
     var isEQWindowVisible: Bool
     var isPlaylistWindowVisible: Bool
 
-    init(registry: WindowRegistry, settings: AppSettings) {
+    init(registry: WindowRegistry, settings: AppSettings, framePersistence: WindowFramePersistence) {
         self.registry = registry
         self.settings = settings
+        self.framePersistence = framePersistence
         // Seed from persisted settings so the first SwiftUI body evaluation
         // (during makeKeyAndOrderFront in showAllWindows) reads the actual
         // restored visibility, not the transient `false` it would see before
@@ -40,6 +42,7 @@ final class WindowVisibilityController {
     // MARK: - EQ Window
 
     func showEQWindow(makeKey: Bool = false) {
+        if let eq = registry.eqWindow { framePersistence.ensureReachable(eq) }
         if makeKey {
             registry.eqWindow?.makeKeyAndOrderFront(nil)
         } else {
@@ -63,6 +66,7 @@ final class WindowVisibilityController {
             settings.showEqualizerWindow = false
             return false
         } else {
+            framePersistence.ensureReachable(eq)
             eq.orderFront(nil)
             isEQWindowVisible = true
             settings.showEqualizerWindow = true
@@ -77,6 +81,7 @@ final class WindowVisibilityController {
     // MARK: - Playlist Window
 
     func showPlaylistWindow(makeKey: Bool = false) {
+        if let playlist = registry.playlistWindow { framePersistence.ensureReachable(playlist) }
         if makeKey {
             registry.playlistWindow?.makeKeyAndOrderFront(nil)
         } else {
@@ -100,6 +105,7 @@ final class WindowVisibilityController {
             settings.showPlaylistWindow = false
             return false
         } else {
+            framePersistence.ensureReachable(playlist)
             playlist.orderFront(nil)
             isPlaylistWindowVisible = true
             settings.showPlaylistWindow = true
@@ -113,23 +119,26 @@ final class WindowVisibilityController {
 
     // MARK: - Menu Command Integration
 
-    func showMain() { registry.mainWindow?.makeKeyAndOrderFront(nil) }
+    func showMain() {
+        if let main = registry.mainWindow { framePersistence.ensureReachable(main) }
+        registry.mainWindow?.makeKeyAndOrderFront(nil)
+    }
     func hideMain() { registry.mainWindow?.orderOut(nil) }
 
     func showVideo() {
-        AppLog.debug(.window, "showVideo() called")
-        registry.videoWindow?.makeKeyAndOrderFront(nil)
+        guard let window = registry.videoWindow else { return }
+        framePersistence.ensureReachable(window)
+        window.makeKeyAndOrderFront(nil)
     }
 
     func hideVideo() {
-        AppLog.debug(.window, "hideVideo() called")
         registry.videoWindow?.orderOut(nil)
     }
 
     func showMilkdrop() {
-        AppLog.debug(.window, "showMilkdrop() called, window exists: \(registry.milkdropWindow != nil)")
-        registry.milkdropWindow?.makeKeyAndOrderFront(nil)
-        AppLog.debug(.window, "milkdropWindow.isVisible: \(registry.milkdropWindow?.isVisible ?? false)")
+        guard let window = registry.milkdropWindow else { return }
+        framePersistence.ensureReachable(window)
+        window.makeKeyAndOrderFront(nil)
     }
 
     func hideMilkdrop() {
@@ -140,21 +149,28 @@ final class WindowVisibilityController {
     // MARK: - Batch Operations
 
     func showAllWindows() {
-        registry.mainWindow?.makeKeyAndOrderFront(nil)
+        if let main = registry.mainWindow {
+            framePersistence.ensureReachable(main)
+            main.makeKeyAndOrderFront(nil)
+        }
 
-        if settings.showPlaylistWindow {
-            registry.playlistWindow?.orderFront(nil)
+        if settings.showPlaylistWindow, let playlist = registry.playlistWindow {
+            framePersistence.ensureReachable(playlist)
+            playlist.orderFront(nil)
             isPlaylistWindowVisible = true
         }
-        if settings.showEqualizerWindow {
-            registry.eqWindow?.orderFront(nil)
+        if settings.showEqualizerWindow, let eq = registry.eqWindow {
+            framePersistence.ensureReachable(eq)
+            eq.orderFront(nil)
             isEQWindowVisible = true
         }
-        if settings.showVideoWindow {
-            registry.videoWindow?.orderFront(nil)
+        if settings.showVideoWindow, let video = registry.videoWindow {
+            framePersistence.ensureReachable(video)
+            video.orderFront(nil)
         }
-        if settings.showMilkdropWindow {
-            registry.milkdropWindow?.orderFront(nil)
+        if settings.showMilkdropWindow, let milkdrop = registry.milkdropWindow {
+            framePersistence.ensureReachable(milkdrop)
+            milkdrop.orderFront(nil)
         }
 
         focusAllWindows()

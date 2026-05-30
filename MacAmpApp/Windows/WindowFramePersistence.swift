@@ -133,6 +133,46 @@ final class WindowFramePersistence {
         return true
     }
 
+    // MARK: - Off-Screen Rescue
+
+    /// Per-window rescue: if `window`'s 22-pt top strip doesn't overlap any
+    /// current screen's `visibleFrame`, re-anchor the frame so it lands at the
+    /// nearest screen's visible top-left. Called whenever a window is shown so
+    /// a persisted frame from a monitor layout that no longer exists is pulled
+    /// back into view. A reachable frame is left untouched, so on-screen
+    /// positions — and the relative offsets between on-screen windows — survive.
+    func ensureReachable(_ window: NSWindow) {
+        let frame = window.frame
+        guard !isReachable(frame) else { return }
+        guard let target = nearestScreen(for: frame)?.visibleFrame else { return }
+        var snapped = frame
+        snapped.origin = NSPoint(x: target.origin.x, y: target.maxY - frame.height)
+        window.setFrame(snapped, display: true)
+    }
+
+    private func isReachable(_ frame: NSRect) -> Bool {
+        let topStripHeight: CGFloat = 22
+        let topStrip = NSRect(
+            x: frame.origin.x,
+            y: frame.maxY - topStripHeight,
+            width: frame.width,
+            height: topStripHeight
+        )
+        return NSScreen.screens.contains { screen in
+            let inter = screen.visibleFrame.intersection(topStrip)
+            return inter.width >= 30 && inter.height > 0
+        }
+    }
+
+    private func nearestScreen(for bounds: NSRect) -> NSScreen? {
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        return NSScreen.screens.min { lhs, rhs in
+            let lc = CGPoint(x: lhs.visibleFrame.midX, y: lhs.visibleFrame.midY)
+            let rc = CGPoint(x: rhs.visibleFrame.midX, y: rhs.visibleFrame.midY)
+            return hypot(center.x - lc.x, center.y - lc.y) < hypot(center.x - rc.x, center.y - rc.y)
+        }
+    }
+
     // MARK: - Constants
 
     enum LayoutDefaults {
