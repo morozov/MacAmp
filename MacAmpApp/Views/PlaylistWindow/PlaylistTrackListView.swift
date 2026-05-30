@@ -96,7 +96,7 @@ struct PlaylistTrackListView: View {
                 .font(trackFont)
                 .foregroundColor(textColor)
 
-            Text("\(track.title) - \(track.artist)")
+            Text("\(track.artist) - \(track.title)")
                 .font(trackFont)
                 .foregroundColor(textColor)
                 .lineLimit(1)
