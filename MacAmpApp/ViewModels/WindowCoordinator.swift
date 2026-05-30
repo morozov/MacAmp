@@ -40,6 +40,7 @@ final class WindowCoordinator {
     private var volumeScrollController: VolumeScrollWheelController?
     private var hotkeyMonitor: WinampHotkeyMonitor?
     private var menuShortcutMonitor: MainShortcutMonitor?
+    private var textEditingShortcutMonitor: TextEditingShortcutMonitor?
     let userActionDispatcher: UserActionDispatcher
 
     var mainWindow: NSWindow? { registry.mainWindow }
@@ -204,6 +205,7 @@ final class WindowCoordinator {
             primaryWindows: { [weak self] in self?.primaryWindowIdentities() ?? [] },
             playlistWindow: { [weak self] in self?.playlistWindow }
         )
+        textEditingShortcutMonitor = TextEditingShortcutMonitor()
     }
 
     private func primaryWindowIdentities() -> Set<NSWindowIdentity> {
