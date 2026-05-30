@@ -367,7 +367,7 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
                 if self.currentTrack?.id == placeholder.id {
                     AppLog.debug(.audio, "Updating current track metadata")
                     self.currentTrack = track
-                    self.currentTitle = "\(track.title) - \(track.artist)"
+                    self.currentTitle = "\(track.artist) - \(track.title)"
                     // Don't overwrite currentDuration from metadata (AVAsset.duration)
                     // when the engine has the current audio file loaded. Engine file
                     // duration is the authoritative runtime source — metadata duration
@@ -534,7 +534,7 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         }
 
         currentTrack = track
-        currentTitle = "\(track.title) - \(track.artist)"
+        currentTitle = "\(track.artist) - \(track.title)"
         currentDuration = track.duration
         currentTrackURL = track.url
         currentTime = 0

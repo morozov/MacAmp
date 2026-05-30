@@ -377,7 +377,7 @@ final class PlaybackCoordinator {
         let trimmedArtist = trackArtist.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !trimmedTitle.isEmpty && !trimmedArtist.isEmpty {
-            return "\(trimmedTitle) - \(trimmedArtist)"
+            return "\(trimmedArtist) - \(trimmedTitle)"
         }
 
         if !trimmedTitle.isEmpty {
