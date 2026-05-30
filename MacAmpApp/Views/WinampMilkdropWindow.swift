@@ -25,10 +25,10 @@ struct WinampMilkdropWindow: View {
     // Menu state - keep strong reference to prevent premature deallocation
     @State private var activeContextMenu: NSMenu?
 
-    // Local key monitor for the bare hotkeys advertised in the context menu
-    // (T, Space, Backspace, R, C). NSMenu keyEquivalents only fire while the
-    // menu is open, so without this monitor pressing the advertised keys with
-    // the milkdrop window focused just beeps.
+    // Local key monitor for the bare hotkeys advertised in the context menu.
+    // NSMenu keyEquivalents only fire while the menu is open, so without this
+    // monitor pressing the advertised keys with the milkdrop window focused
+    // just beeps.
     @State private var keyMonitor: Any?
 
     var body: some View {
