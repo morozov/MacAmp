@@ -27,7 +27,12 @@ struct Skin: @unchecked Sendable {
     // 19-row EQ preview palette from EQ_GRAPH_LINE_COLORS.
     let eqGraphLineColors: [NSColor]
 
-    // Additional skin elements (region maps, letter widths, etc.) can be added as parsing expands.
+    // Per-letter widths for the proportional GEN.bmp title-bar font. Keys are
+    // sprite names like "GEN_TEXT_M" / "GEN_TEXT_SELECTED_M". Each skin lays
+    // letters out at different x positions and widths; the entries here are
+    // discovered at load time by `extractGenTextLetters`. Letter height is
+    // always 7 px (see `MilkdropWindowChromeView`).
+    let genLetterWidths: [String: CGFloat]
 }
 
 // MARK: - Video Window Sprite Access

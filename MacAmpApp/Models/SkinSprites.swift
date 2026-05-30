@@ -265,58 +265,11 @@ struct SkinSprites {
             // Close button - Webamp coordinates
             Sprite(name: "GEN_CLOSE_SELECTED", x: 148, y: 42, width: 9, height: 9),
 
-            // Letter sprites for titlebar text (GEN.BMP 194×109)
-            // CRITICAL: Letters are TWO DISCONTIGUOUS pieces separated by cyan boundaries
-            // Selected: TOP Y=88 H=6, BOTTOM Y=95 H=2 (1px cyan gap at Y=94)
-            // Normal: TOP Y=96 H=6, BOTTOM Y=108 H=1 (6px cyan gap at Y=102-107)
-
-            // Selected (focused) letter TOPS - Y=88, H=6
-            Sprite(name: "GEN_TEXT_SELECTED_M_TOP", x: 86, y: 88, width: 8, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_I_TOP", x: 60, y: 88, width: 4, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_L_TOP", x: 80, y: 88, width: 5, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_K_TOP", x: 72, y: 88, width: 7, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_D_TOP", x: 24, y: 88, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_R_TOP", x: 124, y: 88, width: 7, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_O_TOP", x: 102, y: 88, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_P_TOP", x: 109, y: 88, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_H_TOP", x: 53, y: 88, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_SELECTED_V_TOP", x: 152, y: 88, width: 6, height: 6),
-
-            // Selected (focused) letter BOTTOMS - Y=95, H=2
-            Sprite(name: "GEN_TEXT_SELECTED_M_BOTTOM", x: 86, y: 95, width: 8, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_I_BOTTOM", x: 60, y: 95, width: 4, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_L_BOTTOM", x: 80, y: 95, width: 5, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_K_BOTTOM", x: 72, y: 95, width: 7, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_D_BOTTOM", x: 24, y: 95, width: 6, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_R_BOTTOM", x: 124, y: 95, width: 7, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_O_BOTTOM", x: 102, y: 95, width: 6, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_P_BOTTOM", x: 109, y: 95, width: 6, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_H_BOTTOM", x: 53, y: 95, width: 6, height: 2),
-            Sprite(name: "GEN_TEXT_SELECTED_V_BOTTOM", x: 152, y: 95, width: 6, height: 2),
-
-            // Normal (unfocused) letter TOPS - Y=96, H=6
-            Sprite(name: "GEN_TEXT_M_TOP", x: 86, y: 96, width: 8, height: 6),
-            Sprite(name: "GEN_TEXT_I_TOP", x: 60, y: 96, width: 4, height: 6),
-            Sprite(name: "GEN_TEXT_L_TOP", x: 80, y: 96, width: 5, height: 6),
-            Sprite(name: "GEN_TEXT_K_TOP", x: 72, y: 96, width: 7, height: 6),
-            Sprite(name: "GEN_TEXT_D_TOP", x: 24, y: 96, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_R_TOP", x: 124, y: 96, width: 7, height: 6),
-            Sprite(name: "GEN_TEXT_O_TOP", x: 102, y: 96, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_P_TOP", x: 109, y: 96, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_H_TOP", x: 53, y: 96, width: 6, height: 6),
-            Sprite(name: "GEN_TEXT_V_TOP", x: 152, y: 96, width: 6, height: 6),
-
-            // Normal (unfocused) letter BOTTOMS - Y=108, H=1
-            Sprite(name: "GEN_TEXT_M_BOTTOM", x: 86, y: 108, width: 8, height: 1),
-            Sprite(name: "GEN_TEXT_I_BOTTOM", x: 60, y: 108, width: 4, height: 1),
-            Sprite(name: "GEN_TEXT_L_BOTTOM", x: 80, y: 108, width: 5, height: 1),
-            Sprite(name: "GEN_TEXT_K_BOTTOM", x: 72, y: 108, width: 7, height: 1),
-            Sprite(name: "GEN_TEXT_D_BOTTOM", x: 24, y: 108, width: 6, height: 1),
-            Sprite(name: "GEN_TEXT_R_BOTTOM", x: 124, y: 108, width: 7, height: 1),
-            Sprite(name: "GEN_TEXT_O_BOTTOM", x: 102, y: 108, width: 6, height: 1),
-            Sprite(name: "GEN_TEXT_P_BOTTOM", x: 109, y: 108, width: 6, height: 1),
-            Sprite(name: "GEN_TEXT_H_BOTTOM", x: 53, y: 108, width: 6, height: 1),
-            Sprite(name: "GEN_TEXT_V_BOTTOM", x: 152, y: 108, width: 6, height: 1),
+            // Letter sprites for titlebar text (GEN.BMP) are sliced at skin-load
+            // time by `SkinManager.extractGenTextLetters`. Each skin's GEN.bmp
+            // has a proportional bitmap font at row y=88 (selected) and y=96
+            // (normal), 7 px tall, with letters separated by a single
+            // background-color column — see `MilkdropWindowChromeView`.
         ],
 
         // PLEDIT.bmp (Playlist window chrome/buttons)

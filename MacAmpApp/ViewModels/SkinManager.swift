@@ -53,6 +53,7 @@ final class SkinManager {
     private func parseDefaultSkinFully(payload: SkinArchivePayload) -> Skin {
         var extractedImages: [String: NSImage] = [:]
         var loadedSheets: Set<String> = []
+        var genLetterWidths: [String: CGFloat] = [:]
         var sheetsToProcess = SkinSprites.defaultSprites.sheets
 
         if payload.sheets.keys.contains("nums_ex") {
@@ -67,6 +68,12 @@ final class SkinManager {
 
             loadedSheets.insert(sheetName)
             extractedImages.merge(Self.extractSprites(from: sheetImage, sprites: sprites)) { _, new in new }
+
+            if sheetName == "GEN" {
+                let (letters, widths) = Self.extractGenTextLetters(from: sheetImage)
+                extractedImages.merge(letters) { _, new in new }
+                genLetterWidths.merge(widths) { _, new in new }
+            }
         }
 
         // Also populate the sprite cache so fallback lookups are instant
@@ -86,7 +93,8 @@ final class SkinManager {
             images: extractedImages,
             cursors: [:],
             loadedSheets: loadedSheets,
-            eqGraphLineColors: eqGraphLineColors
+            eqGraphLineColors: eqGraphLineColors,
+            genLetterWidths: genLetterWidths
         )
     }
 
@@ -293,6 +301,7 @@ final class SkinManager {
     private func applySkinPayload(_ payload: SkinArchivePayload, sourceURL: URL) throws {
         var extractedImages: [String: NSImage] = [:]
         var loadedSheets: Set<String> = []  // Track which sheets actually loaded
+        var genLetterWidths: [String: CGFloat] = [:]
         var sheetsToProcess = SkinSprites.defaultSprites.sheets
 
         if payload.sheets.keys.contains("nums_ex") {
@@ -345,6 +354,12 @@ final class SkinManager {
                     }
                 }
             }
+
+            if sheetName == "GEN" {
+                let (letters, widths) = Self.extractGenTextLetters(from: sheetImage)
+                extractedImages.merge(letters) { _, new in new }
+                genLetterWidths.merge(widths) { _, new in new }
+            }
         }
 
         // VIDEO.bmp now handled by standard extraction loop (defined in SkinSprites.swift)
@@ -396,7 +411,8 @@ final class SkinManager {
             images: extractedImages,  // Now includes VIDEO_* sprite keys
             cursors: [:],
             loadedSheets: loadedSheets,  // Track which sheets actually loaded
-            eqGraphLineColors: eqGraphLineColors
+            eqGraphLineColors: eqGraphLineColors,
+            genLetterWidths: genLetterWidths
         )
 
         currentSkin = newSkin
@@ -478,6 +494,83 @@ final class SkinManager {
             }
         }
         return images
+    }
+
+    /// Slice the per-letter GEN.bmp font sprites for the milkdrop / EQ / generic
+    /// title bars. Mirrors Webamp's `genGenTextSprites`
+    /// (`packages/webamp/js/skinParser.js`): each strip is 7 px tall starting at
+    /// y=88 (selected) and y=96 (normal); the pixel at (0, stripY) is the
+    /// separator color, and letters A–Z are scanned left-to-right with the next
+    /// separator pixel terminating the current letter. The bundled Winamp skin
+    /// happens to align with the old hardcoded coordinates in `SkinSprites`,
+    /// but third-party GEN.bmp files use different widths and x positions, so
+    /// any hardcoded slice picks up the wrong pixels (`STHR'QFL 'WX MFI`-style
+    /// garbage in the title bar).
+    private static func extractGenTextLetters(
+        from sheetImage: NSImage
+    ) -> (images: [String: NSImage], widths: [String: CGFloat]) {
+        guard let cgImage = sheetImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+            return ([:], [:])
+        }
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerRow = width * 4
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return ([:], [:])
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let buffer = context.data?.assumingMemoryBound(to: UInt8.self) else {
+            return ([:], [:])
+        }
+
+        // RGB at (x, y), ignoring alpha — separator pixels include the cyan
+        // boundaries the bundled skin uses as well as whatever color a custom
+        // skin chose, so we compare raw RGB bytes.
+        func rgb(_ x: Int, _ y: Int) -> (UInt8, UInt8, UInt8)? {
+            guard x >= 0, y >= 0, x < width, y < height else { return nil }
+            let offset = y * bytesPerRow + x * 4
+            return (buffer[offset], buffer[offset + 1], buffer[offset + 2])
+        }
+
+        let letterHeight = 7
+        let strips: [(y: Int, prefix: String)] = [
+            (88, "GEN_TEXT_SELECTED"),
+            (96, "GEN_TEXT"),
+        ]
+        var images: [String: NSImage] = [:]
+        var widths: [String: CGFloat] = [:]
+
+        for (stripY, prefix) in strips {
+            guard stripY + letterHeight <= height, let bgColor = rgb(0, stripY) else { continue }
+            var x = 1
+            for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
+                guard x < width else { break }
+                var nextBg = x
+                while nextBg < width, let c = rgb(nextBg, stripY), c != bgColor {
+                    nextBg += 1
+                }
+                let letterWidth = nextBg - x
+                if letterWidth > 0 {
+                    let rect = CGRect(x: x, y: stripY, width: letterWidth, height: letterHeight)
+                    if let cropped = sheetImage.cropped(to: rect) {
+                        let name = "\(prefix)_\(String(letter))"
+                        images[name] = cropped
+                        widths[name] = CGFloat(letterWidth)
+                    }
+                }
+                x = nextBg + 1
+            }
+        }
+        return (images, widths)
     }
 
     private static func describeLoadError(_ error: Error, url: URL) -> String {
