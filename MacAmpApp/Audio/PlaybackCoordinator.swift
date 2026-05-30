@@ -127,12 +127,12 @@ final class PlaybackCoordinator {
 
     // MARK: - Playlist Position
 
-    /// Track position string ("3/15") — nil when no playlist track is active.
+    /// Track position string ("3") — nil when no playlist track is active.
     /// Guards against stale values during non-playlist playback (Oracle finding).
     var trackPositionString: String? {
         guard currentTrack != nil,
               let position = audioPlayer.playlistPosition else { return nil }
-        return "\(position)/\(audioPlayer.playlistCount)"
+        return "\(position)"
     }
 
     // MARK: - Capability Flags
