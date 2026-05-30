@@ -25,6 +25,12 @@ struct WinampMilkdropWindow: View {
     // Menu state - keep strong reference to prevent premature deallocation
     @State private var activeContextMenu: NSMenu?
 
+    // Local key monitor for the bare hotkeys advertised in the context menu
+    // (T, Space, Backspace, R, C). NSMenu keyEquivalents only fire while the
+    // menu is open, so without this monitor pressing the advertised keys with
+    // the milkdrop window focused just beeps.
+    @State private var keyMonitor: Any?
+
     var body: some View {
         MilkdropWindowChromeView(sizeState: sizeState) {
             ZStack {
@@ -69,6 +75,88 @@ struct WinampMilkdropWindow: View {
                 // Sync Butterchurn canvas to initial size
                 bridge.setSize(width: sizeState.contentSize.width, height: sizeState.contentSize.height)
             }
+
+            installKeyMonitor()
+        }
+        .onDisappear {
+            if let monitor = keyMonitor {
+                NSEvent.removeMonitor(monitor)
+                keyMonitor = nil
+            }
+        }
+    }
+
+    /// Single source of truth for the bare-key items in the right-click menu.
+    /// The menu builder and the local key monitor both look up by `key`, so
+    /// adding a new entry here exposes it via both surfaces in one place.
+    private struct BareKeyHotkey {
+        let key: String
+        let title: String
+        let isChecked: () -> Bool
+        let action: () -> Void
+    }
+
+    private var bareKeyHotkeys: [BareKeyHotkey] {
+        [
+            BareKeyHotkey(
+                key: " ", title: "Next Preset",
+                isChecked: { false },
+                action: { [presetManager] in presetManager.nextPreset() }
+            ),
+            BareKeyHotkey(
+                key: "\u{08}", title: "Previous Preset",
+                isChecked: { false },
+                action: { [presetManager] in presetManager.previousPreset() }
+            ),
+            BareKeyHotkey(
+                key: "r", title: "Randomize",
+                isChecked: { [presetManager] in presetManager.isRandomize },
+                action: { [presetManager] in presetManager.isRandomize.toggle() }
+            ),
+            BareKeyHotkey(
+                key: "c", title: "Auto-Cycle Presets",
+                isChecked: { [presetManager] in presetManager.isCycling },
+                action: { [presetManager] in presetManager.isCycling.toggle() }
+            ),
+            BareKeyHotkey(
+                key: "t", title: "Show Track Title",
+                isChecked: { false },
+                action: { [bridge, playbackCoordinator] in
+                    bridge.showTrackTitle(playbackCoordinator.displayTitle)
+                }
+            ),
+        ]
+    }
+
+    private func bareKeyMenuItem(_ key: String) -> NSMenuItem {
+        guard let hotkey = bareKeyHotkeys.first(where: { $0.key == key }) else {
+            fatalError("No bare-key hotkey registered for '\(key)'")
+        }
+        return MenuItemFactory.createMenuItem(
+            title: hotkey.title,
+            isChecked: hotkey.isChecked(),
+            keyEquivalent: hotkey.key,
+            modifiers: [],
+            action: hotkey.action
+        )
+    }
+
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.window === WindowCoordinator.shared?.milkdropWindow else { return event }
+            let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            guard mods.isEmpty, let chars = event.charactersIgnoringModifiers?.lowercased() else {
+                return event
+            }
+            // Forward-Delete (0x7F) is the playlist's "Previous Preset" sister
+            // key from full keyboards; map it onto Backspace (0x08).
+            let lookup = chars == "\u{7F}" ? "\u{08}" : chars
+            guard let hotkey = self.bareKeyHotkeys.first(where: { $0.key == lookup }) else {
+                return event
+            }
+            hotkey.action()
+            return nil
         }
     }
 
@@ -104,46 +192,14 @@ struct WinampMilkdropWindow: View {
         }
 
         // MARK: Navigation
-        menu.addItem(MenuItemFactory.createMenuItem(
-            title: "Next Preset",
-            keyEquivalent: " ",
-            modifiers: [],
-            action: { [weak presetManager] in
-                presetManager?.nextPreset()
-            }
-        ))
-
-        menu.addItem(MenuItemFactory.createMenuItem(
-            title: "Previous Preset",
-            keyEquivalent: "\u{08}", // Backspace
-            modifiers: [],
-            action: { [weak presetManager] in
-                presetManager?.previousPreset()
-            }
-        ))
+        menu.addItem(bareKeyMenuItem(" "))           // Next Preset
+        menu.addItem(bareKeyMenuItem("\u{08}"))      // Previous Preset
 
         menu.addItem(.separator())
 
         // MARK: Settings
-        menu.addItem(MenuItemFactory.createMenuItem(
-            title: "Randomize",
-            isChecked: presetManager.isRandomize,
-            keyEquivalent: "r",
-            modifiers: [],
-            action: { [weak presetManager] in
-                presetManager?.isRandomize.toggle()
-            }
-        ))
-
-        menu.addItem(MenuItemFactory.createMenuItem(
-            title: "Auto-Cycle Presets",
-            isChecked: presetManager.isCycling,
-            keyEquivalent: "c",
-            modifiers: [],
-            action: { [weak presetManager] in
-                presetManager?.isCycling.toggle()
-            }
-        ))
+        menu.addItem(bareKeyMenuItem("r"))           // Randomize
+        menu.addItem(bareKeyMenuItem("c"))           // Auto-Cycle Presets
 
         // MARK: Cycle Interval Submenu
         let intervalSubmenu = NSMenu()
@@ -173,15 +229,7 @@ struct WinampMilkdropWindow: View {
         menu.addItem(.separator())
 
         // MARK: Show Track Title
-        let currentDisplayTitle = playbackCoordinator.displayTitle
-        menu.addItem(MenuItemFactory.createMenuItem(
-            title: "Show Track Title",
-            keyEquivalent: "t",
-            modifiers: [],
-            action: { [weak bridge] in
-                bridge?.showTrackTitle(currentDisplayTitle)
-            }
-        ))
+        menu.addItem(bareKeyMenuItem("t"))
 
         // MARK: Track Title Interval Submenu
         let titleIntervalSubmenu = NSMenu()
