@@ -72,8 +72,8 @@ final class WindowFramePersistence {
         applied = restoreMainWindow(scale: scale) || applied
         applied = restoreEQWindow(scale: scale) || applied
         applied = restorePlaylistWindow() || applied
-        applied = restoreOriginOnly(kind: .video) || applied
-        applied = restoreOriginOnly(kind: .milkdrop) || applied
+        applied = restoreFullFrame(kind: .video) || applied
+        applied = restoreFullFrame(kind: .milkdrop) || applied
 
         return applied
     }
@@ -124,12 +124,18 @@ final class WindowFramePersistence {
         return true
     }
 
-    private func restoreOriginOnly(kind: WindowKind) -> Bool {
+    /// Restore the full stored frame (origin + size) for windows whose runtime
+    /// size comes from a persisted sizeState that matches what was saved.
+    /// Restoring only the origin would leave the window at the initial 275×232
+    /// BorderlessWindow contentRect; SwiftUI's `onAppear` then top-anchors a
+    /// resize to the real pixelSize from the persisted segments, but that
+    /// top-anchor pivots off the wrong (initial) height — shifting the visual
+    /// top by (storedHeight − 232). Restoring stored.size makes the later
+    /// SwiftUI resize a no-op so the top stays where the user left it.
+    private func restoreFullFrame(kind: WindowKind) -> Bool {
         guard let window = registry.window(for: kind),
               let stored = windowFrameStore.frame(for: kind) else { return false }
-        var frame = window.frame
-        frame.origin = stored.origin
-        window.setFrame(frame, display: true)
+        window.setFrame(stored, display: true)
         return true
     }
 
