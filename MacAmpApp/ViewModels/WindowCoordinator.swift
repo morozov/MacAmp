@@ -39,6 +39,7 @@ final class WindowCoordinator {
     private var appActivationObserver: NSObjectProtocol?
     private var volumeScrollController: VolumeScrollWheelController?
     private var hotkeyMonitor: WinampHotkeyMonitor?
+    private var menuShortcutMonitor: MainShortcutMonitor?
     let userActionDispatcher: UserActionDispatcher
 
     var mainWindow: NSWindow? { registry.mainWindow }
@@ -194,8 +195,21 @@ final class WindowCoordinator {
             playbackCoordinator: playbackCoordinator
         )
 
-        // Install Winamp's plain-key hotkeys (Z/X/C/V/B/L/R/S, arrows, Option+W/E/G).
-        hotkeyMonitor = WinampHotkeyMonitor(dispatcher: userActionDispatcher)
+        hotkeyMonitor = WinampHotkeyMonitor(
+            perform: { [userActionDispatcher] action in userActionDispatcher.perform(action) },
+            primaryWindows: { [weak self] in self?.primaryWindowIdentities() ?? [] }
+        )
+        menuShortcutMonitor = MainShortcutMonitor(
+            perform: { [userActionDispatcher] action in userActionDispatcher.perform(action) },
+            primaryWindows: { [weak self] in self?.primaryWindowIdentities() ?? [] },
+            playlistWindow: { [weak self] in self?.playlistWindow }
+        )
+    }
+
+    private func primaryWindowIdentities() -> Set<NSWindowIdentity> {
+        Set([mainWindow, eqWindow, playlistWindow, videoWindow, milkdropWindow]
+            .compactMap { $0 }
+            .map(NSWindowIdentity.init))
     }
 
     isolated deinit {

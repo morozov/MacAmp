@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Single source of truth for every keyboard shortcut in the app — both
 /// the ⌘-modifier menu shortcuts surfaced by `AppCommands` and the plain
@@ -82,4 +83,23 @@ enum WinampKeyBindings {
     static let optionKeyBindings: [WinampKeyBinding] = [
         toggleMainWindowAlt, togglePlaylistWindowAlt, toggleEqualizerWindowAlt
     ]
+
+    /// Every ⌘-modifier menu shortcut, consumed by `MainShortcutMonitor`.
+    static let menuShortcutBindings: [WinampKeyBinding] = [
+        alwaysOnTop, doubleSize, timeMode, trackInfo, milkdrop,
+        openFiles, preferences, openOptionsMenu, videoWindow,
+        toggleMainWindow, togglePlaylistWindow, toggleEqualizerWindow,
+        shadeMainWindow, shadePlaylistWindow, shadeEqualizerWindow,
+    ]
+}
+
+extension EventModifiers {
+    var nsEventFlags: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if contains(.command) { flags.insert(.command) }
+        if contains(.option) { flags.insert(.option) }
+        if contains(.control) { flags.insert(.control) }
+        if contains(.shift) { flags.insert(.shift) }
+        return flags
+    }
 }
