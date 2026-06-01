@@ -106,8 +106,6 @@ struct WinampEqualizerWindow: View {
                     // EQ curve visualization (simplified for now)
                     buildEQCurve()
                 }
-                .opacity(playbackCoordinator.supportsAudioProcessing ? 1.0 : 0.5)
-                .allowsHitTesting(playbackCoordinator.supportsAudioProcessing)
             } else {
                 // Shade mode
                 buildShadeMode()
@@ -289,8 +287,6 @@ struct WinampEqualizerWindow: View {
                                  playbackCoordinator.setBalance(abs(balance) < 0.12 ? 0 : balance)
                              },
                              commit: { playbackCoordinator.commitBalance() })
-                .opacity(playbackCoordinator.supportsAudioProcessing ? 1.0 : 0.5)
-                .allowsHitTesting(playbackCoordinator.supportsAudioProcessing)
                 .at(EQCoords.shadeBalance)
 
             buildTitlebarButtons(shaded: true)
