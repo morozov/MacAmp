@@ -541,6 +541,24 @@ final class PlaybackCoordinator {
         }
     }
 
+    /// Bare song title for the system Now Playing center, or `nil` when none is
+    /// available so the caller can omit `MPMediaItemPropertyTitle` entirely.
+    ///
+    /// `displayTitle` is the composed main-window scroller string
+    /// (`"<pos>. <artist> - <title>"`); feeding that to `MPMediaItemPropertyTitle`
+    /// mistypes the field and duplicates the artist that `MPMediaItemPropertyArtist`
+    /// already carries. This is the plain title that field expects.
+    private var nowPlayingTitle: String? {
+        switch currentSource {
+        case .radioStation:
+            return streamPlayer.streamTitle ?? streamPlayer.currentStation?.name
+        case .localTrack:
+            return currentTrack?.title
+        case .none:
+            return nil
+        }
+    }
+
     // MARK: - Legacy State Queries (for compatibility)
 
     var streamTitle: String? {
@@ -580,8 +598,12 @@ final class PlaybackCoordinator {
         }
 
         var info = [String: Any]()
-        info[MPMediaItemPropertyTitle] = displayTitle
-        info[MPMediaItemPropertyArtist] = displayArtist
+        if let title = nowPlayingTitle, !title.isEmpty {
+            info[MPMediaItemPropertyTitle] = title
+        }
+        if !displayArtist.isEmpty {
+            info[MPMediaItemPropertyArtist] = displayArtist
+        }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = displayTime
         info[MPMediaItemPropertyPlaybackDuration] = displayDuration
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
