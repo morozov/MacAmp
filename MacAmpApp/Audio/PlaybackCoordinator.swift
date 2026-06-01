@@ -65,6 +65,15 @@ final class PlaybackCoordinator {
     private(set) var currentTitle: String?
     private(set) var currentTrack: Track?  // For playlist position tracking
 
+    /// Cover art for the current local file, surfaced to the system Now Playing
+    /// center. Resolved asynchronously at track start; `nil` for streams, while
+    /// resolution is in flight, or when no artwork is found.
+    private var currentArtwork: MPMediaItemArtwork?
+
+    /// Generation token for in-flight artwork resolution. Bumped on every track
+    /// change so a slow resolve for a previous track cannot overwrite the current one.
+    private var artworkRequestID = 0
+
     enum PlaybackSource {
         case localTrack(URL)
         case radioStation(RadioStation)
@@ -272,6 +281,7 @@ final class PlaybackCoordinator {
             await streamPlayer.play(url: track.url, title: track.title, artist: track.artist)
             currentSource = .radioStation(RadioStation(name: track.title, streamURL: track.url))
             currentTitle = track.title
+            clearArtwork()
         } else {
             stopAllBackends()
 
@@ -291,6 +301,7 @@ final class PlaybackCoordinator {
         currentSource = .radioStation(station)
         currentTitle = streamPlayer.streamTitle ?? station.name
         currentTrack = nil  // Not from playlist
+        clearArtwork()
         updateNowPlayingInfo()
     }
 
@@ -399,6 +410,30 @@ final class PlaybackCoordinator {
             trackArtist: track.artist,
             url: track.url
         )
+        resolveArtwork(for: track.url)
+    }
+
+    /// Resolve cover art for a local file off the main actor and refresh Now Playing
+    /// when it arrives. Clears any prior artwork immediately so stale art doesn't
+    /// linger across a track change.
+    private func resolveArtwork(for url: URL) {
+        artworkRequestID &+= 1
+        let requestID = artworkRequestID
+        currentArtwork = nil
+
+        Task { [weak self] in
+            let artwork = await CoverArtLoader.loadCoverArt(for: url)
+            guard let self, requestID == self.artworkRequestID else { return }
+            self.currentArtwork = artwork
+            self.updateNowPlayingInfo()
+        }
+    }
+
+    /// Drop the current artwork and cancel any in-flight resolution. Used when the
+    /// source has no artwork (streams) or playback stops.
+    private func clearArtwork() {
+        artworkRequestID &+= 1
+        currentArtwork = nil
     }
 
     private func handlePlaylistAdvance(action: AudioPlayer.PlaylistAdvanceAction) async {
@@ -550,6 +585,9 @@ final class PlaybackCoordinator {
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = displayTime
         info[MPMediaItemPropertyPlaybackDuration] = displayDuration
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        if let currentArtwork {
+            info[MPMediaItemPropertyArtwork] = currentArtwork
+        }
         center.nowPlayingInfo = info
 
         // REQUIRED on macOS — explicit playback state.
@@ -584,6 +622,7 @@ final class PlaybackCoordinator {
     /// Clear Now Playing info and set playback state to stopped.
     /// Disables all context-dependent remote commands (seek, next, previous).
     private func clearNowPlayingInfo() {
+        clearArtwork()
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = nil
         center.playbackState = .stopped
