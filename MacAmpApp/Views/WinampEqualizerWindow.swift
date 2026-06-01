@@ -103,8 +103,6 @@ struct WinampEqualizerWindow: View {
                     // EQ curve visualization (simplified for now)
                     buildEQCurve()
                 }
-                .opacity(playbackCoordinator.supportsAudioProcessing ? 1.0 : 0.5)
-                .allowsHitTesting(playbackCoordinator.supportsAudioProcessing)
             } else {
                 // Shade mode
                 buildShadeMode()

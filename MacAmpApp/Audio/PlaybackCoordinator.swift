@@ -144,24 +144,6 @@ final class PlaybackCoordinator {
         return "\(position)"
     }
 
-    // MARK: - Capability Flags
-
-    /// Whether the stream backend is currently active (playing, paused, or buffering).
-    /// Uses `currentSource` rather than `currentTrack?.isStream` because `currentTrack`
-    /// can be nil when playing a station directly via `play(station:)`.
-    /// Returns false when the stream is in an error state (no audio rendering),
-    /// which re-enables EQ/balance controls so the user isn't stuck with dimmed UI.
-    private var isStreamBackendActive: Bool {
-        guard case .radioStation = currentSource else { return false }
-        // Stream in error state is effectively inactive — re-enable controls
-        return streamPlayer.error == nil
-    }
-
-    /// EQ, balance, and other audio-processing features are available when not streaming,
-    /// OR when the stream bridge is active (stream decoded through AVAudioEngine).
-    /// Dimmed only during stream error or before bridge activates (prebuffering).
-    var supportsAudioProcessing: Bool { !isStreamBackendActive || audioPlayer.isBridgeActive }
-
     // MARK: - Initialization
 
     init(audioPlayer: AudioPlayer, streamPlayer: StreamPlayer) {

@@ -67,8 +67,5 @@ struct MainWindowSlidersLayer: View {
             onDragEnded: { playbackCoordinator.commitBalance() }
         )
         .at(Layout.balanceSlider)
-        .opacity(playbackCoordinator.supportsAudioProcessing ? 1.0 : 0.5)
-        .allowsHitTesting(playbackCoordinator.supportsAudioProcessing)
-        .help(playbackCoordinator.supportsAudioProcessing ? "Balance" : "Balance unavailable during streaming")
     }
 }
