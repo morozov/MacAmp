@@ -11,18 +11,20 @@ import os
 /// analyzed and scheduled from the same buffer, so the analyzer sees the audio
 /// before it is audible and nothing is decoded twice.
 ///
-/// Reads run on a private serial queue. Everything the audio engine needs is
-/// handed over through `AVAudioPlayerNode`, and everything the UI needs goes
-/// through `SpectrumBandFeed`, both of which are safe to touch from there.
+/// Reads run on a private serial queue, and analysis on a second one so that
+/// scheduling never waits on it. Everything the audio engine needs is handed
+/// over through `AVAudioPlayerNode`, and everything the UI needs goes through
+/// `SpectrumBandFeed`, both of which are safe to touch from there.
 final class PlaybackReader: @unchecked Sendable {
-    /// Frames per read. At 44.1 kHz this is a little over half a second, so a
-    /// full queue holds enough audio to cover a slow disk without holding so
-    /// much that a seek has to discard meaningful work.
-    private static let chunkFrames: AVAudioFrameCount = 24576
-    /// Chunks kept scheduled ahead of the playhead.
-    private static let queueDepth = 4
+    /// Seconds of audio per read.
+    private static let chunkSeconds = 0.5
+    /// Chunks kept scheduled ahead of the playhead. Must cover
+    /// `SpatialAudioOutput.maxBufferAhead`, which the output renders in one burst.
+    static let queueDepth = 6
 
     private let queue = DispatchQueue(label: "com.macamp.playback-reader", qos: .userInitiated)
+    /// Owns `feeder`.
+    private let analysisQueue = DispatchQueue(label: "com.macamp.playback-reader.analysis", qos: .userInitiated)
     private let playerNode: AVAudioPlayerNode
     private let feed: SpectrumBandFeed
     private let feeder = SpectrumBandFeeder()
@@ -37,12 +39,18 @@ final class PlaybackReader: @unchecked Sendable {
     private var endFrame: AVAudioFramePosition = 0
     private var outputFormat: AVAudioFormat?
     private var seekID: UUID?
+    private var chunkFrames: AVAudioFrameCount = 0
     private var generation: UInt64 = 0
     private var scheduledEnd = false
 
     /// Bumped by `stop()` so chunks in flight for a superseded position are
     /// dropped instead of scheduled.
     private let epoch = OSAllocatedUnfairLock(initialState: UInt64(0))
+
+    /// Analysis jobs queued at most: enough for the chunks scheduled at start.
+    /// A chunk arriving past this goes unanalyzed.
+    static let maxPendingAnalyses = queueDepth
+    private let pendingAnalyses = OSAllocatedUnfairLock(initialState: 0)
 
     init(
         playerNode: AVAudioPlayerNode,
@@ -68,20 +76,24 @@ final class PlaybackReader: @unchecked Sendable {
             self.converter = nil
             self.seekID = nil
             self.scheduledEnd = true
-            self.feeder.reset()
+            self.analysisQueue.async { self.feeder.reset() }
         }
     }
 
     /// Begin decoding `url` from `startFrame`, stopping at `endFrame`.
     ///
-    /// - Parameter outputFormat: The format the player node is connected with.
-    ///   Chunks are converted into it when the file does not already match.
+    /// - Parameters:
+    ///   - outputFormat: The format the player node is connected with.
+    ///     Chunks are converted into it when the file does not already match.
+    ///   - onPrimed: Called on the main actor once the initial chunks are
+    ///     scheduled, unless the run has been abandoned by then.
     func start(
         url: URL,
         startFrame: AVAudioFramePosition,
         endFrame: AVAudioFramePosition,
         outputFormat: AVAudioFormat,
-        seekID: UUID?
+        seekID: UUID?,
+        onPrimed: (@MainActor @Sendable () -> Void)? = nil
     ) {
         let next = epoch.withLock { state -> UInt64 in
             state &+= 1
@@ -105,13 +117,17 @@ final class PlaybackReader: @unchecked Sendable {
                 self.seekID = seekID
                 self.generation = generation
                 self.scheduledEnd = false
-                self.feeder.reset()
+                self.analysisQueue.async { self.feeder.reset() }
 
                 let sourceFormat = file.processingFormat
+                self.chunkFrames = AVAudioFrameCount(sourceFormat.sampleRate * Self.chunkSeconds)
                 self.converter = sourceFormat == outputFormat ? nil : AVAudioConverter(from: sourceFormat, to: outputFormat)
 
                 for _ in 0..<Self.queueDepth {
                     self.readAndScheduleChunk(epoch: next)
+                }
+                if let onPrimed, self.epoch.withLock({ $0 }) == next {
+                    Task { @MainActor in onPrimed() }
                 }
             } catch {
                 AppLog.error(.audio, "PlaybackReader: open failed: \(error)")
@@ -131,7 +147,7 @@ final class PlaybackReader: @unchecked Sendable {
             return
         }
 
-        let frames = AVAudioFrameCount(min(AVAudioFramePosition(Self.chunkFrames), remaining))
+        let frames = AVAudioFrameCount(min(AVAudioFramePosition(chunkFrames), remaining))
         let sourceFormat = file.processingFormat
         guard let source = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: frames) else { return }
 
@@ -152,7 +168,7 @@ final class PlaybackReader: @unchecked Sendable {
         let chunkStartFrame = nextFrame
         nextFrame += AVAudioFramePosition(source.frameLength)
 
-        analyze(source, startingAt: chunkStartFrame, sampleRate: sourceFormat.sampleRate)
+        analyze(source, startingAt: chunkStartFrame, sampleRate: sourceFormat.sampleRate, epoch: expected)
 
         guard let scheduled = convert(source, to: outputFormat) else {
             finishRun(epoch: expected)
@@ -199,6 +215,13 @@ final class PlaybackReader: @unchecked Sendable {
     var beforeScheduleForTesting: (@Sendable () -> Void)?
     /// Test seam: chunks handed to the player node so far.
     private(set) var scheduledChunkCountForTesting = 0
+    /// Test seam: runs on the analysis queue before each analysis job.
+    var beforeAnalysisForTesting: (@Sendable () -> Void)?
+    private let analyzedChunkCount = OSAllocatedUnfairLock(initialState: 0)
+    /// Test seam: chunks analyzed so far.
+    var analyzedChunkCountForTesting: Int { analyzedChunkCount.withLock { $0 } }
+    /// Test seam: analysis jobs queued or running.
+    var pendingAnalysisCountForTesting: Int { pendingAnalyses.withLock { $0 } }
     #endif
 
     private func finishRun(epoch expected: UInt64) {
@@ -239,16 +262,37 @@ final class PlaybackReader: @unchecked Sendable {
     // MARK: - Analysis
 
     /// Hand the chunk to the shared feeder, stamped with the file time it starts at.
-    private func analyze(_ buffer: AVAudioPCMBuffer, startingAt startFrame: AVAudioFramePosition, sampleRate: Double) {
-        guard let channels = buffer.floatChannelData else { return }
-        feeder.append(
-            planar: channels,
-            channelCount: Int(buffer.format.channelCount),
-            frameCount: Int(buffer.frameLength),
-            startFrame: startFrame,
-            sampleRate: sampleRate,
-            to: feed,
-            generation: generation
-        )
+    private func analyze(
+        _ buffer: AVAudioPCMBuffer,
+        startingAt startFrame: AVAudioFramePosition,
+        sampleRate: Double,
+        epoch expected: UInt64
+    ) {
+        let admitted = pendingAnalyses.withLock { pending -> Bool in
+            guard pending < Self.maxPendingAnalyses else { return false }
+            pending += 1
+            return true
+        }
+        guard admitted else { return }
+        let generation = generation
+        analysisQueue.async { [self] in
+            defer { pendingAnalyses.withLock { $0 -= 1 } }
+            #if DEBUG
+            beforeAnalysisForTesting?()
+            #endif
+            guard epoch.withLock({ $0 }) == expected, let channels = buffer.floatChannelData else { return }
+            feeder.append(
+                planar: channels,
+                channelCount: Int(buffer.format.channelCount),
+                frameCount: Int(buffer.frameLength),
+                startFrame: startFrame,
+                sampleRate: sampleRate,
+                to: feed,
+                generation: generation
+            )
+            #if DEBUG
+            analyzedChunkCount.withLock { $0 += 1 }
+            #endif
+        }
     }
 }

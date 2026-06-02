@@ -65,6 +65,11 @@ struct PlaybackReaderTests {
 
         // The analyzer must hold frames for audio near the start of the file,
         // which is the whole point: they exist before that audio is due.
+        let deadline = ContinuousClock.now + .seconds(5)
+        while feed.frame(at: 0.05) == nil || feed.frame(at: 1.8) == nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(feed.frame(at: 1.8) != nil, "analyzer feed has no frame for the last chunk scheduled at start")
         let early = feed.frame(at: 0.05)
         #expect(early != nil, "analyzer feed has no frame for the opening of the file")
 
@@ -157,6 +162,47 @@ struct PlaybackReaderTests {
 
         player.stop()
         engine.stop()
+    }
+
+    @MainActor
+    @Test("Analysis keeps a bounded backlog and skips abandoned runs")
+    func analysisBacklogIsBounded() async throws {
+        let sampleRate = 44100.0
+        let url = try makeToneFile(seconds: 10.0, frequency: 440, sampleRate: sampleRate)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 2, interleaved: false)!
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+        engine.mainMixerNode.outputVolume = 0
+        engine.prepare()
+        try engine.start()
+        defer { engine.stop() }
+
+        let reader = PlaybackReader(playerNode: player, feed: SpectrumBandFeed()) { _ in }
+        let gate = DispatchSemaphore(value: 0)
+        let jobs = Counter()
+        reader.beforeAnalysisForTesting = {
+            jobs.increment()
+            gate.wait()
+        }
+        let file = try AVAudioFile(forReading: url)
+        reader.start(url: url, startFrame: 0, endFrame: file.length, outputFormat: format, seekID: nil)
+        // Playing consumes chunks, so more are scheduled than analysis admits.
+        player.play()
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        #expect(reader.scheduledChunkCountForTesting > PlaybackReader.maxPendingAnalyses)
+
+        reader.stop()
+        for _ in 0..<reader.scheduledChunkCountForTesting { gate.signal() }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while reader.pendingAnalysisCountForTesting > 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(jobs.value == PlaybackReader.maxPendingAnalyses)
+        #expect(reader.analyzedChunkCountForTesting == 0)
     }
 
     @MainActor
@@ -277,6 +323,13 @@ struct PlaybackReaderTests {
 }
 
 /// Records a completion callback arriving from a background queue.
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() { lock.withLock { count += 1 } }
+}
+
 private final class Ended: @unchecked Sendable {
     private let lock = NSLock()
     private var fired = false

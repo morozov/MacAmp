@@ -43,6 +43,10 @@ final class AudioEngineController {
 
     let audioEngine = AVAudioEngine()
     let playerNode = AVAudioPlayerNode()
+
+    /// The engine renders into this, which plays through `AVSampleBufferAudioRenderer`
+    /// so macOS spatial audio can engage.
+    let spatialOutput = SpatialAudioOutput()
     private(set) var audioFile: AVAudioFile?
     private var progressTimer: Timer?
     private var playheadOffset: Double = 0
@@ -51,6 +55,18 @@ final class AudioEngineController {
     private var graphFormat: AVAudioFormat?
     private var reader: PlaybackReader!
 
+    // Manual rendering never fires `.dataPlayedBack`, so the progress timer detects
+    // the end from the audible clock.
+    private var scheduledEndSeconds: Double = .infinity
+    private var scheduledSeekID: UUID?
+    private var endFired = false
+
+    // Output starts once the reader has scheduled audio; until then the
+    // player renders silence.
+    private var scheduleGeneration = 0
+    private var isSourcePrimed = false
+    private var playWhenPrimed = false
+
     /// Seconds elapsed in the loaded file at the current render time. 0
     /// when nothing is loaded or playback hasn't begun. Rate-agnostic —
     /// callers multiply by whichever sample rate their frame coordinate
@@ -58,20 +74,15 @@ final class AudioEngineController {
     /// which can differ from `AVAudioFile.processingFormat.sampleRate`
     /// for HE-AAC SBR files).
     var currentPlaybackSeconds: Double {
-        guard let nodeTime = playerNode.lastRenderTime,
-              let playerTime = playerNode.playerTime(forNodeTime: nodeTime),
-              playerTime.sampleRate > 0 else {
-            return 0
-        }
-        let seconds = Double(playerTime.sampleTime) / playerTime.sampleRate + playheadOffset
-        return max(0, seconds)
+        spatialOutput.currentTimeSeconds
     }
 
     /// The position analyzer frames are stamped against: the file's playhead, or
-    /// the stream ring buffer's read head while a stream is playing.
+    /// while a stream is playing, the ring buffer's read head less what the
+    /// output holds ahead of the listener.
     var spectrumPlaybackSeconds: Double {
         if isBridgeActive, let ring = streamRingBuffer, streamSampleRate > 0 {
-            return Double(ring.readHeadFrames) / streamSampleRate
+            return Double(ring.readHeadFrames) / streamSampleRate - spatialOutput.bufferedAheadSeconds
         }
         return currentPlaybackSeconds
     }
@@ -156,8 +167,29 @@ final class AudioEngineController {
     func shutdown() {
         configObserver.stop()
         progressTimer?.invalidate()
+        spatialOutput.suspendFeed()
+        spatialOutput.stop()
         deactivateStreamBridge()
         visualizerPipeline.removeTap()
+    }
+
+    /// Put the engine into offline manual rendering mode and bind the output to
+    /// its render block. Must run while the engine is stopped; idempotent. A
+    /// reset can clear the mode, so this is re-checked before each start.
+    private func ensureManualRendering() {
+        guard !audioEngine.isInManualRenderingMode else { return }
+        do {
+            try audioEngine.enableManualRenderingMode(
+                .offline,
+                format: spatialOutput.renderingFormat,
+                maximumFrameCount: spatialOutput.maximumFrameCount
+            )
+            spatialOutput.bind(renderBlock: audioEngine.manualRenderingBlock,
+                               format: audioEngine.manualRenderingFormat)
+            AppLog.info(.audio, "Manual rendering enabled — spatial output active (\(audioEngine.manualRenderingFormat.sampleRate)Hz)")
+        } catch {
+            AppLog.error(.audio, "enableManualRenderingMode failed: \(error)")
+        }
     }
 
     // MARK: - Engine Setup
@@ -165,6 +197,8 @@ final class AudioEngineController {
     private func setupEngine() {
         audioEngine.attach(playerNode)
         audioEngine.attach(eqNode)
+        // Up front, so graph rewires read the render rate from `outputNode`.
+        ensureManualRendering()
     }
 
     // MARK: - Graph Wiring (Local File Path)
@@ -176,6 +210,9 @@ final class AudioEngineController {
     /// after stream bridge disconnection.
     func rewireForFile(_ file: AVAudioFile) {
         audioFile = file
+
+        // Pause the manual-render pull while the graph is reconfigured.
+        spatialOutput.suspendFeed()
 
         // Deactivate stream bridge if active
         if isBridgeActive {
@@ -234,6 +271,13 @@ final class AudioEngineController {
         let sampleRate = file.processingFormat.sampleRate
         let fileDuration = Double(file.length) / sampleRate
 
+        // A feed pulling the stopped player would enqueue silence.
+        spatialOutput.suspendFeed()
+        playWhenPrimed = false
+        isSourcePrimed = false
+        scheduleGeneration += 1
+        let generation = scheduleGeneration
+
         // Everything queued for the old position describes audio that will not
         // be heard, so the analyzer must forget it before the reader refills.
         reader.stop()
@@ -269,7 +313,21 @@ final class AudioEngineController {
                 endFrame: endFrame,
                 outputFormat: graphFormat ?? file.processingFormat,
                 seekID: seekID
-            )
+            ) { [weak self] in
+                guard let self, self.scheduleGeneration == generation else { return }
+                self.isSourcePrimed = true
+                if self.playWhenPrimed {
+                    self.playWhenPrimed = false
+                    self.spatialOutput.play()
+                }
+            }
+
+            scheduledEndSeconds = Double(endFrame) / sampleRate
+            scheduledSeekID = seekID
+            endFired = false
+
+            // Drop audio rendered for the old position and move the clock to the new one.
+            spatialOutput.reanchor(toSeconds: playheadOffset)
             return true
         } else {
             onPlaybackEnded?(nil)
@@ -305,10 +363,8 @@ final class AudioEngineController {
     @discardableResult
     func startEngineIfNeeded() -> Bool {
         if !audioEngine.isRunning {
+            ensureManualRendering()
             audioEngine.prepare()
-            if UnitTestSupport.isActive {
-                muteDeviceOutput()
-            }
             do {
                 try audioEngine.start()
             } catch {
@@ -319,23 +375,9 @@ final class AudioEngineController {
         return audioEngine.isRunning
     }
 
-    /// Silence the device output unit, which applies its volume after every node and tap.
-    private func muteDeviceOutput() {
-        guard let unit = audioEngine.outputNode.audioUnit else { return }
-        let status = AudioUnitSetParameter(unit, kHALOutputParam_Volume, kAudioUnitScope_Global, 0, 0, 0)
-        if status != noErr {
-            AppLog.error(.audio, "Muting output for tests failed: \(status)")
-        }
-    }
-
     #if DEBUG
-    /// Test seam: the device output unit's volume.
-    var deviceOutputVolumeForTesting: Float? {
-        guard let unit = audioEngine.outputNode.audioUnit else { return nil }
-        var value: AudioUnitParameterValue = -1
-        guard AudioUnitGetParameter(unit, kHALOutputParam_Volume, kAudioUnitScope_Global, 0, &value) == noErr else { return nil }
-        return value
-    }
+    /// Test seam: the volume of the audio reaching the device.
+    var deviceOutputVolumeForTesting: Float? { spatialOutput.rendererVolumeForTesting }
     #endif
 
     // MARK: - Progress Timer
@@ -347,12 +389,16 @@ final class AudioEngineController {
             dispatchPrecondition(condition: .onQueue(.main))
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                if let nodeTime = self.playerNode.lastRenderTime,
-                   let playerTime = self.playerNode.playerTime(forNodeTime: nodeTime) {
-                    let current = Double(playerTime.sampleTime) / playerTime.sampleRate + self.playheadOffset
-                    let duration = self.currentFileDuration
-                    let progress = duration > 0 ? current / duration : 0
-                    self.onProgressUpdate?(current, progress)
+                let current = self.spatialOutput.currentTimeSeconds
+                let duration = self.currentFileDuration
+                let progress = duration > 0 ? current / duration : 0
+                self.onProgressUpdate?(current, progress)
+
+                // Stop pulling once the end is heard, or the feed enqueues silence indefinitely.
+                if !self.endFired, current >= self.scheduledEndSeconds {
+                    self.endFired = true
+                    self.onPlaybackEnded?(self.scheduledSeekID)
+                    self.spatialOutput.suspendFeed()
                 }
             }
         }
@@ -381,25 +427,37 @@ final class AudioEngineController {
     var isPlayerNodePlaying: Bool { playerNode.isPlaying }
 
     func playAudio() {
+        _ = startEngineIfNeeded()
         if !playerNode.isPlaying {
             playerNode.play()
+        }
+        if isBridgeActive || isSourcePrimed {
+            spatialOutput.play()
+        } else {
+            playWhenPrimed = true
         }
     }
 
     func pauseAudio() {
+        playWhenPrimed = false
         playerNode.pause()
+        spatialOutput.pause()
     }
 
     func stopAudio() {
+        playWhenPrimed = false
         reader.stop()
         playerNode.stop()
+        spatialOutput.pause()
     }
 
     // MARK: - Volume / Balance
 
     func setVolume(_ volume: Float) {
-        playerNode.volume = volume
-        streamSourceNode?.volume = volume
+        // Volume applies at the renderer, after its buffer, so changes are heard at once.
+        playerNode.volume = 1.0
+        streamSourceNode?.volume = 1.0
+        spatialOutput.setVolume(volume)
     }
 
     func setBalance(_ balance: Float) {
@@ -410,7 +468,19 @@ final class AudioEngineController {
     /// Silence the stream render block. No-op when bridge is inactive.
     /// Producer side must be quiesced and ring flushed BEFORE clearing.
     func setStreamSilenced(_ silenced: Bool) {
-        streamSilenceGate?.store(silenced ? 1 : 0, ordering: .releasing)
+        guard let gate = streamSilenceGate else { return }
+        let wasSilenced = gate.load(ordering: .relaxed) != 0
+        gate.store(silenced ? 1 : 0, ordering: .releasing)
+        guard silenced != wasSilenced else { return }
+
+        // The output still holds audio rendered before the gate closed.
+        spatialOutput.suspendFeed()
+        if silenced {
+            spatialOutput.stop()
+        } else {
+            spatialOutput.reanchor(toSeconds: spatialOutput.currentTimeSeconds)
+            spatialOutput.play()
+        }
     }
 
     #if DEBUG
@@ -429,8 +499,9 @@ final class AudioEngineController {
         eqNode.removeTap(onBus: 0)
     }
 
-    /// Test seam: the sample time of the last render cycle at the tap point.
-    var outputSampleTimeForTesting: AVAudioFramePosition? { eqNode.lastRenderTime?.sampleTime }
+    /// Test seam: the engine's render position. Nodes report no render time in
+    /// manual rendering.
+    var outputSampleTimeForTesting: AVAudioFramePosition? { audioEngine.manualRenderingSampleTime }
 
     var isStreamSilenceGateActive: Bool {
         (streamSilenceGate?.load(ordering: .relaxed) ?? 0) != 0
@@ -497,6 +568,18 @@ final class AudioEngineController {
         }
     }
 
+    /// Enters rebuffering, as a dry read in the render block does, unless the
+    /// ring holds `minimumFrames`. The decoder clears the flag only when it
+    /// writes, so a flag left set over a full ring stalls playback.
+    nonisolated static func reportStarvation(of ring: LockFreeRingBuffer, below minimumFrames: Int) {
+        guard !ring.isRebuffering, ring.availableFrames < minimumFrames else { return }
+        ring.setRebuffering(true)
+        // Audio may have landed between the check and the store.
+        if ring.availableFrames >= minimumFrames {
+            ring.setRebuffering(false)
+        }
+    }
+
     #if DEBUG
     /// Test seam: same render block, exposed without widening production visibility.
     internal nonisolated static func makeStreamRenderBlockForTesting(
@@ -518,6 +601,7 @@ final class AudioEngineController {
     func activateStreamBridge(ringBuffer: LockFreeRingBuffer, sampleRate: Float64) {
         guard !isBridgeActive else { return }
 
+        spatialOutput.suspendFeed()
         streamRingBuffer = ringBuffer
         streamSampleRate = sampleRate
 
@@ -540,6 +624,8 @@ final class AudioEngineController {
             audioEngine.stop()
             audioEngine.reset()
         }
+        // `reset()` can clear manual rendering.
+        ensureManualRendering()
 
         audioEngine.disconnectNodeOutput(playerNode)
         audioEngine.disconnectNodeOutput(eqNode)
@@ -571,6 +657,15 @@ final class AudioEngineController {
         }
         installVisualizerTapIfNeeded()
 
+        // The engine renders only when the output pulls it.
+        spatialOutput.setSourceAvailability {
+            ringBuffer.isRebuffering ? 0 : Double(ringBuffer.availableFrames) / sampleRate
+        } onStarved: { seconds in
+            Self.reportStarvation(of: ringBuffer, below: Int(seconds * sampleRate))
+        }
+        spatialOutput.reanchor(toSeconds: 0)
+        spatialOutput.play()
+
         isBridgeActive = true
         onBridgeStateChanged?(true)
         AppLog.info(.audio, "AudioEngineController: Stream bridge activated — \(sampleRate)Hz")
@@ -581,6 +676,9 @@ final class AudioEngineController {
     func deactivateStreamBridge() {
         guard isBridgeActive else { return }
 
+        spatialOutput.suspendFeed()
+        spatialOutput.stop()
+        spatialOutput.setSourceAvailability(nil)
         audioEngine.stop()
         removeVisualizerTapIfNeeded()
 

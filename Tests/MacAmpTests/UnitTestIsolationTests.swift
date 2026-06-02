@@ -38,6 +38,7 @@ struct UnitTestIsolationTests {
         defer { player.stop() }
         try player.engineForTesting.loadFile(url: url)
         #expect(player.engineForTesting.startEngineIfNeeded())
+        player.engineForTesting.setVolume(1)
         #expect(player.engineForTesting.deviceOutputVolumeForTesting == 0)
     }
 }

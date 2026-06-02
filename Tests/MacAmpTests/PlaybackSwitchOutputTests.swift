@@ -49,6 +49,7 @@ struct PlaybackSwitchOutputTests {
         player.playTrack(track: slice(url, start: 0, duration: 4, number: 1))
         let capture = try await Capture.start(on: player)
         player.playTrack(track: slice(url, start: 4, duration: 4, number: 2))
+        capture.markSwitch()
         try await capture.expectOnlyNewAudio()
     }
 
@@ -63,6 +64,7 @@ struct PlaybackSwitchOutputTests {
         let capture = try await Capture.start(on: player)
         player.stop()
         player.playTrack(track: slice(url, start: 4, duration: 4, number: 2))
+        capture.markSwitch()
         try await capture.expectOnlyNewAudio()
     }
 
@@ -80,6 +82,7 @@ struct PlaybackSwitchOutputTests {
         player.playTrack(track: Track(url: old, title: "Old", artist: "Test", duration: 4))
         let capture = try await Capture.start(on: player)
         player.playTrack(track: Track(url: new, title: "New", artist: "Test", duration: 4))
+        capture.markSwitch()
         try await capture.expectOnlyNewAudio()
     }
 
@@ -103,9 +106,12 @@ struct PlaybackSwitchOutputTests {
             }
             // Let the old track play long enough for the reader to queue ahead.
             try await Task.sleep(for: .milliseconds(800))
+            let deadline = ContinuousClock.now + .seconds(5)
+            while !capture.snapshot().contains(where: { $0.old > Capture.threshold }), ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
             let heardOld = capture.snapshot().contains { $0.old > Capture.threshold }
             #expect(heardOld, "the old track never reached the output")
-            capture.markSwitch(at: player.engineForTesting.outputSampleTimeForTesting ?? 0)
             return capture
         }
 
@@ -121,7 +127,10 @@ struct PlaybackSwitchOutputTests {
             lock.withLock { buffers.append(entry) }
         }
 
-        private func markSwitch(at sampleTime: AVAudioFramePosition) {
+        /// Call right after the switch; the output renders ahead in bursts.
+        @MainActor
+        func markSwitch() {
+            let sampleTime = player?.engineForTesting.outputSampleTimeForTesting ?? 0
             lock.withLock { switchedAt = buffers.count; switchSampleTime = sampleTime }
         }
 

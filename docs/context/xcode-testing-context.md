@@ -47,7 +47,7 @@ swift test --filter <SuiteName> # one suite
 
 `swift test` runs the unit tests in a plain test process, without launching the app. `xcodebuild test` hosts the test bundle inside `MacAmp.app` and launches it, so it is not used for unit tests.
 
-The tests run alongside whatever the user is doing and must not reach them. `UnitTestSupport.isActive` is true in the test process. Under it the audio engine mutes its device output, `PlaybackCoordinator` publishes no Now Playing information, and `UnitTestSupport.applicationSupportDirectory` is a throwaway directory instead of the user's Application Support. Gate anything new that would be heard, seen or written on it, and never order a window front or run an alert modally in a test.
+The tests run alongside whatever the user is doing and must not reach them. `UnitTestSupport.isActive` is true in the test process. Under it the spatial output renderer plays at volume 0, `PlaybackCoordinator` publishes no Now Playing information, and `UnitTestSupport.applicationSupportDirectory` is a throwaway directory instead of the user's Application Support. Gate anything new that would be heard, seen or written on it, and never order a window front or run an alert modally in a test.
 
 ## Adding or Updating Tests
 
