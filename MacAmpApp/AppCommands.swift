@@ -10,23 +10,23 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandMenu("Options") {
             Button(dockingController.showMain ? "Hide Main" : "Show Main") {
-                dispatcher.perform(WinampKeyBindings.toggleMainWindow.action)
+                dispatcher.perform(WinampKeyBindings.toggleMainWindowAlt.action)
             }
-            .keyboardShortcut(WinampKeyBindings.toggleMainWindow.shortcut)
+            .keyboardShortcut(WinampKeyBindings.toggleMainWindowAlt.shortcut)
 
             // Read visibility from `settings` (kept in sync by
             // WindowVisibilityController). `dockingController.panes[…].visible`
             // is no longer updated when toggling through the dispatcher and
             // would drift after the first invocation.
             Button(settings.showPlaylistWindow ? "Hide Playlist" : "Show Playlist") {
-                dispatcher.perform(WinampKeyBindings.togglePlaylistWindow.action)
+                dispatcher.perform(WinampKeyBindings.togglePlaylistWindowAlt.action)
             }
-            .keyboardShortcut(WinampKeyBindings.togglePlaylistWindow.shortcut)
+            .keyboardShortcut(WinampKeyBindings.togglePlaylistWindowAlt.shortcut)
 
             Button(settings.showEqualizerWindow ? "Hide Equalizer" : "Show Equalizer") {
-                dispatcher.perform(WinampKeyBindings.toggleEqualizerWindow.action)
+                dispatcher.perform(WinampKeyBindings.toggleEqualizerWindowAlt.action)
             }
-            .keyboardShortcut(WinampKeyBindings.toggleEqualizerWindow.shortcut)
+            .keyboardShortcut(WinampKeyBindings.toggleEqualizerWindowAlt.shortcut)
 
             Divider()
 
