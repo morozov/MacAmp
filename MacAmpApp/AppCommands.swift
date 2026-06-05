@@ -10,19 +10,19 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandMenu("Options") {
             Button(windowCoordinator.isMainWindowVisible ? "Hide Main" : "Show Main") {
-                dispatcher.perform(WinampKeyBindings.toggleMainWindow.action)
+                dispatcher.perform(WinampKeyBindings.toggleMainWindowAlt.action)
             }
-            .keyboardShortcut(WinampKeyBindings.toggleMainWindow.shortcut)
+            .keyboardShortcut(WinampKeyBindings.toggleMainWindowAlt.shortcut)
 
             Button(windowCoordinator.isPlaylistWindowVisible ? "Hide Playlist" : "Show Playlist") {
-                dispatcher.perform(WinampKeyBindings.togglePlaylistWindow.action)
+                dispatcher.perform(WinampKeyBindings.togglePlaylistWindowAlt.action)
             }
-            .keyboardShortcut(WinampKeyBindings.togglePlaylistWindow.shortcut)
+            .keyboardShortcut(WinampKeyBindings.togglePlaylistWindowAlt.shortcut)
 
             Button(windowCoordinator.isEQWindowVisible ? "Hide Equalizer" : "Show Equalizer") {
-                dispatcher.perform(WinampKeyBindings.toggleEqualizerWindow.action)
+                dispatcher.perform(WinampKeyBindings.toggleEqualizerWindowAlt.action)
             }
-            .keyboardShortcut(WinampKeyBindings.toggleEqualizerWindow.shortcut)
+            .keyboardShortcut(WinampKeyBindings.toggleEqualizerWindowAlt.shortcut)
 
             Divider()
 

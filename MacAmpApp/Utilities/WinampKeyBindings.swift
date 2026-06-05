@@ -44,9 +44,6 @@ enum WinampKeyBindings {
     static let openFiles            = WinampKeyBinding(key: "o", modifiers: .command,              action: .openFiles)
     static let openOptionsMenu      = WinampKeyBinding(key: "o", modifiers: [.command, .shift],    action: .showOptionsMenu)
     static let videoWindow          = WinampKeyBinding(key: "v", modifiers: [.command, .shift],    action: .toggleVideoWindow)
-    static let toggleMainWindow     = WinampKeyBinding(key: "1", modifiers: [.command, .shift],    action: .toggleMainWindow)
-    static let togglePlaylistWindow = WinampKeyBinding(key: "2", modifiers: [.command, .shift],    action: .togglePlaylistWindow)
-    static let toggleEqualizerWindow = WinampKeyBinding(key: "3", modifiers: [.command, .shift],   action: .toggleEqualizerWindow)
     static let shadeMainWindow      = WinampKeyBinding(key: "1", modifiers: [.command, .option],   action: .shadeMainWindow)
     static let shadePlaylistWindow  = WinampKeyBinding(key: "2", modifiers: [.command, .option],   action: .shadePlaylistWindow)
     static let shadeEqualizerWindow = WinampKeyBinding(key: "3", modifiers: [.command, .option],   action: .shadeEqualizerWindow)
@@ -89,7 +86,6 @@ enum WinampKeyBindings {
     static let menuShortcutBindings: [WinampKeyBinding] = [
         alwaysOnTop, doubleSize, timeMode, trackInfo, milkdrop,
         openFiles, openOptionsMenu, videoWindow,
-        toggleMainWindow, togglePlaylistWindow, toggleEqualizerWindow,
         shadeMainWindow, shadePlaylistWindow, shadeEqualizerWindow,
     ]
 }
