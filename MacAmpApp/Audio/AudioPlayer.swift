@@ -646,15 +646,15 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
     /// Walk the playlist forward from `start` collecting every consecutive same-file
     /// CUE slice whose `cueSlice.startTime` equals the previous slice's `endTime`.
     /// The result is the run of slices a single `scheduleSegment` call covers so the
-    /// decoder runs uninterrupted. Stops at: shuffle / repeat-one (where "next" is
-    /// not the sequentially-next track), a non-CUE track, a different-file slice,
+    /// decoder runs uninterrupted. Stops at: shuffle (where "next" is not the
+    /// sequentially-next track), a non-CUE track, a different-file slice,
     /// a non-contiguous slice, or end of playlist (without wrapping for repeat-all
     /// to avoid an unbounded run).
     private func computeRunSlices(startingAt start: Track) -> [Track] {
         guard start.isCueSlice else { return [] }
         let playlist = playlistController.playlist
         guard let startIdx = playlist.firstIndex(of: start) else { return [start] }
-        if playlistController.shuffleEnabled || playlistController.repeatMode == .one {
+        if playlistController.shuffleEnabled {
             return [start]
         }
         var run: [Track] = [start]
@@ -1080,15 +1080,15 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
     }
 
     @discardableResult
-    func nextTrack(isManualSkip: Bool = false) -> PlaylistAdvanceAction {
+    func nextTrack() -> PlaylistAdvanceAction {
         playlistController.updatePosition(with: currentTrack)
-        let action = playlistController.nextTrack(isManualSkip: isManualSkip)
+        let action = playlistController.nextTrack()
         return handlePlaylistAction(action)
     }
 
     @discardableResult
-    func nextTrack(from track: Track?, isManualSkip: Bool = false) -> PlaylistAdvanceAction {
-        let action = playlistController.nextTrack(from: track, isManualSkip: isManualSkip)
+    func nextTrack(from track: Track?) -> PlaylistAdvanceAction {
+        let action = playlistController.nextTrack(from: track)
         return handlePlaylistAction(action)
     }
 

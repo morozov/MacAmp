@@ -86,16 +86,6 @@ final class MainWindowOptionsMenuPresenter {
         ))
 
         menu.addItem(MenuItemFactory.createMenuItem(
-            title: "Repeat: One",
-            isChecked: audioPlayer.repeatMode == .one,
-            keyEquivalent: "r",
-            modifiers: .control,
-            action: { [weak audioPlayer] in
-                audioPlayer?.repeatMode = .one
-            }
-        ))
-
-        menu.addItem(MenuItemFactory.createMenuItem(
             title: "Shuffle",
             isChecked: audioPlayer.shuffleEnabled,
             keyEquivalent: "s",

@@ -210,12 +210,11 @@ final class PlaylistController {
     /// - Parameters:
     ///   - track: External track context for position resolution. If non-nil, position is synced before navigation.
     ///     If nil (e.g., direct station playback not from playlist), clears stale index to prevent incorrect navigation.
-    ///   - isManualSkip: Whether this is a user-initiated skip (affects repeat-one behavior)
     /// - Returns: The action to perform (caller handles playback)
-    func nextTrack(from track: Track?, isManualSkip: Bool = false) -> AdvanceAction {
+    func nextTrack(from track: Track?) -> AdvanceAction {
         // Always sync position: non-nil track resolves index, nil clears stale index
         updatePosition(with: track)
-        return nextTrack(isManualSkip: isManualSkip)
+        return nextTrack()
     }
 
     /// Compute the previous track to play with external position context.
@@ -229,18 +228,11 @@ final class PlaylistController {
     }
 
     /// Compute the next track to play
-    /// - Parameter isManualSkip: Whether this is a user-initiated skip (affects repeat-one behavior)
     /// - Returns: The action to perform (caller handles playback)
-    func nextTrack(isManualSkip: Bool = false) -> AdvanceAction {
+    func nextTrack() -> AdvanceAction {
         guard !playlist.isEmpty else { return .none }
 
         hasEnded = false
-
-        // Repeat-one: Only auto-restart on track end, allow manual skips
-        if repeatMode == .one && !isManualSkip {
-            guard let track = currentTrack else { return .none }
-            return track.isStream ? .requestCoordinatorPlayback(track) : .restartCurrent
-        }
 
         // Shuffle mode: pick random track
         if shuffleEnabled {

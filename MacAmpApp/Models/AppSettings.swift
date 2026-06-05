@@ -375,9 +375,8 @@ final class AppSettings {
     enum RepeatMode: String, Codable, CaseIterable {
         case off
         case all
-        case one
 
-        /// Cycle to next mode (Winamp 5 Modern button behavior: Off → All → One → Off)
+        /// Cycle to the next mode: Off → All → Off.
         func next() -> RepeatMode {
             let cases = Self.allCases
             guard let index = cases.firstIndex(of: self) else { return self }
@@ -390,11 +389,10 @@ final class AppSettings {
             switch self {
             case .off: return "Repeat: Off"
             case .all: return "Repeat: All"
-            case .one: return "Repeat: One"
             }
         }
 
-        /// Button state - lit when all or one (Winamp 5 visual)
+        /// Button state - lit when repeat is on
         var isActive: Bool {
             self != .off
         }

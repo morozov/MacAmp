@@ -340,7 +340,7 @@ final class PlaybackCoordinator {
     func next() async {
         // Pass coordinator's currentTrack so PlaylistController can resolve position
         // even when audioPlayer.currentTrack is nil (e.g., during stream playback)
-        let action = audioPlayer.nextTrack(from: currentTrack, isManualSkip: true)
+        let action = audioPlayer.nextTrack(from: currentTrack)
         await handlePlaylistAdvance(action: action)
     }
 
