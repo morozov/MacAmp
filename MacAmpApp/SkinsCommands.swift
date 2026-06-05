@@ -25,7 +25,6 @@ struct SkinsCommands: Commands {
                     Button(skin.name) {
                         skinManager.switchToSkin(identifier: skin.id)
                     }
-                    .keyboardShortcut(keyboardShortcut(for: skin))
                 }
             }
 
@@ -49,7 +48,6 @@ struct SkinsCommands: Commands {
                 Button("Import Skin File...") {
                     openSkinFilePicker()
                 }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
 
                 Button("Open Skins Folder") {
                     do {
@@ -72,20 +70,6 @@ struct SkinsCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
             }
         }
-    }
-
-    // MARK: - Helper Methods
-
-    /// Generate keyboard shortcut for bundled skins (Cmd+Shift+1, Cmd+Shift+2, etc.)
-    private func keyboardShortcut(for skin: SkinMetadata) -> KeyboardShortcut? {
-        let bundledSkins = skinManager.availableSkins.filter { $0.source == .bundled }
-        if let index = bundledSkins.firstIndex(where: { $0.id == skin.id }) {
-            if index < 9 {
-                let key = String(index + 1)
-                return KeyboardShortcut(KeyEquivalent(Character(key)), modifiers: [.command, .shift])
-            }
-        }
-        return nil
     }
 
     /// Open file picker to select and import a .wsz skin file
