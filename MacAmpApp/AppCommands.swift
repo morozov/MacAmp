@@ -75,11 +75,19 @@ struct AppCommands: Commands {
             }
             .keyboardShortcut(WinampKeyBindings.trackInfo.shortcut)
 
-            // Repeat: plain `R` via WinampHotkeyMonitor matches Webamp; this
-            // menu item has no shortcut and just dispatches the same action.
+            // `S` and `R` are dispatched by WinampHotkeyMonitor, which consumes
+            // the key before menu shortcuts are evaluated. These
+            // `.keyboardShortcut`s only surface the bindings in the menu; they
+            // never drive the action while a primary window is key.
+            Button(audioPlayer.shuffleEnabled ? "Shuffle: On" : "Shuffle: Off") {
+                dispatcher.perform(WinampKeyBindings.toggleShuffleHotkey.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.toggleShuffleHotkey.shortcut)
+
             Button(audioPlayer.repeatMode.label) {
                 dispatcher.perform(WinampKeyBindings.cycleRepeatHotkey.action)
             }
+            .keyboardShortcut(WinampKeyBindings.cycleRepeatHotkey.shortcut)
 
             // Video Window toggle. Plain `V` (Webamp stop) is in the hotkey
             // monitor and `⌘V` is system Paste, so video uses `⌘⇧V`.
