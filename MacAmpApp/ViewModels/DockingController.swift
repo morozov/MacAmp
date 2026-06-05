@@ -71,7 +71,19 @@ final class DockingController {
     var showPlaylist: Bool { pane(for: .playlist)?.visible ?? false }
     var showEqualizer: Bool { pane(for: .equalizer)?.visible ?? false }
 
-    func toggleMain() { toggleVisibility(.main) }
+    func toggleMain() {
+        toggleVisibility(.main)
+        assert(windowCoordinator != nil, "DockingController.windowCoordinator not injected")
+        // Sync actual NSWindow to match DockingController state
+        if let coordinator = windowCoordinator {
+            let shouldBeVisible = showMain
+            if shouldBeVisible {
+                coordinator.showMain()
+            } else {
+                coordinator.hideMain()
+            }
+        }
+    }
     func togglePlaylist() {
         toggleVisibility(.playlist)
         assert(windowCoordinator != nil, "DockingController.windowCoordinator not injected")
