@@ -194,6 +194,7 @@ final class WindowCoordinator {
         ) { [weak zOrderController] _ in
             MainActor.assumeIsolated {
                 zOrderController?.bringAllWindowsForward()
+                AlwaysOnTopBadge.apply()
             }
         }
 
