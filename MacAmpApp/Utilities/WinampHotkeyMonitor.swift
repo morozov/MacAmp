@@ -9,6 +9,7 @@ import AppKit
 final class WinampHotkeyMonitor {
     private let perform: @MainActor (UserAction) -> Void
     private let primaryWindows: @MainActor () -> Set<NSWindowIdentity>
+    private let playlistWindow: @MainActor () -> NSWindow?
     private var monitor: Any?
 
     private let plainKeyActions: [Character: UserAction]
@@ -16,10 +17,12 @@ final class WinampHotkeyMonitor {
 
     init(
         perform: @escaping @MainActor (UserAction) -> Void,
-        primaryWindows: @escaping @MainActor () -> Set<NSWindowIdentity>
+        primaryWindows: @escaping @MainActor () -> Set<NSWindowIdentity>,
+        playlistWindow: @escaping @MainActor () -> NSWindow?
     ) {
         self.perform = perform
         self.primaryWindows = primaryWindows
+        self.playlistWindow = playlistWindow
         self.plainKeyActions = Dictionary(
             uniqueKeysWithValues: WinampKeyBindings.plainKeyBindings.map { ($0.key, $0.action) }
         )
@@ -44,11 +47,14 @@ final class WinampHotkeyMonitor {
         }
         guard appShortcutModifiers.isEmpty else { return event }
 
+        // ↑/↓ adjust volume, except over the playlist, where they move the
+        // cursor. Defer those to the playlist's own monitor so the outcome
+        // doesn't depend on keyDown-monitor registration order.
         switch event.keyCode {
         case 123: perform(.seekBy(seconds: -5)); return nil
         case 124: perform(.seekBy(seconds: +5)); return nil
-        case 125: perform(.adjustVolume(percent: -1)); return nil
-        case 126: perform(.adjustVolume(percent: +1)); return nil
+        case 125 where window !== playlistWindow(): perform(.adjustVolume(percent: -1)); return nil
+        case 126 where window !== playlistWindow(): perform(.adjustVolume(percent: +1)); return nil
         default:
             break
         }

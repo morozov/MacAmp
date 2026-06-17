@@ -28,6 +28,7 @@ targets:
     resources:
       - path: MacAmpApp/Skins
       - path: MacAmpApp/AppIcon.icon
+      - path: MacAmpApp/FileIcons
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hankyeomans.MacAmp
