@@ -3,6 +3,7 @@ import AppKit
 
 @main
 struct MacAmpApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var skinManager: SkinManager
     @State private var audioPlayer: AudioPlayer
     @State private var dockingController: DockingController
@@ -101,6 +102,15 @@ struct MacAmpApp: App {
         WindowCoordinator.shared = coordinator
         WindowCoordinatorBox.shared.value = coordinator
         dockingController.windowCoordinator = coordinator
+
+        // Route files opened from Finder ("Open With", double-click, drag onto
+        // the app icon) once collaborators exist; cold-launch opens that arrived
+        // earlier are flushed here.
+        FileOpenRouter.shared.configure(
+            audioPlayer: audioPlayer,
+            playbackCoordinator: playbackCoordinator,
+            skinManager: skinManager
+        )
     }
 
     var body: some Scene {

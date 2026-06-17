@@ -146,6 +146,36 @@ final class PlaylistWindowActions: NSObject {
         }
     }
 
+    /// Open media, playlists, and cue sheets from outside the app (Finder
+    /// double-click, "Open With", drag onto the app icon): replace the current
+    /// playlist with the opened file(s) and start playing. This is the shell-open
+    /// semantics — the playlist is clobbered, not appended to. The in-app Add
+    /// Files menu remains the append/enqueue path. Skins and EQ presets are
+    /// routed elsewhere before reaching here.
+    ///
+    /// Playback starts at the first track, or at a `#EXTMACAMP-CURRENT` marker
+    /// when the opened file is a MacAmp-saved playlist that carries one.
+    func openExternalURLs(
+        _ urls: [URL],
+        audioPlayer: AudioPlayer,
+        playbackCoordinator: PlaybackCoordinator?
+    ) async {
+        let coordinator = playbackCoordinator ?? self.playbackCoordinator
+
+        audioPlayer.clearPlaylist()
+        let hint = await handleSelectedURLs(urls, audioPlayer: audioPlayer)
+
+        let target: Int? = {
+            if let hint, audioPlayer.playlist.indices.contains(hint.absoluteIndex) {
+                return hint.absoluteIndex
+            }
+            return audioPlayer.playlist.isEmpty ? nil : 0
+        }()
+
+        guard let target, let coordinator else { return }
+        await coordinator.play(track: audioPlayer.playlist[target])
+    }
+
     // MARK: - File Handling (async — awaits M3U parsing)
 
     /// Hint surfaced by `handleSelectedURLs` for the caller's post-load decision.
@@ -177,6 +207,11 @@ final class PlaylistWindowActions: NSObject {
                    audioPlayer.playlist.indices.contains(offset + ci) {
                     firstHint = SelectionHint(absoluteIndex: offset + ci)
                 }
+            } else if ext == "pls" {
+                let entries = await Task.detached(priority: .userInitiated) {
+                    PLSParser.parse(fileURL: url)
+                }.value
+                audioPlayer.addEntries(entries)
             } else if ext == "cue" {
                 await parseAndAddCue(url, audioPlayer: audioPlayer, reportFailureLoudly: true)
             } else if let sidecar = CueParser.sidecarCueURL(for: url) {

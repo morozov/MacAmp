@@ -199,7 +199,8 @@ final class WindowCoordinator {
 
         hotkeyMonitor = WinampHotkeyMonitor(
             perform: { [userActionDispatcher] action in userActionDispatcher.perform(action) },
-            primaryWindows: { [weak self] in self?.primaryWindowIdentities() ?? [] }
+            primaryWindows: { [weak self] in self?.primaryWindowIdentities() ?? [] },
+            playlistWindow: { [weak self] in self?.playlistWindow }
         )
         menuShortcutMonitor = MainShortcutMonitor(
             perform: { [userActionDispatcher] action in userActionDispatcher.perform(action) },
