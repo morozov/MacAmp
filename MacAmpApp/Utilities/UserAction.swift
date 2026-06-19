@@ -49,6 +49,9 @@ enum UserAction: Hashable, Sendable {
 
     case openFiles
 
+    /// Prompt for an internet-radio stream URL and add it to the playlist.
+    case addLocation
+
     // MARK: Window visibility
 
     case toggleMainWindow

@@ -42,6 +42,7 @@ enum WinampKeyBindings {
     static let trackInfo            = WinampKeyBinding(key: "i", modifiers: .command,              action: .showTrackInfo)
     static let milkdrop             = WinampKeyBinding(key: "k", modifiers: .command,              action: .toggleMilkdropWindow)
     static let openFiles            = WinampKeyBinding(key: "o", modifiers: .command,              action: .openFiles)
+    static let addLocation          = WinampKeyBinding(key: "l", modifiers: .command,              action: .addLocation)
     static let openOptionsMenu      = WinampKeyBinding(key: "o", modifiers: [.command, .shift],    action: .showOptionsMenu)
     static let videoWindow          = WinampKeyBinding(key: "v", modifiers: [.command, .shift],    action: .toggleVideoWindow)
     static let shadeMainWindow      = WinampKeyBinding(key: "1", modifiers: [.command, .option],   action: .shadeMainWindow)
@@ -85,7 +86,7 @@ enum WinampKeyBindings {
     /// Every ⌘-modifier menu shortcut, consumed by `MainShortcutMonitor`.
     static let menuShortcutBindings: [WinampKeyBinding] = [
         alwaysOnTop, doubleSize, timeMode, trackInfo, milkdrop,
-        openFiles, openOptionsMenu, videoWindow,
+        openFiles, addLocation, openOptionsMenu, videoWindow,
         shadeMainWindow, shadePlaylistWindow, shadeEqualizerWindow,
     ]
 }
