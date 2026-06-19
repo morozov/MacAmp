@@ -39,7 +39,6 @@ enum WinampKeyBindings {
     static let alwaysOnTop          = WinampKeyBinding(key: "a", modifiers: .command,              action: .toggleAlwaysOnTop)
     static let doubleSize           = WinampKeyBinding(key: "d", modifiers: .command,              action: .toggleDoubleSize)
     static let timeMode             = WinampKeyBinding(key: "t", modifiers: .command,              action: .toggleTimeDisplayMode)
-    static let trackInfo            = WinampKeyBinding(key: "i", modifiers: .command,              action: .showTrackInfo)
     static let milkdrop             = WinampKeyBinding(key: "k", modifiers: .command,              action: .toggleMilkdropWindow)
     static let loadPlaylist         = WinampKeyBinding(key: "o", modifiers: .command,              action: .loadPlaylist)
     static let addLocation          = WinampKeyBinding(key: "l", modifiers: .command,              action: .addLocation)
@@ -67,6 +66,7 @@ enum WinampKeyBindings {
     static let toggleMainWindowAlt      = WinampKeyBinding(key: "w", modifiers: .option, action: .toggleMainWindow)
     static let togglePlaylistWindowAlt  = WinampKeyBinding(key: "e", modifiers: .option, action: .togglePlaylistWindow)
     static let toggleEqualizerWindowAlt = WinampKeyBinding(key: "g", modifiers: .option, action: .toggleEqualizerWindow)
+    static let trackInfo                = WinampKeyBinding(key: "3", modifiers: .option, action: .showTrackInfo)
 
     // MARK: Plain-key tables consumed by WinampHotkeyMonitor
 
@@ -77,15 +77,15 @@ enum WinampKeyBindings {
         cycleRepeatHotkey, toggleShuffleHotkey
     ]
 
-    /// Option+letter shortcuts, looked up by `event.charactersIgnoringModifiers`
+    /// Option-modified shortcuts, looked up by `event.charactersIgnoringModifiers`
     /// when the modifier set is exactly Option.
     static let optionKeyBindings: [WinampKeyBinding] = [
-        toggleMainWindowAlt, togglePlaylistWindowAlt, toggleEqualizerWindowAlt
+        toggleMainWindowAlt, togglePlaylistWindowAlt, toggleEqualizerWindowAlt, trackInfo
     ]
 
     /// Every ⌘-modifier menu shortcut, consumed by `MainShortcutMonitor`.
     static let menuShortcutBindings: [WinampKeyBinding] = [
-        alwaysOnTop, doubleSize, timeMode, trackInfo, milkdrop,
+        alwaysOnTop, doubleSize, timeMode, milkdrop,
         loadPlaylist, addLocation, minimizeWindow, preferences, openOptionsMenu, videoWindow,
         shadeMainWindow, shadePlaylistWindow, shadeEqualizerWindow,
     ]
