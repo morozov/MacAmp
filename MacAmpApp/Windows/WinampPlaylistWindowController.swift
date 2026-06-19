@@ -29,6 +29,9 @@ class WinampPlaylistWindowController: NSWindowController {
 
         window.hasShadow = true
 
+        // Stable handle for UI tests to locate the playlist window.
+        window.setAccessibilityIdentifier("MacAmp.PlaylistWindow")
+
         // Create view with environment injection
         let rootView = WinampPlaylistWindow()
             .environment(skinManager)
