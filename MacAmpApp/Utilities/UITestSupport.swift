@@ -35,4 +35,12 @@ enum UITestSupport {
     /// Application-support subdirectory for persisted files. A distinct folder
     /// in UI-test mode keeps the test playlist out of the user's real one.
     static var appSupportDirectoryName: String { isActive ? "MacAmp-UITest" : "MacAmp" }
+
+    /// Number of placeholder tracks to seed into the playlist at launch, for
+    /// tests that need a populated list (crop, clear). Zero unless the test
+    /// sets `MACAMP_UITEST_SEED_PLAYLIST`.
+    static var seedPlaylistCount: Int {
+        guard isActive else { return 0 }
+        return Int(ProcessInfo.processInfo.environment["MACAMP_UITEST_SEED_PLAYLIST"] ?? "") ?? 0
+    }
 }

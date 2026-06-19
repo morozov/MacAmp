@@ -47,7 +47,9 @@ final class PlaylistWindowInteractionState {
         playlistCount: @escaping () -> Int,
         visibleTrackCount: @escaping () -> Int,
         removeTrack: @escaping (Int) -> Void,
-        playTrackAt: @escaping (Int) -> Void
+        playTrackAt: @escaping (Int) -> Void,
+        cropToSelection: @escaping (Set<Int>) -> Void,
+        clearPlaylist: @escaping () -> Void
     ) {
         keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // Do NOT use `self?.handleKeyPress(...) ?? event`: Swift collapses
@@ -62,7 +64,9 @@ final class PlaylistWindowInteractionState {
                 playlistCount: playlistCount(),
                 visibleTrackCount: visibleTrackCount(),
                 removeTrack: removeTrack,
-                playTrackAt: playTrackAt
+                playTrackAt: playTrackAt,
+                cropToSelection: cropToSelection,
+                clearPlaylist: clearPlaylist
             )
         }
     }
@@ -108,11 +112,32 @@ final class PlaylistWindowInteractionState {
         playlistCount: Int,
         visibleTrackCount: Int,
         removeTrack: (Int) -> Void,
-        playTrackAt: (Int) -> Void
+        playTrackAt: (Int) -> Void,
+        cropToSelection: (Set<Int>) -> Void = { _ in },
+        clearPlaylist: () -> Void = {}
     ) -> NSEvent? {
         guard isPlaylistKey else { return event }
 
         let appModifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+
+        // ⌘⌫ crop to the selection, ⌘⇧⌫ clear the list. Consumed here so the
+        // chord never falls through to a global handler when the playlist is key.
+        if event.keyCode == Self.deleteKeyCode || event.keyCode == Self.forwardDeleteKeyCode {
+            if appModifiers == .command {
+                if !selectedIndices.isEmpty { cropToSelection(selectedIndices) }
+                selectedIndices = []
+                cursorIndex = nil
+                anchorIndex = nil
+                return nil
+            }
+            if appModifiers == [.command, .shift] {
+                clearPlaylist()
+                selectedIndices = []
+                cursorIndex = nil
+                anchorIndex = nil
+                return nil
+            }
+        }
 
         // ⌘A → Select All when the playlist is key (Webamp menuWa5.ts item
         // 40205). Outside the playlist, the same shortcut reaches Always On

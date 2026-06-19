@@ -66,6 +66,18 @@ struct WinampPlaylistWindow: View {
         }
         .frame(width: windowWidth, height: settings.isPlaylistWindowShaded ? 14 : windowHeight)
         .background(Color.black)
+        .overlay(alignment: .topLeading) {
+            // UI-test probe: exposes the live track count to the accessibility
+            // tree so a chord's effect on the list is observable. Present only
+            // under MACAMP_UITEST; invisible and inert otherwise.
+            if UITestSupport.isActive {
+                Text(verbatim: "count")
+                    .accessibilityIdentifier("MacAmp.Playlist.Count")
+                    .accessibilityValue("\(audioPlayer.playlist.count)")
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+            }
+        }
         .onAppear {
             ui.installKeyboardMonitor(
                 playlistWindow: { WindowCoordinator.shared?.playlistWindow },
@@ -76,7 +88,14 @@ struct WinampPlaylistWindow: View {
                     guard audioPlayer.playlist.indices.contains(index) else { return }
                     let track = audioPlayer.playlist[index]
                     Task { await playbackCoordinator.play(track: track) }
-                }
+                },
+                cropToSelection: { indices in
+                    let tracks = indices.sorted()
+                        .filter { audioPlayer.playlist.indices.contains($0) }
+                        .map { audioPlayer.playlist[$0] }
+                    audioPlayer.replacePlaylist(with: tracks)
+                },
+                clearPlaylist: { audioPlayer.clearPlaylist() }
             )
             PlaylistWindowActions.shared.radioLibrary = radioLibrary
             PlaylistWindowActions.shared.playbackCoordinator = playbackCoordinator

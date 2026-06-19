@@ -37,6 +37,12 @@ struct MacAmpApp: App {
             }
         }
 
+        if UITestSupport.seedPlaylistCount > 0 {
+            audioPlayer.addEntries((1...UITestSupport.seedPlaylistCount).map {
+                M3UEntry(url: URL(fileURLWithPath: "/tmp/macamp-uitest-\($0).mp3"), title: "UITest Track \($0)")
+            })
+        }
+
         let playlistStateStore = PlaylistStateStore(
             audioPlayer: audioPlayer,
             playbackCoordinator: playbackCoordinator

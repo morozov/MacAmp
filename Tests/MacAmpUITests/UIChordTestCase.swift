@@ -15,6 +15,10 @@ import XCTest
 class UIChordTestCase: XCTestCase {
     private(set) var app: XCUIApplication!
 
+    /// Extra launch-environment entries a subclass needs, e.g. seeding the
+    /// playlist. Merged on top of the deterministic-mode default.
+    var extraLaunchEnvironment: [String: String] { [:] }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
@@ -22,6 +26,7 @@ class UIChordTestCase: XCTestCase {
         // UserDefaults suite, so every run starts from a normal-size,
         // non-shaded, empty-playlist state with no further setup.
         app.launchEnvironment["MACAMP_UITEST"] = "1"
+        for (key, value) in extraLaunchEnvironment { app.launchEnvironment[key] = value }
         app.launch()
     }
 
@@ -69,6 +74,11 @@ class UIChordTestCase: XCTestCase {
 
     /// Sends a key chord to the focused app through the real event pipeline.
     func sendChord(_ key: String, _ modifiers: XCUIElement.KeyModifierFlags = []) {
+        app.typeKey(key, modifierFlags: modifiers)
+    }
+
+    /// Sends a special key (e.g. `.delete`) with modifiers through the pipeline.
+    func sendKey(_ key: XCUIKeyboardKey, _ modifiers: XCUIElement.KeyModifierFlags = []) {
         app.typeKey(key, modifierFlags: modifiers)
     }
 
