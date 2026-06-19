@@ -20,6 +20,9 @@ class WinampEqualizerWindowController: NSWindowController {
 
         window.hasShadow = true
 
+        // Stable handle for UI tests to locate the equalizer window.
+        window.setAccessibilityIdentifier("MacAmp.EqualizerWindow")
+
         // Create view with environment injection
         let rootView = WinampEqualizerWindow()
             .environment(skinManager)

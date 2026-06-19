@@ -12,6 +12,7 @@ struct WinampEqualizerWindow: View {
     @Environment(UserActionDispatcher.self) var dispatcher
 
     @State private var showPresetPicker: Bool = false
+    @State private var keyMonitor: Any?
 
     private var isShadeMode: Bool { settings.isEqualizerWindowShaded }
 
@@ -126,6 +127,31 @@ struct WinampEqualizerWindow: View {
         )
         .fixedSize()  // Lock measured size so background sees final geometry
         .background(Color.black) // Must be AFTER fixedSize to see scaled dimensions
+        .onAppear { installKeyMonitor() }
+        .onDisappear {
+            if let keyMonitor {
+                NSEvent.removeMonitor(keyMonitor)
+                self.keyMonitor = nil
+            }
+        }
+    }
+
+    /// Installs a key monitor that handles the equalizer's bare-key bindings
+    /// while the equalizer window is key, consuming the event so it does not
+    /// fall through to the global transport keys.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.window === WindowCoordinator.shared?.eqWindow else { return event }
+            let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            guard mods.isEmpty,
+                  let chars = event.charactersIgnoringModifiers?.lowercased(),
+                  let action = EqualizerWindowHotkeys.action(forKey: chars) else {
+                return event
+            }
+            dispatcher.perform(action)
+            return nil
+        }
     }
     
     @ViewBuilder
@@ -156,6 +182,8 @@ struct WinampEqualizerWindow: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .accessibilityIdentifier("MacAmp.EQ.OnOff")
+            .accessibilityValue(audioPlayer.isEqOn ? "on" : "off")
             .at(EQCoords.onButton)
 
             Button(action: { dispatcher.perform(.toggleEqualizerAuto) }) {
@@ -164,6 +192,8 @@ struct WinampEqualizerWindow: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .accessibilityIdentifier("MacAmp.EQ.Auto")
+            .accessibilityValue(audioPlayer.eqAutoEnabled ? "on" : "off")
             .at(EQCoords.autoButton)
         }
     }
