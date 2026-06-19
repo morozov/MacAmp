@@ -64,6 +64,8 @@ final class UserActionDispatcher {
             audioPlayer.repeatMode = audioPlayer.repeatMode.next()
         case .openFiles:
             presentOpenPanel()
+        case .addLocation:
+            PlaylistWindowActions.shared.presentAddURLPrompt(audioPlayer: audioPlayer)
         case .toggleMainWindow:
             dockingController.toggleMain()
         case .togglePlaylistWindow:

@@ -370,7 +370,12 @@ final class PlaylistWindowActions: NSObject {
             showAlert("Error", "Audio player not available")
             return
         }
+        presentAddURLPrompt(audioPlayer: audioPlayer)
+    }
 
+    /// Prompts for an internet-radio stream URL and adds it to the playlist.
+    /// Shared by the menu action and the `⌘L` keyboard shortcut.
+    func presentAddURLPrompt(audioPlayer: AudioPlayer) {
         let alert = NSAlert()
         alert.messageText = "Add Internet Radio Station"
         alert.informativeText = "Enter the stream URL (HTTP or HTTPS):"
