@@ -129,13 +129,21 @@ final class WinampMainWindowInteractionState {
 
     // MARK: - Time Helpers
 
+    /// Digit values for the MM:SS display, as
+    /// `[hundredMinutes, tenMinutes, oneMinutes, tenSeconds, oneSeconds]`.
+    ///
+    /// The hundred-minutes slot is `-1` below 100 minutes so callers leave it
+    /// blank, and becomes visible from 100 minutes on. Every place wraps
+    /// modulo 10, so the display rolls over at 1000 minutes rather than
+    /// clamping or growing a fourth minute digit.
     func timeDigits(from seconds: Double) -> [Int] {
         let totalSeconds = max(0, Int(seconds))
         let minutes = totalSeconds / 60
         let secs = totalSeconds % 60
 
         return [
-            minutes / 10,
+            minutes >= 100 ? (minutes / 100) % 10 : -1,
+            (minutes / 10) % 10,
             minutes % 10,
             secs / 10,
             secs % 10

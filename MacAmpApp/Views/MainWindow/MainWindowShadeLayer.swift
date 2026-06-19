@@ -93,7 +93,7 @@ struct MainWindowShadeLayer: View {
         let remaining = settings.timeDisplayMode == .remaining && !stopped && duration > 0
         let seconds = remaining ? max(0.0, duration - playbackCoordinator.displayTime) : playbackCoordinator.displayTime
         // Two minute digits: 99:59 is the most the strip can show.
-        let digits = interactionState.timeDigits(from: min(seconds, 5999)).map { Character(String($0)) }
+        let digits = interactionState.timeDigits(from: min(seconds, 5999)).dropFirst().map { Character(String($0)) }
         let visible = !stopped && (!playbackCoordinator.isPaused || interactionState.pauseBlinkVisible)
         let characters: [Character] = [remaining ? "-" : " "] + digits
         ZStack(alignment: .topLeading) {
