@@ -16,6 +16,12 @@ final class UserActionDispatcher {
     private let settings: AppSettings
     private let presentOpenPanel: () -> Void
 
+    /// The key window captured when File Info was invoked. The dialog is a sheet
+    /// owned by the main window, so when it closes AppKit returns key status to
+    /// the main window — not to the window the command came from. Capturing the
+    /// prior key window lets `restoreTrackInfoFocus()` return focus to it.
+    @ObservationIgnored private weak var trackInfoReturnWindow: NSWindow?
+
     init(
         audioPlayer: AudioPlayer,
         playbackCoordinator: PlaybackCoordinator,
@@ -85,6 +91,7 @@ final class UserActionDispatcher {
         case .toggleTimeDisplayMode:
             settings.toggleTimeDisplayMode()
         case .showTrackInfo:
+            trackInfoReturnWindow = NSApp.keyWindow
             settings.trackInfoTrack = trackInfoTarget()
             settings.showTrackInfoDialog = true
         case .showOptionsMenu:
@@ -107,6 +114,19 @@ final class UserActionDispatcher {
             playbackCoordinator.togglePlayPause()
         } else if !playbackCoordinator.isPlaying {
             audioPlayer.play()
+        }
+    }
+
+    /// Returns key focus to the window that invoked File Info. Called when the
+    /// dialog closes. The restore is deferred so it runs after AppKit has ended
+    /// the sheet and handed key status back to the main window; restoring sooner
+    /// would be overridden by that hand-off. No-op if nothing was captured or the
+    /// window is gone.
+    func restoreTrackInfoFocus() {
+        guard let window = trackInfoReturnWindow else { return }
+        trackInfoReturnWindow = nil
+        DispatchQueue.main.async {
+            window.makeKeyAndOrderFront(nil)
         }
     }
 
