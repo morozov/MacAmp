@@ -38,7 +38,7 @@ final class EqualizerController {
     var isEqOn: Bool = false {
         didSet {
             eqNode.bypass = !isEqOn
-            UserDefaults.standard.set(isEqOn, forKey: "isEqOn")
+            UITestSupport.defaults.set(isEqOn, forKey: "isEqOn")
             fanOutToVideoTaps()
         }
     }
@@ -134,8 +134,8 @@ final class EqualizerController {
     init() {
         configureEQ()
         // Restore EQ on/off state
-        if UserDefaults.standard.object(forKey: "isEqOn") != nil {
-            isEqOn = UserDefaults.standard.bool(forKey: "isEqOn")
+        if UITestSupport.defaults.object(forKey: "isEqOn") != nil {
+            isEqOn = UITestSupport.defaults.bool(forKey: "isEqOn")
         }
     }
 

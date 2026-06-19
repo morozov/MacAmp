@@ -26,7 +26,7 @@ final class PlaylistStateStore {
         guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
         }
-        let dir = base.appendingPathComponent("MacAmp", isDirectory: true)
+        let dir = base.appendingPathComponent(UITestSupport.appSupportDirectoryName, isDirectory: true)
         if !fm.fileExists(atPath: dir.path) {
             do {
                 try fm.createDirectory(at: dir, withIntermediateDirectories: true)

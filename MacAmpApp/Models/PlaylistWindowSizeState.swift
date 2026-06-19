@@ -158,11 +158,11 @@ final class PlaylistWindowSizeState {
 
     private func saveSize() {
         let data = ["width": size.width, "height": size.height]
-        UserDefaults.standard.set(data, forKey: Self.sizeKey)
+        UITestSupport.defaults.set(data, forKey: Self.sizeKey)
     }
 
     private func loadSize() {
-        guard let data = UserDefaults.standard.dictionary(forKey: Self.sizeKey),
+        guard let data = UITestSupport.defaults.dictionary(forKey: Self.sizeKey),
               let width = data["width"] as? Int,
               let height = data["height"] as? Int else {
             // Default to standard playlist size if no saved value

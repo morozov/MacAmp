@@ -23,6 +23,10 @@ class WinampMainWindowController: NSWindowController {
 
         window.hasShadow = true
 
+        // Stable handle for UI tests to locate the main window in the
+        // accessibility tree; inert for normal use.
+        window.setAccessibilityIdentifier("MacAmp.MainWindow")
+
         // Create view with environment injection
         let rootView = WinampMainWindow()
             .environment(skinManager)

@@ -32,7 +32,7 @@ final class EQPresetStore {
     // MARK: - User Presets (UserDefaults)
 
     private func loadUserPresets() {
-        let defaults = UserDefaults.standard
+        let defaults = UITestSupport.defaults
         guard let data = defaults.data(forKey: userPresetDefaultsKey) else { return }
         do {
             var decoded = try JSONDecoder().decode([EQPreset].self, from: data)
@@ -48,7 +48,7 @@ final class EQPresetStore {
     private func persistUserPresets() {
         do {
             let data = try JSONEncoder().encode(userPresets)
-            UserDefaults.standard.set(data, forKey: userPresetDefaultsKey)
+            UITestSupport.defaults.set(data, forKey: userPresetDefaultsKey)
         } catch {
             AppLog.warn(.audio, "Failed to persist user EQ presets: \(error)")
         }

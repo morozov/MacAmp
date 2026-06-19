@@ -28,7 +28,7 @@ struct WindowFrameStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = UITestSupport.defaults) {
         self.defaults = defaults
     }
 

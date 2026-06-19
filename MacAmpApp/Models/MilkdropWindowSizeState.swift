@@ -101,11 +101,11 @@ final class MilkdropWindowSizeState {
 
     private func saveSize() {
         let data = ["width": size.width, "height": size.height]
-        UserDefaults.standard.set(data, forKey: Self.sizeKey)
+        UITestSupport.defaults.set(data, forKey: Self.sizeKey)
     }
 
     func loadSize() {
-        guard let data = UserDefaults.standard.dictionary(forKey: Self.sizeKey),
+        guard let data = UITestSupport.defaults.dictionary(forKey: Self.sizeKey),
               let width = data["width"] as? Int,
               let height = data["height"] as? Int else {
             size = .milkdropDefault
