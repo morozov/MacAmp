@@ -98,14 +98,14 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
     /// Commit the current `volume` to `UserDefaults`.
     /// Approved callers (plan §6.1): `PlaybackCoordinator.commitVolume()`.
     internal func commitVolumeToDefaults() {
-        UserDefaults.standard.set(volume, forKey: Keys.volume)
+        UITestSupport.defaults.set(volume, forKey: Keys.volume)
     }
 
     /// Commit the current `balance` to `UserDefaults`.
     /// Approved callers (plan §6.1, mirrored per todo 1B.9):
     /// `PlaybackCoordinator.commitBalance()`.
     internal func commitBalanceToDefaults() {
-        UserDefaults.standard.set(balance, forKey: Keys.balance)
+        UITestSupport.defaults.set(balance, forKey: Keys.balance)
     }
 
     // MARK: - Playlist (extracted to PlaylistController)
@@ -228,10 +228,10 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
     // MARK: - Init / Deinit
 
     init() {
-        if let saved = UserDefaults.standard.object(forKey: Keys.volume) as? Float {
+        if let saved = UITestSupport.defaults.object(forKey: Keys.volume) as? Float {
             self.volume = saved
         }
-        if let saved = UserDefaults.standard.object(forKey: Keys.balance) as? Float {
+        if let saved = UITestSupport.defaults.object(forKey: Keys.balance) as? Float {
             self.balance = saved
         }
 

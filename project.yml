@@ -68,12 +68,27 @@ targets:
         GENERATE_INFOPLIST_FILE: true
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: AC3LGVEJJ8
+  MacAmpUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: Tests/MacAmpUITests
+    dependencies:
+      - target: MacAmp
+    settings:
+      base:
+        SWIFT_VERSION: '6.2'
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: AC3LGVEJJ8
+        TEST_TARGET_NAME: MacAmp
 schemes:
   MacAmpApp:
     build:
       targets:
         MacAmp: all
         MacAmpTests: [test]
+        MacAmpUITests: [test]
     run:
       config: Debug
       environmentVariables:
@@ -85,3 +100,4 @@ schemes:
       gatherCoverageData: false
       targets:
         - MacAmpTests
+        - MacAmpUITests

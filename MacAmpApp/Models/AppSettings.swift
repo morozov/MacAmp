@@ -62,13 +62,13 @@ final class AppSettings {
 
     var materialIntegration: MaterialIntegrationLevel {
         didSet {
-            UserDefaults.standard.set(materialIntegration.rawValue, forKey: Keys.materialIntegration)
+            UITestSupport.defaults.set(materialIntegration.rawValue, forKey: Keys.materialIntegration)
         }
     }
 
     var enableLiquidGlass: Bool {
         didSet {
-            UserDefaults.standard.set(enableLiquidGlass, forKey: Keys.enableLiquidGlass)
+            UITestSupport.defaults.set(enableLiquidGlass, forKey: Keys.enableLiquidGlass)
         }
     }
 
@@ -79,22 +79,22 @@ final class AppSettings {
         self.enableLiquidGlass = Self.loadLiquidGlassSetting()
 
         // Load persisted clutter bar states (default to false)
-        self.isDoubleSizeMode = UserDefaults.standard.bool(forKey: Keys.isDoubleSizeMode)
-        self.isAlwaysOnTop = UserDefaults.standard.bool(forKey: Keys.isAlwaysOnTop)
-        self.isMainWindowShaded = UserDefaults.standard.bool(forKey: Keys.isMainWindowShaded)
-        self.isPlaylistWindowShaded = UserDefaults.standard.bool(forKey: Keys.isPlaylistWindowShaded)
-        self.isEqualizerWindowShaded = UserDefaults.standard.bool(forKey: Keys.isEqualizerWindowShaded)
-        self.showVideoWindow = UserDefaults.standard.bool(forKey: Keys.showVideoWindow)
-        self.showMilkdropWindow = UserDefaults.standard.bool(forKey: Keys.showMilkdropWindow)
+        self.isDoubleSizeMode = UITestSupport.defaults.bool(forKey: Keys.isDoubleSizeMode)
+        self.isAlwaysOnTop = UITestSupport.defaults.bool(forKey: Keys.isAlwaysOnTop)
+        self.isMainWindowShaded = UITestSupport.defaults.bool(forKey: Keys.isMainWindowShaded)
+        self.isPlaylistWindowShaded = UITestSupport.defaults.bool(forKey: Keys.isPlaylistWindowShaded)
+        self.isEqualizerWindowShaded = UITestSupport.defaults.bool(forKey: Keys.isEqualizerWindowShaded)
+        self.showVideoWindow = UITestSupport.defaults.bool(forKey: Keys.showVideoWindow)
+        self.showMilkdropWindow = UITestSupport.defaults.bool(forKey: Keys.showMilkdropWindow)
         // Default to visible — preserves existing first-launch behavior where
         // showAllWindows() unconditionally surfaced the EQ window.
-        self.showEqualizerWindow = (UserDefaults.standard.object(forKey: Keys.showEqualizerWindow) as? Bool) ?? true
-        self.showPlaylistWindow = (UserDefaults.standard.object(forKey: Keys.showPlaylistWindow) as? Bool) ?? true
+        self.showEqualizerWindow = (UITestSupport.defaults.object(forKey: Keys.showEqualizerWindow) as? Bool) ?? true
+        self.showPlaylistWindow = (UITestSupport.defaults.object(forKey: Keys.showPlaylistWindow) as? Bool) ?? true
 
         // NOTE: videoWindowSizeMode loading removed - Size2D persisted in VideoWindowSizeState
 
         // Load persisted time display mode (default to elapsed)
-        if let rawTimeMode = UserDefaults.standard.string(forKey: Keys.timeDisplayMode),
+        if let rawTimeMode = UITestSupport.defaults.string(forKey: Keys.timeDisplayMode),
            let mode = TimeDisplayMode(rawValue: rawTimeMode) {
             self.timeDisplayMode = mode
         } else {
@@ -102,25 +102,25 @@ final class AppSettings {
         }
 
         // Load persisted visualizer mode (default to spectrum)
-        let rawMode = UserDefaults.standard.integer(forKey: Keys.visualizerMode)
+        let rawMode = UITestSupport.defaults.integer(forKey: Keys.visualizerMode)
         self.visualizerMode = VisualizerMode(rawValue: rawMode) ?? .spectrum
 
         // Load repeat mode with migration from old boolean (preserves user preference)
-        if let savedMode = UserDefaults.standard.string(forKey: Keys.repeatMode),
+        if let savedMode = UITestSupport.defaults.string(forKey: Keys.repeatMode),
            let mode = RepeatMode(rawValue: savedMode) {
             self.repeatMode = mode
         } else {
             // Migrate from old boolean key: true → .all, false → .off
-            let oldRepeat = UserDefaults.standard.bool(forKey: Keys.audioPlayerRepeatEnabled)
+            let oldRepeat = UITestSupport.defaults.bool(forKey: Keys.audioPlayerRepeatEnabled)
             self.repeatMode = oldRepeat ? .all : .off
         }
 
         // Load Butterchurn settings (with sensible defaults)
-        self.butterchurnRandomize = UserDefaults.standard.object(forKey: Keys.butterchurnRandomize) as? Bool ?? true
-        self.butterchurnCycling = UserDefaults.standard.object(forKey: Keys.butterchurnCycling) as? Bool ?? true
-        let savedInterval = UserDefaults.standard.double(forKey: Keys.butterchurnCycleInterval)
+        self.butterchurnRandomize = UITestSupport.defaults.object(forKey: Keys.butterchurnRandomize) as? Bool ?? true
+        self.butterchurnCycling = UITestSupport.defaults.object(forKey: Keys.butterchurnCycling) as? Bool ?? true
+        let savedInterval = UITestSupport.defaults.double(forKey: Keys.butterchurnCycleInterval)
         self.butterchurnCycleInterval = savedInterval > 0 ? savedInterval : 15.0
-        self.butterchurnTrackTitleInterval = UserDefaults.standard.double(forKey: Keys.butterchurnTrackTitleInterval)
+        self.butterchurnTrackTitleInterval = UITestSupport.defaults.double(forKey: Keys.butterchurnTrackTitleInterval)
     }
     
     static func instance() -> AppSettings {
@@ -152,10 +152,10 @@ final class AppSettings {
     /// The currently selected skin identifier
     var selectedSkinIdentifier: String? {
         get {
-            UserDefaults.standard.string(forKey: Self.selectedSkinKey)
+            UITestSupport.defaults.string(forKey: Self.selectedSkinKey)
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: Self.selectedSkinKey)
+            UITestSupport.defaults.set(newValue, forKey: Self.selectedSkinKey)
         }
     }
 
@@ -165,7 +165,7 @@ final class AppSettings {
     }
 
     private static func loadMaterialIntegration() -> MaterialIntegrationLevel {
-        guard let savedRaw = UserDefaults.standard.string(forKey: Keys.materialIntegration),
+        guard let savedRaw = UITestSupport.defaults.string(forKey: Keys.materialIntegration),
               let saved = MaterialIntegrationLevel(rawValue: savedRaw) else {
             return .hybrid
         }
@@ -173,7 +173,7 @@ final class AppSettings {
     }
 
     private static func loadLiquidGlassSetting() -> Bool {
-        guard let stored = UserDefaults.standard.object(forKey: Keys.enableLiquidGlass) as? Bool else {
+        guard let stored = UITestSupport.defaults.object(forKey: Keys.enableLiquidGlass) as? Bool else {
             return true
         }
         return stored
@@ -208,7 +208,7 @@ final class AppSettings {
     /// to maintain @Observable reactivity
     var isDoubleSizeMode: Bool = false {
         didSet {
-            UserDefaults.standard.set(isDoubleSizeMode, forKey: Keys.isDoubleSizeMode)
+            UITestSupport.defaults.set(isDoubleSizeMode, forKey: Keys.isDoubleSizeMode)
         }
     }
 
@@ -218,7 +218,7 @@ final class AppSettings {
     /// Note: Using didSet pattern to maintain @Observable reactivity
     var isAlwaysOnTop: Bool = false {
         didSet {
-            UserDefaults.standard.set(isAlwaysOnTop, forKey: Keys.isAlwaysOnTop)
+            UITestSupport.defaults.set(isAlwaysOnTop, forKey: Keys.isAlwaysOnTop)
         }
     }
 
@@ -229,7 +229,7 @@ final class AppSettings {
     /// Persists across app restarts - defaults to false (full window)
     var isMainWindowShaded: Bool = false {
         didSet {
-            UserDefaults.standard.set(isMainWindowShaded, forKey: Keys.isMainWindowShaded)
+            UITestSupport.defaults.set(isMainWindowShaded, forKey: Keys.isMainWindowShaded)
         }
     }
 
@@ -237,7 +237,7 @@ final class AppSettings {
     /// Persisted under the original `playlistIsShadeMode` key.
     var isPlaylistWindowShaded: Bool = false {
         didSet {
-            UserDefaults.standard.set(isPlaylistWindowShaded, forKey: Keys.isPlaylistWindowShaded)
+            UITestSupport.defaults.set(isPlaylistWindowShaded, forKey: Keys.isPlaylistWindowShaded)
         }
     }
 
@@ -245,7 +245,7 @@ final class AppSettings {
     /// Persisted under the original `equalizerIsShadeMode` key.
     var isEqualizerWindowShaded: Bool = false {
         didSet {
-            UserDefaults.standard.set(isEqualizerWindowShaded, forKey: Keys.isEqualizerWindowShaded)
+            UITestSupport.defaults.set(isEqualizerWindowShaded, forKey: Keys.isEqualizerWindowShaded)
         }
     }
 
@@ -261,7 +261,7 @@ final class AppSettings {
     /// Note: Using didSet pattern to maintain @Observable reactivity
     var timeDisplayMode: TimeDisplayMode = .elapsed {
         didSet {
-            UserDefaults.standard.set(timeDisplayMode.rawValue, forKey: Keys.timeDisplayMode)
+            UITestSupport.defaults.set(timeDisplayMode.rawValue, forKey: Keys.timeDisplayMode)
         }
     }
 
@@ -292,7 +292,7 @@ final class AppSettings {
     /// V - Video Window visibility state (persisted)
     var showVideoWindow: Bool = false {
         didSet {
-            UserDefaults.standard.set(showVideoWindow, forKey: Keys.showVideoWindow)
+            UITestSupport.defaults.set(showVideoWindow, forKey: Keys.showVideoWindow)
         }
     }
 
@@ -304,7 +304,7 @@ final class AppSettings {
     /// Milkdrop Window visibility state (persisted)
     var showMilkdropWindow: Bool = false {
         didSet {
-            UserDefaults.standard.set(showMilkdropWindow, forKey: Keys.showMilkdropWindow)
+            UITestSupport.defaults.set(showMilkdropWindow, forKey: Keys.showMilkdropWindow)
         }
     }
 
@@ -312,14 +312,14 @@ final class AppSettings {
     /// when the user closes/opens the EQ window so the choice survives a relaunch.
     var showEqualizerWindow: Bool = true {
         didSet {
-            UserDefaults.standard.set(showEqualizerWindow, forKey: Keys.showEqualizerWindow)
+            UITestSupport.defaults.set(showEqualizerWindow, forKey: Keys.showEqualizerWindow)
         }
     }
 
     /// Playlist window visibility state (persisted). Mirrors `showEqualizerWindow`.
     var showPlaylistWindow: Bool = true {
         didSet {
-            UserDefaults.standard.set(showPlaylistWindow, forKey: Keys.showPlaylistWindow)
+            UITestSupport.defaults.set(showPlaylistWindow, forKey: Keys.showPlaylistWindow)
         }
     }
 
@@ -335,7 +335,7 @@ final class AppSettings {
     /// Current visualizer mode - click analyzer to cycle
     var visualizerMode: VisualizerMode = .spectrum {
         didSet {
-            UserDefaults.standard.set(visualizerMode.rawValue, forKey: Keys.visualizerMode)
+            UITestSupport.defaults.set(visualizerMode.rawValue, forKey: Keys.visualizerMode)
         }
     }
 
@@ -344,21 +344,21 @@ final class AppSettings {
     /// Whether to randomize preset selection (default: true, matches Winamp)
     var butterchurnRandomize: Bool = true {
         didSet {
-            UserDefaults.standard.set(butterchurnRandomize, forKey: Keys.butterchurnRandomize)
+            UITestSupport.defaults.set(butterchurnRandomize, forKey: Keys.butterchurnRandomize)
         }
     }
 
     /// Whether automatic preset cycling is enabled (default: true)
     var butterchurnCycling: Bool = true {
         didSet {
-            UserDefaults.standard.set(butterchurnCycling, forKey: Keys.butterchurnCycling)
+            UITestSupport.defaults.set(butterchurnCycling, forKey: Keys.butterchurnCycling)
         }
     }
 
     /// Preset cycle interval in seconds (default: 15s, Milkdrop standard)
     var butterchurnCycleInterval: Double = 15.0 {
         didSet {
-            UserDefaults.standard.set(butterchurnCycleInterval, forKey: Keys.butterchurnCycleInterval)
+            UITestSupport.defaults.set(butterchurnCycleInterval, forKey: Keys.butterchurnCycleInterval)
         }
     }
 
@@ -366,7 +366,7 @@ final class AppSettings {
     /// When > 0, track title is displayed at this interval automatically
     var butterchurnTrackTitleInterval: Double = 0 {
         didSet {
-            UserDefaults.standard.set(butterchurnTrackTitleInterval, forKey: Keys.butterchurnTrackTitleInterval)
+            UITestSupport.defaults.set(butterchurnTrackTitleInterval, forKey: Keys.butterchurnTrackTitleInterval)
         }
     }
 
@@ -406,7 +406,7 @@ final class AppSettings {
     /// Note: Using didSet pattern to maintain @Observable reactivity
     var repeatMode: RepeatMode = .off {
         didSet {
-            UserDefaults.standard.set(repeatMode.rawValue, forKey: Keys.repeatMode)
+            UITestSupport.defaults.set(repeatMode.rawValue, forKey: Keys.repeatMode)
         }
     }
 }

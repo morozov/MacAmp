@@ -38,14 +38,14 @@ final class RadioStationLibrary {
         do {
             let encoder = JSONEncoder()
             let data = try encoder.encode(stations)
-            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+            UITestSupport.defaults.set(data, forKey: userDefaultsKey)
         } catch {
             AppLog.error(.audio, "Failed to save radio stations: \(error)")
         }
     }
 
     private func loadStations() {
-        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else { return }
+        guard let data = UITestSupport.defaults.data(forKey: userDefaultsKey) else { return }
 
         do {
             let decoder = JSONDecoder()

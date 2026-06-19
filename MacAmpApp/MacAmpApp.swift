@@ -29,7 +29,7 @@ struct MacAmpApp: App {
         // before the playlist window has a chance to render. The store itself
         // is constructed AFTER population so its observation loop doesn't
         // fire a redundant save during restore.
-        if let snapshot = PlaylistStateStore.restoreSnapshot() {
+        if !UITestSupport.isActive, let snapshot = PlaylistStateStore.restoreSnapshot() {
             audioPlayer.addEntries(snapshot.entries)
             if let idx = snapshot.currentIndex,
                audioPlayer.playlist.indices.contains(idx) {
