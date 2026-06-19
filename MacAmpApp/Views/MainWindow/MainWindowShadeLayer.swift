@@ -55,12 +55,15 @@ struct MainWindowShadeLayer: View {
             let shouldShowDigits = !playbackCoordinator.isPaused || interactionState.pauseBlinkVisible
 
             if shouldShowDigits {
-                SimpleSpriteImage(.digit(digits[0]), width: 9, height: 13).offset(x: 6, y: 0)
-                SimpleSpriteImage(.digit(digits[1]), width: 9, height: 13).offset(x: 17, y: 0)
+                if digits[0] >= 0 {
+                    SimpleSpriteImage(.digit(digits[0]), width: 9, height: 13).offset(x: -5, y: 0)
+                }
+                SimpleSpriteImage(.digit(digits[1]), width: 9, height: 13).offset(x: 6, y: 0)
+                SimpleSpriteImage(.digit(digits[2]), width: 9, height: 13).offset(x: 17, y: 0)
             }
             if shouldShowDigits {
-                SimpleSpriteImage(.digit(digits[2]), width: 9, height: 13).offset(x: 35, y: 0)
-                SimpleSpriteImage(.digit(digits[3]), width: 9, height: 13).offset(x: 46, y: 0)
+                SimpleSpriteImage(.digit(digits[3]), width: 9, height: 13).offset(x: 35, y: 0)
+                SimpleSpriteImage(.digit(digits[4]), width: 9, height: 13).offset(x: 46, y: 0)
             }
         }
         .frame(width: 56, height: 13, alignment: .leading)

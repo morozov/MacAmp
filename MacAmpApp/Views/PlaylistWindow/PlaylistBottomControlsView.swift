@@ -37,14 +37,20 @@ struct PlaylistBottomControlsView: View {
         return "\(selected)/\(total)"
     }
 
+    private var remainingMinutes: Int { max(0, Int(remainingTime)) / 60 }
+
+    /// Hundred-minutes digit, present only at or above 100 minutes so the slot
+    /// stays blank below that. Wraps modulo 10, rolling over at 1000 minutes.
+    private var miniTimeHundreds: String? {
+        remainingMinutes >= 100 ? String((remainingMinutes / 100) % 10) : nil
+    }
+
     private var miniTimeMinutes: String {
-        let total = max(0, Int(remainingTime))
-        return String(format: "%02d", min(total / 60, 99))
+        String(format: "%02d", remainingMinutes % 100)
     }
 
     private var miniTimeSeconds: String {
-        let total = max(0, Int(remainingTime))
-        return String(format: "%02d", total % 60)
+        String(format: "%02d", max(0, Int(remainingTime)) % 60)
     }
 
     var body: some View {
@@ -121,6 +127,8 @@ struct PlaylistBottomControlsView: View {
         // at offset 4 (width 3), minutes at offset 9 (width 10), seconds at
         // offset 22 (width 10). The colon at offset 19-21 is part of the
         // PLAYLIST_BOTTOM_RIGHT_CORNER sprite — leave that gap uncovered.
+        // From 100 minutes on, a hundred-minutes digit fills offset 4 (width 5)
+        // and the minus shifts left to offset 0 to clear it.
         // SwiftUI .position centers, so add half-frame to land each top-left
         // at Winamp's coordinates.
         let glyphHeight: CGFloat = 6
@@ -140,7 +148,13 @@ struct PlaylistBottomControlsView: View {
         if audioPlayer.isPlaying {
             PlaylistTimeText("-", spacing: 0)
                 .frame(width: 3, height: glyphHeight, alignment: .leading)
-                .position(x: miniLeft + 4 + 1.5, y: miniMidY)
+                .position(x: miniLeft + (miniTimeHundreds != nil ? 0 : 4) + 1.5, y: miniMidY)
+        }
+
+        if let hundreds = miniTimeHundreds {
+            PlaylistTimeText(hundreds, spacing: 0)
+                .frame(width: 5, height: glyphHeight, alignment: .leading)
+                .position(x: miniLeft + 4 + 2.5, y: miniMidY)
         }
 
         PlaylistTimeText(miniTimeMinutes, spacing: 0)
