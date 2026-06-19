@@ -115,9 +115,12 @@ struct AppCommands: Commands {
 
         CommandGroup(replacing: .newItem) {
             Button("Open Files...") {
-                dispatcher.perform(WinampKeyBindings.openFiles.action)
+                dispatcher.perform(.openFiles)
             }
-            .keyboardShortcut(WinampKeyBindings.openFiles.shortcut)
+            Button("Load Playlist...") {
+                dispatcher.perform(WinampKeyBindings.loadPlaylist.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.loadPlaylist.shortcut)
         }
 
         // MacAmp has no settings window; hide the empty "Settings…" item.

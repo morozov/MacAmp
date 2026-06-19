@@ -542,7 +542,12 @@ final class PlaylistWindowActions: NSObject {
 
     @objc func loadList(_ sender: NSMenuItem) {
         guard let audioPlayer = sender.representedObject as? AudioPlayer else { return }
+        presentLoadPlaylistPanel(audioPlayer: audioPlayer)
+    }
 
+    /// Prompts for an M3U playlist file and loads it. Shared by the menu action
+    /// and the `⌘O` keyboard shortcut.
+    func presentLoadPlaylistPanel(audioPlayer: AudioPlayer) {
         let m3uType = UTType(filenameExtension: "m3u") ?? .plainText
         let m3u8Type = UTType(filenameExtension: "m3u8") ?? .plainText
 
