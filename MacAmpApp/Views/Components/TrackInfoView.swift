@@ -1,120 +1,314 @@
 import SwiftUI
+import AppKit
 
-/// Track information dialog showing metadata for the currently playing track
+/// Read-only File Info dialog for the current track, modeled on Winamp's
+/// classic File Info window. The left side is a labeled grid of edit fields
+/// (read-only for now); the right side is two read-only text boxes — Format
+/// Info and Replay Gain — whose contents follow Winamp's templated lines.
 struct TrackInfoView: View {
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(\.dismiss) private var dismiss
 
+    @State private var info: FileInfo?
+
+    private let labelWidth: CGFloat = 78
+
+    private var currentURL: URL? { audioPlayer.currentTrack?.url }
+
+    private var isStream: Bool {
+        if case .radioStation = playbackCoordinator.currentSource { return true }
+        return false
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Track Information")
-                .font(.headline)
-                .padding(.top, 10)
-
-            buildContent()
-
-            Button("Close") {
-                dismiss()
-            }
-            .keyboardShortcut(.defaultAction)
-            .padding(.bottom, 10)
-        }
-        .frame(minWidth: 350, minHeight: 200)
-    }
-
-    @ViewBuilder
-    private func buildContent() -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if audioPlayer.currentTrack != nil {
-                buildLocalTrackInfo()
-            } else if case .radioStation = playbackCoordinator.currentSource {
-                buildStreamInfo()
-            } else {
-                Text("No track or stream loaded")
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 20)
+            header
+            content
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
             }
         }
-        .frame(minWidth: 300, maxWidth: 400)
-        .padding(.horizontal)
+        .padding(16)
+        .frame(width: currentURL != nil ? 660 : 380)
+        .task(id: currentURL) { await load() }
     }
 
+    // MARK: - Loading
+
+    private func load() async {
+        guard let url = currentURL else { info = nil; return }
+        info = nil
+        let loaded = await MetadataLoader.loadFileInfo(from: url)
+        if currentURL == url { info = loaded }
+    }
+
+    // MARK: - Header
+
     @ViewBuilder
-    private func buildLocalTrackInfo() -> some View {
-        if let title = audioPlayer.currentTrack?.title, !title.isEmpty {
-            InfoRow(label: "Title:", value: title)
+    private var header: some View {
+        if let url = currentURL {
+            pathField(url.path)
+        } else if isStream {
+            pathField(playbackCoordinator.displayTitle)
         }
+    }
 
-        if let artist = audioPlayer.currentTrack?.artist, !artist.isEmpty {
-            InfoRow(label: "Artist:", value: artist)
+    private func pathField(_ text: String) -> some View {
+        Fieldset {
+            Text(text)
+                .font(.system(size: 11))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
         }
+    }
 
-        if audioPlayer.currentDuration > 0 {
-            InfoRow(label: "Duration:", value: TimeFormatting.formatDuration(audioPlayer.currentDuration))
-        }
+    // MARK: - Content
 
-        Divider()
-
-        buildTechnicalDetails()
-
-        if audioPlayer.bitrate == 0 && audioPlayer.sampleRate == 0 {
-            Text("Limited metadata available")
+    @ViewBuilder
+    private var content: some View {
+        if currentURL != nil {
+            HStack(alignment: .top, spacing: 16) {
+                metadataGroup
+                VStack(alignment: .leading, spacing: 12) {
+                    formatInfoGroup
+                    replayGainGroup
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        } else if isStream {
+            Fieldset(title: "Format Info") {
+                textBox(streamFormatText, height: 60)
+            }
+            Text("Stream playback — some metadata may be unavailable")
                 .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.top, 4)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("No track or stream loaded")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 30)
         }
     }
 
+    // MARK: - Metadata fields
+
+    private var metadataGroup: some View {
+        Fieldset(title: "Metadata", width: 320) {
+            VStack(alignment: .leading, spacing: 6) {
+                // Three equal-width fields share the row; with the BPM field
+                // last, its right edge lands on the column's right edge (where
+                // the Title/Album fields end), and nothing overflows the box.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    primaryLabel("Track #")
+                    valueField(info?.trackNumber)
+                    inlineLabel("Disc #")
+                    valueField(info?.discNumber)
+                    inlineLabel("BPM")
+                    valueField(info?.bpm)
+                }
+                row("Title", info?.title ?? audioPlayer.currentTrack?.title)
+                row("Artist", info?.artist ?? audioPlayer.currentTrack?.artist)
+                row("Album", info?.album)
+                row("Album Artist", info?.albumArtist)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    primaryLabel("Year")
+                    valueField(info?.year, width: 48)
+                    inlineLabel("Genre")
+                    valueField(info?.genre)
+                }
+                row("Comment", info?.comment, multiline: true)
+                row("Composer", info?.composer)
+                row("Publisher", info?.publisher)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    /// A single-field row: label in the shared label column, field filling the
+    /// rest. The label column keeps every primary field on one left edge.
     @ViewBuilder
-    private func buildStreamInfo() -> some View {
-        InfoRow(label: "Stream:", value: playbackCoordinator.displayTitle)
+    private func row(_ label: String, _ value: String?, multiline: Bool = false) -> some View {
+        HStack(alignment: multiline ? .top : .firstTextBaseline, spacing: 8) {
+            primaryLabel(label)
+            valueField(value, multiline: multiline)
+        }
+    }
 
-        Divider()
+    private func primaryLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .frame(width: labelWidth, alignment: .trailing)
+    }
 
-        buildTechnicalDetails()
-
-        Text("Stream playback - some metadata may be unavailable")
-            .font(.caption)
-            .foregroundColor(.secondary)
-            .padding(.top, 4)
+    private func inlineLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize()
     }
 
     @ViewBuilder
-    private func buildTechnicalDetails() -> some View {
-        if audioPlayer.bitrate > 0 {
-            InfoRow(label: "Bitrate:", value: "\(audioPlayer.bitrate) kbps")
+    private func valueField(_ value: String?, width: CGFloat? = nil, multiline: Bool = false) -> some View {
+        let box = ReadOnlyField(text: value ?? "", lineBreak: multiline ? .byWordWrapping : .byTruncatingTail, multiline: multiline)
+        if let width {
+            box.frame(width: width, height: 20)
+        } else {
+            box.frame(maxWidth: .infinity).frame(height: multiline ? 46 : 20)
         }
+    }
 
+    // MARK: - Format Info / Replay Gain text boxes
+
+    private var formatInfoGroup: some View {
+        Fieldset(title: "Format Info") {
+            textBox(formatInfoText, height: 150)
+        }
+    }
+
+    private var replayGainGroup: some View {
+        Fieldset(title: "Replay Gain") {
+            textBox(replayGainText, height: 44)
+        }
+    }
+
+    private func textBox(_ text: String, height: CGFloat) -> some View {
+        ReadOnlyField(text: text, lineBreak: .byWordWrapping, multiline: true)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .padding(.vertical, 2)
+    }
+
+    // MARK: - Templated text
+
+    /// Format Info lines, following Winamp's `GetFileDescription` order and
+    /// strings. A line is present only when its datum is available.
+    private var formatInfoText: String {
+        guard let info else { return "" }
+        var lines: [String] = []
+        if let b = info.payloadSizeBytes { lines.append("Payload Size: \(b) bytes") }
+        if let o = info.headerOffsetBytes { lines.append("Header found at: \(o) bytes") }
+        if let len = info.lengthSeconds { lines.append("Length: \(Int(len)) seconds") }
+        if let name = info.formatName {
+            lines.append(info.isMPEG ? name : "Format: \(name)")
+        }
+        if let kbps = info.bitrateKbps {
+            if let frames = info.frameCount {
+                lines.append("\(kbps) kbps, \(frames) frames")
+            } else {
+                lines.append("\(kbps) kbps")
+            }
+        }
+        if let hz = info.sampleRateHz {
+            let mode = info.channelMode ?? channelWord(info.channelCount)
+            lines.append(mode.map { "\(hz) Hz \($0)" } ?? "\(hz) Hz")
+        }
+        if let crc = info.crc, let copyrighted = info.copyrighted {
+            lines.append("CRC: \(yesNo(crc)), Copyrighted: \(yesNo(copyrighted))")
+        }
+        if let original = info.original, let emphasis = info.emphasis {
+            lines.append("Original: \(yesNo(original)), Emphasis: \(emphasis)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private var replayGainText: String {
+        guard info != nil else { return "" }
+        return "Track Gain: \(info?.trackGain ?? "not present")\nAlbum Gain: \(info?.albumGain ?? "not present")"
+    }
+
+    private var streamFormatText: String {
+        var lines: [String] = []
+        if audioPlayer.bitrate > 0 { lines.append("\(audioPlayer.bitrate) kbps") }
         if audioPlayer.sampleRate > 0 {
-            let khz = audioPlayer.sampleRate / 1000
-            InfoRow(label: "Sample Rate:", value: "\(khz) kHz")
+            let count = audioPlayer.channelCount
+            let mode = count == 1 ? "Mono" : count == 2 ? "Stereo" : count > 0 ? "\(count) channels" : nil
+            lines.append(mode.map { "\(audioPlayer.sampleRate) Hz \($0)" } ?? "\(audioPlayer.sampleRate) Hz")
         }
-
-        if audioPlayer.channelCount > 0 {
-            let channelText = audioPlayer.channelCount == 1 ? "Mono" :
-                            audioPlayer.channelCount == 2 ? "Stereo" :
-                            "\(audioPlayer.channelCount) channels"
-            InfoRow(label: "Channels:", value: channelText)
-        }
+        return lines.joined(separator: "\n")
     }
 
+    private func yesNo(_ value: Bool) -> String { value ? "Yes" : "No" }
+
+    private func channelWord(_ count: Int?) -> String? {
+        guard let count, count > 0 else { return nil }
+        return count == 1 ? "Mono" : count == 2 ? "Stereo" : "\(count) channels"
+    }
 }
 
-/// Helper view for displaying label-value pairs
-struct InfoRow: View {
-    let label: String
-    let value: String
+/// A bordered box with an optional title, drawn entirely in SwiftUI. Every box
+/// in the dialog uses this one container, so their borders all sit at the same
+/// frame edge and their left edges align by construction — unlike `GroupBox`,
+/// whose border inset differs between titled and untitled boxes.
+private struct Fieldset<Content: View>: View {
+    var title: String?
+    var width: CGFloat?
+    @ViewBuilder var content: () -> Content
+
+    init(title: String? = nil, width: CGFloat? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.width = width
+        self.content = content
+    }
 
     var body: some View {
-        HStack(alignment: .top) {
-            Text(label)
-                .fontWeight(.medium)
-                .frame(width: 100, alignment: .leading)
-            Text(value)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 5) {
+            if let title {
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 2)
+            }
+            content()
+                .padding(8)
+                // Size the box itself, then wrap it in the border — so a fixed
+                // width never fights an outer frame and shift the box left/right.
+                .frame(width: width, alignment: .topLeading)
+                .frame(maxWidth: width == nil ? .infinity : nil, alignment: .topLeading)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.secondary.opacity(0.06)))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.secondary.opacity(0.22)))
         }
-        .font(.system(size: 12))
+    }
+}
+
+/// A native, read-only `NSTextField` styled as an edit field: bezeled, white
+/// background, selectable, non-editable. Used for the metadata fields and the
+/// Format Info / Replay Gain text boxes.
+private struct ReadOnlyField: NSViewRepresentable {
+    let text: String
+    var lineBreak: NSLineBreakMode = .byTruncatingTail
+    var multiline = false
+
+    func makeNSView(context: Context) -> NSTextField {
+        let tf = NSTextField()
+        tf.isEditable = false
+        tf.isSelectable = true
+        tf.isBezeled = true
+        tf.bezelStyle = .squareBezel
+        tf.drawsBackground = true
+        tf.backgroundColor = .textBackgroundColor
+        tf.font = .systemFont(ofSize: 11)
+        tf.focusRingType = .none
+        tf.usesSingleLineMode = !multiline
+        tf.lineBreakMode = lineBreak
+        tf.cell?.lineBreakMode = lineBreak
+        tf.cell?.wraps = multiline
+        tf.cell?.isScrollable = false
+        tf.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tf.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        tf.setContentHuggingPriority(multiline ? .defaultLow : .defaultHigh, for: .vertical)
+        tf.stringValue = text
+        return tf
+    }
+
+    func updateNSView(_ tf: NSTextField, context: Context) {
+        if tf.stringValue != text { tf.stringValue = text }
     }
 }
 
