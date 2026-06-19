@@ -85,6 +85,7 @@ final class UserActionDispatcher {
         case .toggleTimeDisplayMode:
             settings.toggleTimeDisplayMode()
         case .showTrackInfo:
+            settings.trackInfoTrack = trackInfoTarget()
             settings.showTrackInfoDialog = true
         case .showOptionsMenu:
             settings.showOptionsMenuTrigger = true
@@ -107,6 +108,18 @@ final class UserActionDispatcher {
         } else if !playbackCoordinator.isPlaying {
             audioPlayer.play()
         }
+    }
+
+    /// File Info target, matching Winamp: the playlist editor shows info for the
+    /// selected item, the main window for the playing track. Prefer the
+    /// (first) selected playlist track; fall back to the playing track.
+    private func trackInfoTarget() -> Track? {
+        let playlist = audioPlayer.playlist
+        if let first = PlaylistWindowActions.shared.selectedIndices.sorted().first,
+           playlist.indices.contains(first) {
+            return playlist[first]
+        }
+        return audioPlayer.currentTrack
     }
 
     /// Local-file relative seek. No-op for streams (no seekable timeline).

@@ -278,6 +278,10 @@ final class AppSettings {
     /// I - Track Info Dialog (transient, not persisted)
     var showTrackInfoDialog: Bool = false
 
+    /// The track whose info the dialog shows, resolved when it opens: the
+    /// selected playlist item if any, else the playing track. Transient.
+    var trackInfoTrack: Track?
+
     /// Trigger the Preferences window. Set true to request; an observer
     /// (currently `WinampMainWindow`, which has SwiftUI's `openWindow`
     /// in scope) opens the window and resets the flag.

@@ -8,13 +8,18 @@ import AppKit
 struct TrackInfoView: View {
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
+    @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
 
     @State private var info: FileInfo?
 
     private let labelWidth: CGFloat = 78
 
-    private var currentURL: URL? { audioPlayer.currentTrack?.url }
+    /// The track resolved when the dialog opened (selected playlist item, else
+    /// the playing track).
+    private var target: Track? { settings.trackInfoTrack }
+
+    private var currentURL: URL? { target?.url }
 
     private var isStream: Bool {
         if case .radioStation = playbackCoordinator.currentSource { return true }
@@ -111,8 +116,8 @@ struct TrackInfoView: View {
                     inlineLabel("BPM")
                     valueField(info?.bpm)
                 }
-                row("Title", info?.title ?? audioPlayer.currentTrack?.title)
-                row("Artist", info?.artist ?? audioPlayer.currentTrack?.artist)
+                row("Title", info?.title ?? target?.title)
+                row("Artist", info?.artist ?? target?.artist)
                 row("Album", info?.album)
                 row("Album Artist", info?.albumArtist)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -318,4 +323,5 @@ private struct ReadOnlyField: NSViewRepresentable {
     return TrackInfoView()
         .environment(audioPlayer)
         .environment(PlaybackCoordinator(audioPlayer: audioPlayer, streamPlayer: streamPlayer))
+        .environment(AppSettings.instance())
 }
