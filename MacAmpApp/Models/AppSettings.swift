@@ -204,6 +204,10 @@ final class AppSettings {
     /// I - Track Info Dialog (transient, not persisted)
     var showTrackInfoDialog: Bool = false
 
+    /// The track whose info the dialog shows, resolved when it opens: the
+    /// selected playlist item if any, else the playing track. Transient.
+    var trackInfoTrack: Track?
+
     // MARK: - Video Window (TASK 2: Day 6)
 
     /// V - Video Window visibility state (persisted)

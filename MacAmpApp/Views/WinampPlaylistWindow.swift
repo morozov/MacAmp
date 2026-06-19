@@ -95,6 +95,11 @@ struct WinampPlaylistWindow: View {
         .onChange(of: sizeState.size) { _, _ in
             WindowCoordinator.shared?.updatePlaylistWindowSize(to: windowPixelSize)
         }
+        // Keep the shared selection live so File Info (⌘I) can resolve the
+        // selected track, the way Winamp's playlist file-info acts on selection.
+        .onChange(of: ui.selectedIndices) { _, new in
+            PlaylistWindowActions.shared.selectedIndices = new
+        }
         .onDisappear {
             ui.removeKeyboardMonitor()
         }
