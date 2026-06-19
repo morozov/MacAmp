@@ -30,4 +30,21 @@ final class PlaylistChordUITests: UIChordTestCase {
         let cleared = waitUntil({ count() }, satisfies: { $0 == "0" })
         XCTAssertEqual(cleared, "0", "⌘⇧⌫ should clear the playlist when it is key")
     }
+
+    func test_cmdDelete_cropsToSelectedRow() {
+        window("MacAmp.PlaylistWindow")
+        let probe = app.staticTexts["MacAmp.Playlist.Count"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 10), "playlist count probe not found")
+        func count() -> String { probe.value as? String ?? "" }
+        XCTAssertEqual(count(), "5", "seed should produce five tracks")
+
+        // Clicking a row focuses the playlist window and selects that track.
+        let row = app.otherElements.matching(identifier: "MacAmp.Playlist.Row.1").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "playlist row not found")
+        row.click()
+
+        sendKey(.delete, .command)
+        let cropped = waitUntil({ count() }, satisfies: { $0 == "1" })
+        XCTAssertEqual(cropped, "1", "⌘⌫ should crop the list to the one selected track")
+    }
 }
