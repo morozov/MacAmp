@@ -66,6 +66,8 @@ final class UserActionDispatcher {
             presentOpenPanel()
         case .addLocation:
             PlaylistWindowActions.shared.presentAddURLPrompt(audioPlayer: audioPlayer)
+        case .loadPlaylist:
+            PlaylistWindowActions.shared.presentLoadPlaylistPanel(audioPlayer: audioPlayer)
         case .toggleMainWindow:
             dockingController.toggleMain()
         case .togglePlaylistWindow:
