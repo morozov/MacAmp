@@ -29,6 +29,8 @@ struct PlaylistTrackListView: View {
                                 }
                             )
                         )
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("MacAmp.Playlist.Row.\(index)")
                 }
             }
         }
