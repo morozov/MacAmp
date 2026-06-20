@@ -12,6 +12,7 @@ struct TrackInfoView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var info: FileInfo?
+    @State private var fields = FieldRegistry()
 
     private let labelWidth: CGFloat = 78
 
@@ -110,11 +111,11 @@ struct TrackInfoView: View {
                 // the Title/Album fields end), and nothing overflows the box.
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     primaryLabel("Track #")
-                    valueField(info?.trackNumber)
+                    valueField(info?.trackNumber, key: "Track #")
                     inlineLabel("Disc #")
-                    valueField(info?.discNumber)
+                    valueField(info?.discNumber, key: "Disc #")
                     inlineLabel("BPM")
-                    valueField(info?.bpm)
+                    valueField(info?.bpm, key: "BPM")
                 }
                 row("Title", info?.title ?? target?.title)
                 row("Artist", info?.artist ?? target?.artist)
@@ -122,9 +123,9 @@ struct TrackInfoView: View {
                 row("Album Artist", info?.albumArtist)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     primaryLabel("Year")
-                    valueField(info?.year, width: 48)
+                    valueField(info?.year, key: "Year", width: 48)
                     inlineLabel("Genre")
-                    valueField(info?.genre)
+                    valueField(info?.genre, key: "Genre")
                 }
                 row("Comment", info?.comment, multiline: true)
                 row("Composer", info?.composer)
@@ -140,7 +141,7 @@ struct TrackInfoView: View {
     private func row(_ label: String, _ value: String?, multiline: Bool = false) -> some View {
         HStack(alignment: multiline ? .top : .firstTextBaseline, spacing: 8) {
             primaryLabel(label)
-            valueField(value, multiline: multiline)
+            valueField(value, key: label, multiline: multiline)
         }
     }
 
@@ -149,6 +150,8 @@ struct TrackInfoView: View {
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .frame(width: labelWidth, alignment: .trailing)
+            .contentShape(Rectangle())
+            .onTapGesture { fields.handle(text).selectAll() }
     }
 
     private func inlineLabel(_ text: String) -> some View {
@@ -156,11 +159,13 @@ struct TrackInfoView: View {
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .fixedSize()
+            .contentShape(Rectangle())
+            .onTapGesture { fields.handle(text).selectAll() }
     }
 
     @ViewBuilder
-    private func valueField(_ value: String?, width: CGFloat? = nil, multiline: Bool = false) -> some View {
-        let box = ReadOnlyField(text: value ?? "", lineBreak: multiline ? .byWordWrapping : .byTruncatingTail, multiline: multiline)
+    private func valueField(_ value: String?, key: String, width: CGFloat? = nil, multiline: Bool = false) -> some View {
+        let box = ReadOnlyField(text: value ?? "", lineBreak: multiline ? .byWordWrapping : .byTruncatingTail, multiline: multiline, handle: fields.handle(key))
         if let width {
             box.frame(width: width, height: 20)
         } else {
@@ -288,9 +293,11 @@ private struct ReadOnlyField: NSViewRepresentable {
     let text: String
     var lineBreak: NSLineBreakMode = .byTruncatingTail
     var multiline = false
+    var handle: FieldHandle?
 
     func makeNSView(context: Context) -> NSTextField {
         let tf = NSTextField()
+        handle?.field = tf
         tf.isEditable = false
         tf.isSelectable = true
         tf.isBezeled = true
@@ -313,7 +320,32 @@ private struct ReadOnlyField: NSViewRepresentable {
     }
 
     func updateNSView(_ tf: NSTextField, context: Context) {
+        handle?.field = tf
         if tf.stringValue != text { tf.stringValue = text }
+    }
+}
+
+/// Holds a weak reference to a field's `NSTextField` so its label can select the
+/// field's text on click. Selection is a no-op when the field is empty.
+private final class FieldHandle {
+    weak var field: NSTextField?
+
+    func selectAll() {
+        guard let field, !field.stringValue.isEmpty else { return }
+        field.selectText(nil)
+    }
+}
+
+/// Vends one stable `FieldHandle` per label, so a label click reaches the same
+/// field across view updates.
+private final class FieldRegistry {
+    private var handles: [String: FieldHandle] = [:]
+
+    func handle(_ key: String) -> FieldHandle {
+        if let existing = handles[key] { return existing }
+        let handle = FieldHandle()
+        handles[key] = handle
+        return handle
     }
 }
 
