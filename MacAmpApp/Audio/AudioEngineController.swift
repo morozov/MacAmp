@@ -28,6 +28,10 @@ final class AudioEngineController {
     private var progressTimer: Timer?
     private var playheadOffset: Double = 0
 
+    /// Format the player node is connected with, which chunks must arrive in.
+    private var graphFormat: AVAudioFormat?
+    private var reader: PlaybackReader!
+
     /// Seconds elapsed in the loaded file at the current render time. 0
     /// when nothing is loaded or playback hasn't begun. Rate-agnostic —
     /// callers multiply by whichever sample rate their frame coordinate
@@ -76,6 +80,12 @@ final class AudioEngineController {
         self.eqNode = eqNode
         self.visualizerPipeline = visualizerPipeline
         setupEngine()
+        reader = PlaybackReader(
+            playerNode: playerNode,
+            feed: visualizerPipeline.analyzerFeed
+        ) { [weak self] seekID in
+            self?.onPlaybackEnded?(seekID)
+        }
     }
 
     /// Tear down engine resources. Called from AudioPlayer's isolated deinit.
@@ -128,6 +138,7 @@ final class AudioEngineController {
         )!
         audioEngine.connect(playerNode, to: eqNode, format: graphFormat)
         audioEngine.connect(eqNode, to: audioEngine.mainMixerNode, format: graphFormat)
+        self.graphFormat = graphFormat
 
         // Verify mixer→output
         if audioEngine.outputConnectionPoints(for: audioEngine.mainMixerNode, outputBus: 0).isEmpty {
@@ -168,6 +179,10 @@ final class AudioEngineController {
         let clampedStart = max(0, min(time, fileDuration))
         let startFrame = AVAudioFramePosition(clampedStart * sampleRate)
 
+        // Everything queued for the old position describes audio that will not
+        // be heard, so the analyzer must forget it before the reader refills.
+        reader.stop()
+
         // Determine end frame: bounded by endTime if provided, otherwise EOF.
         let endFrame: AVAudioFramePosition
         if let endTime {
@@ -183,19 +198,13 @@ final class AudioEngineController {
         playerNode.stop()
 
         if framesRemaining > 0 {
-            let completionID = seekID
-            playerNode.scheduleSegment(
-                file,
-                startingFrame: startFrame,
-                frameCount: AVAudioFrameCount(framesRemaining),
-                at: nil,
-                completionHandler: { [weak self] in
-                    Task { @MainActor [weak self] in
-                        self?.onPlaybackEnded?(completionID)
-                    }
-                }
+            reader.start(
+                url: file.url,
+                startFrame: startFrame,
+                endFrame: endFrame,
+                outputFormat: graphFormat ?? file.processingFormat,
+                seekID: seekID
             )
-
             return true
         } else {
             onPlaybackEnded?(nil)

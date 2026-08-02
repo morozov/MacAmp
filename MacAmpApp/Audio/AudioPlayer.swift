@@ -28,18 +28,6 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         }
     }
 
-    /// Visualizer smoothing (forwarded to pipeline)
-    var visualizerSmoothing: Float {
-        get { visualizerPipeline.smoothing }
-        set { visualizerPipeline.smoothing = newValue }
-    }
-
-    /// Visualizer peak falloff (forwarded to pipeline)
-    var visualizerPeakFalloff: Float {
-        get { visualizerPipeline.peakFalloff }
-        set { visualizerPipeline.peakFalloff = newValue }
-    }
-
     // MARK: - Playback State
 
     private(set) var playbackState: PlaybackState = .idle
@@ -252,15 +240,10 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
                 }
                 guard let slice = self.currentTrack?.cueSlice else { return }
                 let sliceCurrent = max(0, min(currentTime - slice.startTime, slice.duration))
-                self.currentTime = sliceCurrent
-                self.playbackProgress = slice.duration > 0 ? sliceCurrent / slice.duration : 0
+                let sliceProgress = slice.duration > 0 ? sliceCurrent / slice.duration : 0
+                self.publishPlaybackTime(sliceCurrent, progress: sliceProgress)
             } else {
-                self.currentTime = currentTime
-                if self.currentDuration > 0 {
-                    self.playbackProgress = progress
-                } else {
-                    self.playbackProgress = 0
-                }
+                self.publishPlaybackTime(currentTime, progress: self.currentDuration > 0 ? progress : 0)
             }
         }
         engine.onPlaybackEnded = { [weak self] seekID in
@@ -1000,8 +983,43 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
 
     // MARK: - Visualizer Forwarding (backed by VisualizerPipeline)
 
-    func getFrequencyData(bands: Int) -> [Float] {
-        visualizerPipeline.getFrequencyData(bands: bands, isPlaying: isEngineRendering)
+    /// Live, unquantized playback position (seconds), for consumers that need
+    /// precision such as relative seek. The observable `currentTime` is
+    /// quantized to whole seconds so the readout does not re-render 10×/second.
+    var livePlaybackTime: Double { engine.currentPlaybackSeconds }
+
+    /// Whole-second bucket the MM:SS counter shows.
+    static func displaySecond(_ time: Double) -> Int { Int(time) }
+
+    /// Finest grid the seek thumb can land on: the bar's 248−29 pt travel over a
+    /// quarter point, which is one screen pixel at a 2× backing scale under the
+    /// 2× double-size mode. Coarser grids are subsets of it, so bucketing here
+    /// never misses a step the thumb would have taken.
+    private static let thumbSteps = (248.0 - 29.0) * 4
+
+    /// Bucket of the seek bar's travel that `progress` falls in. Two values in
+    /// the same bucket put the thumb on the same screen pixel.
+    static func thumbStep(_ progress: Double) -> Int { Int(progress * thumbSteps) }
+
+    /// Publish playback position, skipping the observable write when the value
+    /// the UI derives from it is unchanged — the counter advances once a second
+    /// and the thumb only when it reaches the next screen pixel, both slower than
+    /// the 10 Hz timer. The skipped writes also make the paused state cost
+    /// nothing to render.
+    private func publishPlaybackTime(_ time: Double, progress: Double) {
+        if Self.displaySecond(time) != Self.displaySecond(currentTime) {
+            currentTime = time
+        }
+        if Self.thumbStep(progress) != Self.thumbStep(playbackProgress) {
+            playbackProgress = progress
+        }
+    }
+
+    func spectrumBands() -> [Float] {
+        visualizerPipeline.spectrumBands(
+            isPlaying: isEngineRendering,
+            playbackTime: engine.currentPlaybackSeconds
+        )
     }
 
     func getWaveformSamples(count: Int) -> [Float] {
