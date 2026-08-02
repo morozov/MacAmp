@@ -9,12 +9,11 @@ struct MainWindowIndicatorsLayer: View {
 
     private typealias Layout = WinampMainWindowLayout
 
-    /// Interval between bitrate-display refreshes. 10 Hz — slower than
-    /// the visualizer's 30 Hz because the digit-by-digit numeric readout
-    /// reads as noise when it ticks faster than the eye can settle on it.
-    /// ~100 ms also matches `LocalFilePacketScanner`'s marker stride, so
-    /// neighboring ticks generally land in distinct windows.
-    private static let bitrateRefreshInterval: TimeInterval = 1.0 / 10.0
+    /// Interval between bitrate-display refreshes. Each tick re-lays out the
+    /// whole hosted main window, and the digit-by-digit numeric readout reads
+    /// as noise when it ticks faster than once a second, so a faster rate is
+    /// pure wasted CPU.
+    private static let bitrateRefreshInterval: TimeInterval = 1.0
 
     var body: some View {
         // Play/Pause indicator

@@ -10,53 +10,14 @@ struct PlaylistBottomControlsView: View {
     let menuPresenter: PlaylistMenuPresenter
     let selectedIndices: Set<Int>
 
-    private var totalPlaylistDuration: Double {
-        audioPlayer.playlist.reduce(0.0) { total, track in
-            total + track.duration
-        }
-    }
-
-    private var selectedTracksDuration: Double {
-        audioPlayer.playlist.enumerated().reduce(0.0) { sum, pair in
-            selectedIndices.contains(pair.offset) ? sum + pair.element.duration : sum
-        }
-    }
-
-    private var remainingTime: Double {
-        guard audioPlayer.currentDuration > 0 else { return 0 }
-        return max(0, audioPlayer.currentDuration - audioPlayer.currentTime)
-    }
-
-    private var trackTimeText: String {
-        // Per Webamp `selectors.ts` getRunningTimeMessage and Winamp
-        // Src/Winamp/draw_pe.cpp lines 752-790 (the seltime / ttime branch),
-        // this field is selectedTracksSum/totalTracksSum — independent of
-        // playback. Left half collapses to "0:00" with nothing selected.
-        let selected = TimeFormatting.formatDuration(selectedTracksDuration)
-        let total = TimeFormatting.formatDuration(totalPlaylistDuration)
-        return "\(selected)/\(total)"
-    }
-
-    private var remainingMinutes: Int { max(0, Int(remainingTime)) / 60 }
-
-    /// Hundred-minutes digit, present only at or above 100 minutes so the slot
-    /// stays blank below that. Wraps modulo 10, rolling over at 1000 minutes.
-    private var miniTimeHundreds: String? {
-        remainingMinutes >= 100 ? String((remainingMinutes / 100) % 10) : nil
-    }
-
-    private var miniTimeMinutes: String {
-        String(format: "%02d", remainingMinutes % 100)
-    }
-
-    private var miniTimeSeconds: String {
-        String(format: "%02d", max(0, Int(remainingTime)) % 60)
-    }
-
     var body: some View {
         buildMenuButtons()
         buildTransportButtons()
-        buildTimeDisplays()
+        PlaylistBottomTimeDisplays(
+            windowWidth: windowWidth,
+            windowHeight: windowHeight,
+            selectedIndices: selectedIndices
+        )
     }
 
     @ViewBuilder
@@ -117,20 +78,69 @@ struct PlaylistBottomControlsView: View {
         .position(x: x, y: y)
     }
 
-    @ViewBuilder
-    private func buildTimeDisplays() -> some View {
-        // Per Src/Winamp/draw_pe.cpp `draw_pe_infostr` (lines 73-103), the
-        // running-time field is 18 × 5-px glyphs with no gap, anchored at
-        // top-left (config_pe_width-143, config_pe_height-28). Per
-        // `draw_pe_timedisp` (lines 562-611), the MiniTime field anchors at
-        // (config_pe_width-86, config_pe_height-15) as discrete slots: minus
-        // at offset 4 (width 3), minutes at offset 9 (width 10), seconds at
-        // offset 22 (width 10). The colon at offset 19-21 is part of the
-        // PLAYLIST_BOTTOM_RIGHT_CORNER sprite — leave that gap uncovered.
-        // From 100 minutes on, a hundred-minutes digit fills offset 4 (width 5)
-        // and the minus shifts left to offset 0 to clear it.
-        // SwiftUI .position centers, so add half-frame to land each top-left
-        // at Winamp's coordinates.
+}
+
+/// Running-time and MiniTime readouts for the playlist bottom bar. Split out so
+/// the ~10 Hz MiniTime update re-renders only these glyphs, not the menu and
+/// transport buttons alongside them.
+struct PlaylistBottomTimeDisplays: View {
+    @Environment(AudioPlayer.self) private var audioPlayer
+
+    let windowWidth: CGFloat
+    let windowHeight: CGFloat
+    let selectedIndices: Set<Int>
+
+    private var totalPlaylistDuration: Double {
+        audioPlayer.playlist.reduce(0.0) { total, track in
+            total + track.duration
+        }
+    }
+
+    private var selectedTracksDuration: Double {
+        audioPlayer.playlist.enumerated().reduce(0.0) { sum, pair in
+            selectedIndices.contains(pair.offset) ? sum + pair.element.duration : sum
+        }
+    }
+
+    private var remainingTime: Double {
+        guard audioPlayer.currentDuration > 0 else { return 0 }
+        return max(0, audioPlayer.currentDuration - audioPlayer.currentTime)
+    }
+
+    private var trackTimeText: String {
+        // The running-time field is selectedTracksSum/totalTracksSum, independent
+        // of playback. Left half collapses to "0:00" with nothing selected.
+        let selected = TimeFormatting.formatDuration(selectedTracksDuration)
+        let total = TimeFormatting.formatDuration(totalPlaylistDuration)
+        return "\(selected)/\(total)"
+    }
+
+    private var remainingMinutes: Int { max(0, Int(remainingTime)) / 60 }
+
+    /// Hundred-minutes digit, present only at or above 100 minutes so the slot
+    /// stays blank below that. Wraps modulo 10, rolling over at 1000 minutes.
+    private var miniTimeHundreds: String? {
+        remainingMinutes >= 100 ? String((remainingMinutes / 100) % 10) : nil
+    }
+
+    private var miniTimeMinutes: String {
+        String(format: "%02d", remainingMinutes % 100)
+    }
+
+    private var miniTimeSeconds: String {
+        String(format: "%02d", max(0, Int(remainingTime)) % 60)
+    }
+
+    var body: some View {
+        // Running-time field: 18 × 5-px glyphs with no gap, top-left at
+        // (windowWidth-143, windowHeight-28). MiniTime field: top-left at
+        // (windowWidth-86, windowHeight-15) as discrete slots — minus at
+        // offset 4 (width 3), minutes at offset 9 (width 10), seconds at offset
+        // 22 (width 10). The colon at offset 19-21 belongs to the
+        // PLAYLIST_BOTTOM_RIGHT_CORNER sprite — leave that gap uncovered. From
+        // 100 minutes on, a hundred-minutes digit fills offset 4 (width 5) and
+        // the minus shifts left to offset 0 to clear it. SwiftUI .position
+        // centers, so add half-frame to land each top-left at its coordinates.
         let glyphHeight: CGFloat = 6
         let glyphWidth: CGFloat = 5
         let runningWidth = glyphWidth * 18
