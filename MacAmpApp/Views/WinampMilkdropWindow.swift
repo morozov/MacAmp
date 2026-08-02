@@ -31,11 +31,19 @@ struct WinampMilkdropWindow: View {
     // just beeps.
     @State private var keyMonitor: Any?
 
+    /// Latches true the first time the Milkdrop window is shown. The WebView is
+    /// created lazily on that first show: mounting it eagerly spawns a WebKit
+    /// content process whose throttler and IPC churn cost several percent CPU
+    /// during playback even while this window has never been opened.
+    @State private var hasBeenShown = false
+
     var body: some View {
         MilkdropWindowChromeView(sizeState: sizeState) {
             ZStack {
-                // ALWAYS create WebView - it must exist to send 'ready' message
-                ButterchurnWebView(bridge: bridge)
+                // Create the WebView lazily on first show, then keep it alive.
+                if hasBeenShown {
+                    ButterchurnWebView(bridge: bridge)
+                }
 
                 // Overlay loading/error state (fades when ready)
                 if !bridge.isReady {
@@ -60,7 +68,13 @@ struct WinampMilkdropWindow: View {
         )
         .fixedSize()
         .background(Color.black)
+        .onChange(of: settings.showMilkdropWindow) { _, shown in
+            if shown { hasBeenShown = true }
+        }
         .onAppear {
+            // Latch if the window was already visible on launch (restored state).
+            if settings.showMilkdropWindow { hasBeenShown = true }
+
             // Configure bridge with audioPlayer for audio visualization
             bridge.configure(audioPlayer: audioPlayer)
 

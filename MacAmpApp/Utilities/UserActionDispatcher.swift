@@ -149,7 +149,9 @@ final class UserActionDispatcher {
     /// Local-file relative seek. No-op for streams (no seekable timeline).
     private func seekBy(_ seconds: Double) {
         guard case .localTrack = playbackCoordinator.currentSource else { return }
-        let newTime = max(0, audioPlayer.currentTime + seconds)
+        // `currentTime` is quantized to whole seconds for display; use the live
+        // position so a relative seek lands accurately.
+        let newTime = max(0, audioPlayer.livePlaybackTime + seconds)
         audioPlayer.seek(to: newTime)
     }
 

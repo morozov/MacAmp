@@ -23,7 +23,7 @@ final class WindowResizeController {
 
     // MARK: - Double-Size Resize
 
-    func resizeMainAndEQWindows(doubled: Bool, animated _: Bool = true, persistResult: Bool = true) {
+    func resizeMainAndEQWindows(doubled: Bool, shaded: Bool = false, animated _: Bool = true, persistResult: Bool = true) {
         guard let main = registry.mainWindow, let eq = registry.eqWindow else { return }
 
         let originalMainFrame = main.frame
@@ -47,7 +47,7 @@ final class WindowResizeController {
         )
 
         let scale: CGFloat = doubled ? 2.0 : 1.0
-        let newMainFrame = scaledMainFrame(from: originalMainFrame, scale: scale)
+        let newMainFrame = scaledMainFrame(from: originalMainFrame, scale: scale, shaded: shaded)
         let newEqFrame = scaledEQFrame(from: originalEqFrame, scale: scale, belowMain: newMainFrame)
         let animationAnchorFrame = dockingContext.flatMap { context in
             WindowDockingGeometry.anchorFrame(context.anchor, mainFrame: newMainFrame, eqFrame: newEqFrame)
@@ -84,9 +84,10 @@ final class WindowResizeController {
         }
     }
 
-    private func scaledMainFrame(from original: NSRect, scale: CGFloat) -> NSRect {
+    private func scaledMainFrame(from original: NSRect, scale: CGFloat, shaded: Bool) -> NSRect {
         var frame = original
-        let newSize = CGSize(width: WinampSizes.main.width * scale, height: WinampSizes.main.height * scale)
+        let baseHeight = shaded ? WinampSizes.mainShade.height : WinampSizes.main.height
+        let newSize = CGSize(width: WinampSizes.main.width * scale, height: baseHeight * scale)
         let delta = newSize.height - frame.size.height
         frame.size = newSize
         frame.origin.y -= delta

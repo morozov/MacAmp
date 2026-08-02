@@ -226,7 +226,7 @@ final class WindowCoordinator {
     // MARK: - Window Resize (forwarded to WindowResizeController)
 
     private func resizeMainAndEQWindows(doubled: Bool, animated: Bool = true, persistResult: Bool = true) {
-        resizeController.resizeMainAndEQWindows(doubled: doubled, animated: animated, persistResult: persistResult)
+        resizeController.resizeMainAndEQWindows(doubled: doubled, shaded: settings.isMainWindowShaded, animated: animated, persistResult: persistResult)
     }
 
     func updateVideoWindowSize(to pixelSize: CGSize) { resizeController.updateVideoWindowSize(to: pixelSize) }

@@ -11,15 +11,24 @@ import SwiftUI
 private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     weak var preferredContentSizeOwner: NSViewController?
 
+    /// Whether an intrinsic size is worth measuring at all. A window that sizes
+    /// itself explicitly reads neither `intrinsicContentSize` nor
+    /// `preferredContentSize`, and the layout pass calls the invalidation hook
+    /// once per subview on every display cycle — enough, in a window whose
+    /// content animates, to cost more than everything it draws.
+    private var tracksIntrinsicSize: Bool { preferredContentSizeOwner != nil }
+
     override func acceptsFirstMouse(for _: NSEvent?) -> Bool { true }
 
     override func invalidateIntrinsicContentSize() {
+        guard tracksIntrinsicSize else { return }
         super.invalidateIntrinsicContentSize()
         forwardPreferredContentSize()
     }
 
     override func layout() {
         super.layout()
+        guard tracksIntrinsicSize else { return }
         forwardPreferredContentSize()
     }
 
@@ -49,9 +58,17 @@ private final class FirstMouseHostingView<Content: View>: NSHostingView<Content>
 @MainActor
 final class FirstMouseHostingController<Content: View>: NSViewController {
     private let rootView: Content
+    private let autoSizesWindow: Bool
 
-    init(rootView: Content) {
+    /// - Parameter autoSizesWindow: When `true`, the hosting view tracks
+    ///   SwiftUI's intrinsic size and forwards it to `preferredContentSize` so
+    ///   the window follows content-size changes automatically. This re-measures
+    ///   the whole SwiftUI tree on every content update, so a window that
+    ///   updates at a high rate (the main window's visualizer/time/position)
+    ///   MUST pass `false` and resize its window explicitly instead.
+    init(rootView: Content, autoSizesWindow: Bool = true) {
         self.rootView = rootView
+        self.autoSizesWindow = autoSizesWindow
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -59,15 +76,19 @@ final class FirstMouseHostingController<Content: View>: NSViewController {
 
     override func loadView() {
         let hosting = FirstMouseHostingView(rootView: rootView)
-        // `.intrinsicContentSize` makes the hosting view expose SwiftUI's
-        // measured size through `intrinsicContentSize`. The sibling
-        // `.preferredContentSize` option *should* also update the closest
-        // view controller's `preferredContentSize` automatically, but in
-        // practice it no-ops when the controller is a vanilla
-        // NSViewController (only NSHostingController bridges natively).
-        // Forward it manually via the hosting view's layout hooks instead.
-        hosting.sizingOptions = [.intrinsicContentSize]
-        hosting.preferredContentSizeOwner = self
+        if autoSizesWindow {
+            // `.intrinsicContentSize` makes the hosting view expose SwiftUI's
+            // measured size through `intrinsicContentSize`. The sibling
+            // `.preferredContentSize` option *should* also update the closest
+            // view controller's `preferredContentSize` automatically, but in
+            // practice it no-ops when the controller is a vanilla
+            // NSViewController (only NSHostingController bridges natively).
+            // Forward it manually via the hosting view's layout hooks instead.
+            hosting.sizingOptions = [.intrinsicContentSize]
+            hosting.preferredContentSizeOwner = self
+        } else {
+            hosting.sizingOptions = []
+        }
         view = hosting
     }
 }

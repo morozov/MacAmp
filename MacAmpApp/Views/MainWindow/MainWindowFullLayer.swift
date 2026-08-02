@@ -16,6 +16,10 @@ struct MainWindowFullLayer: View {
 
     var body: some View {
         Group {
+            // All button sprites drawn in one Canvas layer; the buttons below
+            // are transparent hit targets over it.
+            MainWindowButtonSprites()
+
             // Titlebar buttons
             buildTitlebarButtons()
 
@@ -23,7 +27,7 @@ struct MainWindowFullLayer: View {
             MainWindowIndicatorsLayer(pauseBlinkVisible: interactionState.pauseBlinkVisible)
 
             // Time display
-            buildTimeDisplay()
+            MainWindowTimeLayer(interactionState: interactionState)
 
             // Track info (scrolling text)
             MainWindowTrackInfoLayer(interactionState: interactionState)
@@ -78,52 +82,6 @@ struct MainWindowFullLayer: View {
     }
 
     // MARK: - Time Display
-
-    @ViewBuilder
-    private func buildTimeDisplay() -> some View {
-        ZStack(alignment: .leading) {
-            // Minus sign for remaining time (hidden for streams — no known duration)
-            if settings.timeDisplayMode == .remaining && playbackCoordinator.displayDuration > 0 {
-                ZStack(alignment: .topLeading) {
-                    SimpleSpriteImage(.minusSign, width: 5, height: 1)
-                        .offset(x: 0, y: 6)
-                }
-                .frame(width: 9, height: 13, alignment: .topLeading)
-                .offset(x: 1, y: 0)
-            }
-
-            // Time digits (MM:SS)
-            buildTimeDigits()
-        }
-        .frame(width: 56, height: 13, alignment: .leading)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            dispatcher.perform(.toggleTimeDisplayMode)
-        }
-        .at(Layout.timeDisplay)
-    }
-
-    @ViewBuilder
-    private func buildTimeDigits() -> some View {
-        let duration = playbackCoordinator.displayDuration
-        let timeToShow = settings.timeDisplayMode == .remaining && duration > 0
-            ? max(0.0, duration - playbackCoordinator.displayTime)
-            : playbackCoordinator.displayTime
-        let digits = interactionState.timeDigits(from: timeToShow)
-        let shouldShowDigits = !playbackCoordinator.isPaused || interactionState.pauseBlinkVisible
-
-        if shouldShowDigits {
-            if digits[0] >= 0 {
-                SimpleSpriteImage(.digit(digits[0]), width: 9, height: 13).offset(x: -3, y: 0)
-            }
-            SimpleSpriteImage(.digit(digits[1]), width: 9, height: 13).offset(x: 8, y: 0)
-            SimpleSpriteImage(.digit(digits[2]), width: 9, height: 13).offset(x: 19, y: 0)
-        }
-        if shouldShowDigits {
-            SimpleSpriteImage(.digit(digits[3]), width: 9, height: 13).offset(x: 39, y: 0)
-            SimpleSpriteImage(.digit(digits[4]), width: 9, height: 13).offset(x: 50, y: 0)
-        }
-    }
 
     // MARK: - Spectrum Analyzer
 
