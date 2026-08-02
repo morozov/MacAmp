@@ -81,8 +81,8 @@ This creates a signed, notarization-ready `.app` bundle.
 
 **Pre-flight:** Read project config before running any build commands:
 ```bash
-# Check product name, version, and build dir
-grep -E "MARKETING_VERSION|CURRENT_PROJECT_VERSION|PRODUCT_NAME|CONFIGURATION_BUILD_DIR" project.yml
+# Check product name and build dir
+grep -E "PRODUCT_NAME|CONFIGURATION_BUILD_DIR" project.yml
 # IMPORTANT: Product name is "MacAmp" — exported app is MacAmp.app (NOT MacAmpApp.app)
 # IMPORTANT: Release CONFIGURATION_BUILD_DIR is $(PROJECT_DIR)/dist — do NOT delete dist/
 ls -d build/ dist/ 2>/dev/null  # check existing state
@@ -461,14 +461,16 @@ chmod +x scripts/release.sh
 ./scripts/release.sh
 ```
 
-## Updating Versions
+## Versions
 
-Before each release, update:
+`CFBundleShortVersionString` is the fixed string `Development`. `CFBundleVersion` is the short commit SHA of the build, so the app reports itself as `Development (abc1234)`.
 
-1. **Info.plist** - `CFBundleShortVersionString` (e.g., "0.2.0")
-2. **Info.plist** - `CFBundleVersion` (e.g., "2")
-3. **README.md** - Version references
-4. **Release notes** - Document changes
+The "Stamp version with commit SHA" build phase writes the SHA into the built `Info.plist` after every build phase and before code signing, so there is nothing to bump by hand. The `0` placeholder in `MacAmpApp/Info.plist` survives only when the build runs outside a git checkout.
+
+Still worth updating per release:
+
+1. **README.md** - Version references
+2. **Release notes** - Document changes
 
 ## Resources
 
