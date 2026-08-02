@@ -97,7 +97,7 @@ final class VideoTapContext: @unchecked Sendable {
     let feed: VisualizerFeed
 
     /// Per-tap render-confined scratch buffers for the visualizer DSP (mono / RMS /
-    /// Goertzel / FFT working set). OWNED by this Context (allocated in `init`, dies
+    /// analyzer / FFT working set). OWNED by this Context (allocated in `init`, dies
     /// with the Context). `RenderThreadSafe` (render-confined).
     let scratch: VisualizerScratchBuffers
 

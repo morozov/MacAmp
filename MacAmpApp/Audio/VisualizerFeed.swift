@@ -10,16 +10,21 @@ import os
 ///
 /// **Producers:** the engine-side mainMixerNode tap (existing) and the video-side
 /// `MTAudioProcessingTap` render path. Both
-/// publish pre-computed arrays — RMS×20, Goertzel spectrum×20, oscilloscope
-/// waveform×76, Butterchurn FFT spectrum×1024, Butterchurn FFT waveform×1024 —
+/// publish pre-computed arrays — RMS×20, analyzer frames×75 bands,
+/// oscilloscope waveform×76, Butterchurn FFT spectrum×1024, Butterchurn FFT waveform×1024 —
 /// not raw PCM. Each producer runs the DSP into its own per-tap
 /// `VisualizerScratchBuffers` instance and calls `tryPublish(from:)`.
 ///
-/// **Consumer:** `VisualizerPipeline` polls `consume()` from a 30 Hz main-thread
-/// `Timer` in `.common` run-loop mode. Last-write-wins; no queue.
+/// **Consumer:** `VisualizerPipeline` polls `consume()` from a main-thread
+/// `Timer` at the display refresh rate, in `.common` run-loop mode. Last-write-wins; no queue.
 final class VisualizerFeed: @unchecked Sendable {
     private var rms = [Float](repeating: 0, count: 20)
-    private var spectrum = [Float](repeating: 0, count: 20)
+    private var spectrum = [Float](
+        repeating: 0,
+        count: VisualizerScratchBuffers.maxSpectrumFrames * VisualizerScratchBuffers.spectrumBandCount
+    )
+    private var spectrumFrames = 0
+    private var spectrumHopDuration: TimeInterval = 0
     private var waveform = [Float](repeating: 0, count: 76)
     private var bcSpectrum = [Float](repeating: 0, count: 1024)
     private var bcWaveform = [Float](repeating: 0, count: 1024)
@@ -46,7 +51,7 @@ final class VisualizerFeed: @unchecked Sendable {
 
     /// Audio thread: try to publish data (non-blocking).
     /// Returns false if lock is contended (frame is dropped).
-    func tryPublish(from scratch: VisualizerScratchBuffers, oscilloscopeSamples: Int, validFrameCount: Int) -> Bool {
+    func tryPublish(from scratch: VisualizerScratchBuffers, oscilloscopeSamples: Int, hopDuration: TimeInterval) -> Bool {
         guard os_unfair_lock_trylock(&lock) else { return false }
         defer { os_unfair_lock_unlock(&lock) }
 
@@ -54,13 +59,16 @@ final class VisualizerFeed: @unchecked Sendable {
         copyFloatBuffer(from: scratch.rms, to: &rms, count: rCount)
         rmsCount = rCount
 
-        let sCount = min(scratch.spectrum.count, spectrum.count)
+        spectrumFrames = min(scratch.spectrumFrameCount, VisualizerScratchBuffers.maxSpectrumFrames)
+        spectrumHopDuration = hopDuration
+        let sCount = min(spectrumFrames * VisualizerScratchBuffers.spectrumBandCount, spectrum.count)
         copyFloatBuffer(from: scratch.spectrum, to: &spectrum, count: sCount)
         spectrumCount = sCount
 
-        // Downsample waveform using validFrameCount (not mono.count)
-        let scratchMono = scratch.mono
-        let monoLen = validFrameCount
+        // Downsample the whole history, so the oscilloscope's time window stays
+        // fixed instead of tracking the tap's buffer size.
+        let scratchMono = scratch.history
+        let monoLen = scratchMono.count
         let step = max(1, monoLen / oscilloscopeSamples)
         let actualSamples = min(oscilloscopeSamples, waveform.count)
         scratchMono.withUnsafeBufferPointer { src in
@@ -94,6 +102,8 @@ final class VisualizerFeed: @unchecked Sendable {
         // Copy raw data under lock (memcpy only, no construction)
         let localRms = Array(rms.prefix(rmsCount))
         let localSpec = Array(spectrum.prefix(spectrumCount))
+        let localFrames = spectrumFrames
+        let localHop = spectrumHopDuration
         let localWave = Array(waveform.prefix(waveformCount))
         let localBcSpec = Array(bcSpectrum)
         let localBcWave = Array(bcWaveform)
@@ -104,6 +114,8 @@ final class VisualizerFeed: @unchecked Sendable {
         return VisualizerData(
             rms: localRms,
             spectrum: localSpec,
+            spectrumFrameCount: localFrames,
+            spectrumHopDuration: localHop,
             waveform: localWave,
             butterchurnSpectrum: localBcSpec,
             butterchurnWaveform: localBcWave

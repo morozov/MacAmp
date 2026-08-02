@@ -1,5 +1,6 @@
 import AVFoundation
 import Accelerate
+import AppKit
 import Observation
 import os
 
@@ -20,7 +21,15 @@ struct ButterchurnFrame: Sendable {
 /// Sendable for safe cross-actor transfer in Swift 6
 struct VisualizerData: Sendable {
     let rms: [Float]
+    /// Consecutive analyzer frames, `spectrumFrameCount` of them laid end to
+    /// end, oldest first. A tap delivers 100 ms at a time, so one frame per
+    /// delivery would show a tenth of what the audio does; the analyzer instead
+    /// gets a frame per hop and plays the batch back over the delivery it
+    /// covers.
     let spectrum: [Float]
+    let spectrumFrameCount: Int
+    /// Audio seconds between consecutive analyzer frames.
+    let spectrumHopDuration: TimeInterval
     let waveform: [Float]
     let butterchurnSpectrum: [Float]
     let butterchurnWaveform: [Float]
@@ -62,12 +71,20 @@ final class VisualizerPipeline {
 
     // MARK: - Visualizer Data Storage
 
-    @ObservationIgnored private var peaks: [Float] = Array(repeating: 0.0, count: 20)
-    @ObservationIgnored private var lastUpdateTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
+    /// Analyzer frames stamped with the playback position they describe, filled
+    /// by the decoder ahead of the playhead. Preferred over the tap batch below,
+    /// which can only describe audio the engine has already rendered.
+    @ObservationIgnored let analyzerFeed = SpectrumBandFeed()
 
     @ObservationIgnored private var latestRMS: [Float] = []
-    @ObservationIgnored private var latestSpectrum: [Float] = []
     @ObservationIgnored private var latestWaveform: [Float] = []
+
+    // Analyzer batch awaiting playout: the frames themselves, when they were
+    // handed over, and how much audio each one advances.
+    @ObservationIgnored private var spectrumBatch: [Float] = []
+    @ObservationIgnored private var spectrumFrameCount = 0
+    @ObservationIgnored private var spectrumHopDuration: TimeInterval = 0
+    @ObservationIgnored private var spectrumBatchArrival: CFTimeInterval = 0
 
     // Butterchurn audio data - populated by tap, consumed at 30 FPS
     @ObservationIgnored private var butterchurnSpectrum: [Float] = Array(repeating: 0, count: 1024)
@@ -76,19 +93,13 @@ final class VisualizerPipeline {
 
     // MARK: - Configuration
 
-    /// Smoothing factor for visualizer levels (0..1, higher = smoother)
-    var smoothing: Float = 0.6
-
-    /// Peak falloff rate (units per second)
-    var peakFalloff: Float = 1.2
-
     /// Cached spectrum/RMS mode to avoid per-frame AppSettings lookup
     /// AudioPlayer sets this when visualizerMode changes in AppSettings
     var useSpectrum: Bool = true
 
     // MARK: - Observable State (for UI)
 
-    /// Current smoothed visualizer levels (20 bars)
+    /// Latest levels for the active mode: 75 analyzer bands, or 20 RMS bars.
     private(set) var levels: [Float] = []
 
     // MARK: - Initialization
@@ -119,8 +130,14 @@ final class VisualizerPipeline {
         let scratch = VisualizerScratchBuffers()
         let handler = Self.makeTapHandler(feed: feed, scratch: scratch)
 
-        // Buffer size 2048 for Butterchurn FFT - provides 1024 frequency bins
-        mixer.installTap(onBus: 0, bufferSize: 2048, format: nil, block: handler)
+        // A tap buffer is clamped to a documented [100, 400] ms range, so this
+        // asks for the shortest one available: 4410 frames at 44.1 kHz, one
+        // callback per 100 ms. Anything smaller is silently rounded up to the
+        // same thing. Both transforms window the rolling history rather than
+        // this buffer, so the size sets only the delivery rate.
+        let sampleRate = mixer.outputFormat(forBus: 0).sampleRate
+        let tapFrames = AVAudioFrameCount((sampleRate / 10).rounded())
+        mixer.installTap(onBus: 0, bufferSize: tapFrames, format: nil, block: handler)
         tapInstalled = true
         startPollTimer()
 
@@ -146,8 +163,9 @@ final class VisualizerPipeline {
     func clearData() {
         levels = []
         latestRMS = []
-        latestSpectrum = []
         latestWaveform = []
+        spectrumBatch = []
+        spectrumFrameCount = 0
         butterchurnSpectrum = Array(repeating: 0, count: 1024)
         butterchurnWaveform = Array(repeating: 0, count: 1024)
     }
@@ -183,6 +201,14 @@ final class VisualizerPipeline {
 
     // MARK: - Poll Timer
 
+    /// Poll period for draining the shared feed, one tick per refresh of the
+    /// fastest attached display. Polling slower than that would cap how often
+    /// the visualizers can see new data, whatever rate they draw at.
+    private static var pollInterval: TimeInterval {
+        let fastest = NSScreen.screens.map(\.maximumFramesPerSecond).max() ?? 60
+        return 1.0 / Double(max(30, fastest))
+    }
+
     private func startPollTimer() {
         pollTimer?.invalidate()
         // Add to .common run-loop mode so polling continues during user
@@ -191,7 +217,7 @@ final class VisualizerPipeline {
         // DragGesture). That stalled the data pipeline and made the
         // visualizer appear frozen during slider interaction even though
         // VisualizerView's own .common-mode display timer kept firing.
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             dispatchPrecondition(condition: .onQueue(.main))
             MainActor.assumeIsolated {
                 self?.pollVisualizerData()
@@ -242,39 +268,39 @@ final class VisualizerPipeline {
         resample(latestWaveform, to: count)
     }
 
-    /// Get frequency data mapped to requested number of bands with logarithmic scaling
+    /// Spectrum analyzer band levels for this instant.
+    ///
+    /// File playback answers from `analyzerFeed`, which the decoder fills ahead
+    /// of the playhead, so the bars line up with what is audible. Sources that
+    /// never pass through the decoder — streams and video — fall back to the
+    /// tap, which hands over 100 ms of already-rendered audio at a time; that
+    /// batch is played back over the span it describes, leaving those sources
+    /// up to one delivery behind.
+    ///
     /// - Parameters:
-    ///   - bands: Number of output bands
-    ///   - isPlaying: Whether audio is currently playing (controls output behavior)
-    /// - Returns: Array of normalized frequency values (0.0-1.0)
-    func getFrequencyData(bands: Int, isPlaying: Bool) -> [Float] {
-        guard bands > 0 else { return [] }
-
-        var result = [Float](repeating: 0, count: bands)
-
-        if isPlaying && !levels.isEmpty {
-            let sourceCount = levels.count
-
-            for i in 0..<bands {
-                let sourceIndex = (i * sourceCount) / bands
-                let nextIndex = min(sourceIndex + 1, sourceCount - 1)
-
-                let fraction = Float(i * sourceCount % bands) / Float(bands)
-                let value1 = levels[sourceIndex]
-                let value2 = levels[nextIndex]
-
-                let interpolated = value1 * (1 - fraction) + value2 * fraction
-                let scaled = log10(1.0 + interpolated * 9.0)
-
-                result[i] = min(1.0, max(0.0, scaled * 0.8))
-            }
-        } else if isPlaying {
-            for i in 0..<bands {
-                result[i] = Float.random(in: 0.0...0.1)
-            }
+    ///   - isPlaying: Whether audio is currently rendering; when false the bands
+    ///     read zero rather than holding their last values.
+    ///   - playbackTime: Seconds into the current file, used to pick the frame
+    ///     describing the audible instant.
+    /// - Returns: 75 band levels on a 0...255 scale, low frequencies first.
+    func spectrumBands(isPlaying: Bool, playbackTime: Double) -> [Float] {
+        let width = VisualizerScratchBuffers.spectrumBandCount
+        guard isPlaying else {
+            return [Float](repeating: 0, count: width)
         }
 
-        return result
+        if let frame = analyzerFeed.frame(at: playbackTime) {
+            return frame
+        }
+
+        guard spectrumFrameCount > 0, spectrumHopDuration > 0 else {
+            return [Float](repeating: 0, count: width)
+        }
+
+        let elapsed = CACurrentMediaTime() - spectrumBatchArrival
+        let index = min(spectrumFrameCount - 1, max(0, Int(elapsed / spectrumHopDuration)))
+        let frame = spectrumFrame(at: index)
+        return frame.isEmpty ? [Float](repeating: 0, count: width) : frame
     }
 
     // MARK: - Data Update (called from poll timer)
@@ -284,32 +310,30 @@ final class VisualizerPipeline {
     func updateLevels(with data: VisualizerData, useSpectrum: Bool) {
         // Store all visualizer datasets
         latestRMS = data.rms
-        latestSpectrum = data.spectrum
         latestWaveform = data.waveform
+
+        spectrumBatch = data.spectrum
+        spectrumFrameCount = data.spectrumFrameCount
+        spectrumHopDuration = data.spectrumHopDuration
+        spectrumBatchArrival = CACurrentMediaTime()
 
         // Store Butterchurn data
         butterchurnSpectrum = data.butterchurnSpectrum
         butterchurnWaveform = data.butterchurnWaveform
         lastButterchurnUpdate = CACurrentMediaTime()
 
-        // Apply smoothing to active mode
-        let used = useSpectrum ? data.spectrum : data.rms
-        let now = CFAbsoluteTimeGetCurrent()
-        let dt = max(0, Float(now - lastUpdateTime))
-        lastUpdateTime = now
+        // No smoothing: the analyzer's own fall model is what damps the bars,
+        // and a second filter here would flatten the transients it feeds on.
+        levels = useSpectrum ? spectrumFrame(at: spectrumFrameCount - 1) : data.rms
+    }
 
-        let alpha = max(0, min(1, smoothing))
-        var smoothed = [Float](repeating: 0, count: used.count)
-
-        for b in 0..<used.count {
-            let prev = (b < levels.count) ? levels[b] : 0
-            smoothed[b] = alpha * prev + (1 - alpha) * used[b]
-            let fall = peakFalloff * dt
-            let dropped = max(0, peaks[b] - fall)
-            peaks[b] = max(dropped, smoothed[b])
+    /// Frame `index` of the pending batch, or an empty array when out of range.
+    private func spectrumFrame(at index: Int) -> [Float] {
+        let width = VisualizerScratchBuffers.spectrumBandCount
+        guard index >= 0, index < spectrumFrameCount, (index + 1) * width <= spectrumBatch.count else {
+            return []
         }
-
-        levels = smoothed
+        return Array(spectrumBatch[(index * width)..<((index + 1) * width)])
     }
 
     // MARK: - Tap Handler (nonisolated)
@@ -329,7 +353,7 @@ final class VisualizerPipeline {
             if frameCount == 0 { return }
 
             let bars = 20
-            let cappedFrameCount = scratch.prepare(frameCount: frameCount, bars: bars, sampleRate: Float(buffer.format.sampleRate))
+            let cappedFrameCount = scratch.prepare(frameCount: frameCount)
 
             // Mix channels to mono
             scratch.withMono { mono in
@@ -342,6 +366,8 @@ final class VisualizerPipeline {
                     mono[frame] = sum * invCount
                 }
             }
+
+            scratch.appendHistory(count: cappedFrameCount)
 
             // Compute RMS per bar
             scratch.withMonoReadOnly { mono in // swiftlint:disable:this closure_body_length
@@ -369,47 +395,18 @@ final class VisualizerPipeline {
                     }
                 }
 
-                // Compute spectrum using Goertzel algorithm with precomputed coefficients
-                scratch.withSpectrum { spectrum in
-                    let sampleCount = min(1024, cappedFrameCount)
-                    if sampleCount > 0 {
-                        let coefficients = scratch.goertzel.coefficients
-                        let gains = scratch.goertzel.equalizationGains
-
-                        for b in 0..<bars {
-                            let coefficient = coefficients[b]
-                            var s0: Float = 0
-                            var s1: Float = 0
-                            var s2: Float = 0
-                            var index = 0
-                            while index < sampleCount {
-                                let sample = mono[index]
-                                s0 = sample + coefficient * s1 - s2
-                                s2 = s1
-                                s1 = s0
-                                index += 1
-                            }
-                            let power = s1 * s1 + s2 * s2 - coefficient * s1 * s2
-                            var value = sqrt(max(0, power)) / Float(sampleCount)
-                            value *= gains[b]
-                            value = min(1.0, value * 15.0)
-                            spectrum[b] = value
-                        }
-                    } else {
-                        for b in 0..<bars {
-                            spectrum[b] = 0
-                        }
-                    }
-                }
             }
 
+            scratch.updateSpectrum(newSamples: cappedFrameCount)
+
             // Process Butterchurn FFT (2048-point for 1024 bins)
-            scratch.withMonoReadOnly { mono in
-                scratch.processButterchurnFFT(samples: mono, validCount: cappedFrameCount)
+            if scratch.takeButterchurnRefresh() {
+                scratch.processButterchurnFFT()
             }
 
             // Publish to feed (non-blocking: drops frame on contention)
-            _ = feed.tryPublish(from: scratch, oscilloscopeSamples: 76, validFrameCount: cappedFrameCount)
+            let hopDuration = Double(VisualizerScratchBuffers.analyzerHop) / buffer.format.sampleRate
+            _ = feed.tryPublish(from: scratch, oscilloscopeSamples: 76, hopDuration: hopDuration)
         }
     }
     // swiftlint:enable function_body_length

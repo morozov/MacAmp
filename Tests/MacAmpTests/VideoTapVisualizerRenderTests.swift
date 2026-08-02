@@ -6,7 +6,7 @@ import Testing
 
 /// Correctness tests for the Phase 4 video-tap visualizer producer
 /// (`videoTapVisualizerRender`, ADR-6 dual-producer). Verifies the mono downmix
-/// (interleaved + non-interleaved), RMS bars, and Goertzel spectrum against known
+/// (interleaved + non-interleaved), RMS bars, and analyzer frames against known
 /// inputs, and that results reach the shared `VisualizerFeed`.
 @Suite("VideoTap visualizer render", .tags(.audio))
 struct VideoTapVisualizerRenderTests {
@@ -69,10 +69,13 @@ struct VideoTapVisualizerRenderTests {
         let data = try #require(Self.renderNonInterleaved([Self.sine(1_000)]))
         #expect(data.rms.contains { $0 > 0.5 }, "expected strong RMS energy for a full-scale tone")
         #expect(data.rms.allSatisfy { $0 <= 1.0 }, "RMS must be clamped to 1.0")
-        let peak = data.spectrum.max() ?? 0
-        let peakBar = data.spectrum.firstIndex(of: peak) ?? -1
+        let width = VisualizerScratchBuffers.spectrumBandCount
+        #expect(data.spectrumFrameCount > 0)
+        let newest = Array(data.spectrum.suffix(width))
+        let peak = newest.max() ?? 0
+        let peakBand = newest.firstIndex(of: peak) ?? -1
         #expect(peak > 0, "expected a spectral peak for a 1 kHz tone")
-        #expect(peakBar > 0 && peakBar < 19, "1 kHz peak should land in a mid bar, not the edges (got bar \(peakBar))")
+        #expect(peakBand > 0 && peakBand < width - 1, "1 kHz peak should land in a mid band, not the edges (got band \(peakBand))")
     }
 
     @Test("Mono downmix: interleaved stereo matches non-interleaved")
@@ -87,7 +90,10 @@ struct VideoTapVisualizerRenderTests {
 
         for b in 0..<20 {
             #expect(abs(nonInter.rms[b] - inter.rms[b]) < 1e-5, "rms bar \(b) differs across layouts")
-            #expect(abs(nonInter.spectrum[b] - inter.spectrum[b]) < 1e-5, "spectrum bar \(b) differs across layouts")
+        }
+        #expect(nonInter.spectrum.count == inter.spectrum.count)
+        for i in 0..<min(nonInter.spectrum.count, inter.spectrum.count) {
+            #expect(abs(nonInter.spectrum[i] - inter.spectrum[i]) < 1e-5, "spectrum value \(i) differs across layouts")
         }
     }
 

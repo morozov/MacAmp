@@ -6,7 +6,7 @@ import Foundation
 ///
 /// Consumes the tap's `AudioBufferList` (already EQ/balance-processed by `tapProcess`),
 /// computes the same pre-computed visualizer arrays the engine `makeTapHandler`
-/// produces — mono downmix → 20-bar RMS → 20-bar Goertzel spectrum → 2048-pt
+/// produces — mono downmix → 20-bar RMS → analyzer frames → 2048-pt
 /// Butterchurn FFT — into the per-tap `VisualizerScratchBuffers`, then publishes to
 /// the shared `VisualizerFeed` (non-blocking; drops the frame on contention).
 ///
@@ -14,11 +14,11 @@ import Foundation
 /// `scratch` is render-confined (one per tap); the `feed` is the shared single-slot
 /// SPSC hand-off whose `tryPublish` uses a `trylock`.
 ///
-/// **Drift note.** The RMS-bar and Goertzel-spectrum math below MUST stay
-/// numerically identical to `VisualizerPipeline.makeTapHandler`. The two producers are
-/// kept parallel (different input buffer types) rather than extracting a shared
-/// helper; the Butterchurn FFT is already shared via `processButterchurnFFT`. If you
-/// change the RMS or Goertzel formula in one producer, change both.
+/// **Drift note.** The RMS-bar math below MUST stay numerically identical to
+/// `VisualizerPipeline.makeTapHandler`. The two producers are kept parallel
+/// (different input buffer types) rather than extracting a shared helper; the
+/// analyzer and the Butterchurn FFT are already shared via `updateSpectrum` and
+/// `processButterchurnFFT`. If you change the RMS formula in one producer, change both.
 func videoTapVisualizerRender(
     bufferList: UnsafeMutablePointer<AudioBufferList>,
     frames: Int,
@@ -28,7 +28,7 @@ func videoTapVisualizerRender(
 ) {
     guard frames > 0, sampleRate > 0 else { return }
     let bars = 20
-    let cappedFrameCount = scratch.prepare(frameCount: frames, bars: bars, sampleRate: Float(sampleRate))
+    let cappedFrameCount = scratch.prepare(frameCount: frames)
     guard cappedFrameCount > 0 else { return }
 
     // Downmix every channel to mono. Handles non-interleaved (1 channel per buffer,
@@ -64,6 +64,8 @@ func videoTapVisualizerRender(
         }
     }
 
+    scratch.appendHistory(count: cappedFrameCount)
+
     scratch.withMonoReadOnly { mono in
         // 20-bar RMS — MUST match VisualizerPipeline.makeTapHandler.
         scratch.withRms { rms in
@@ -89,41 +91,15 @@ func videoTapVisualizerRender(
                 cursor = end
             }
         }
-
-        // 20-bar Goertzel spectrum — MUST match VisualizerPipeline.makeTapHandler.
-        scratch.withSpectrum { spectrum in
-            let sampleCount = min(1024, cappedFrameCount)
-            if sampleCount > 0 {
-                let coefficients = scratch.goertzel.coefficients
-                let gains = scratch.goertzel.equalizationGains
-                for b in 0..<bars {
-                    let coefficient = coefficients[b]
-                    var s1: Float = 0
-                    var s2: Float = 0
-                    var index = 0
-                    while index < sampleCount {
-                        let sample = mono[index]
-                        let s0 = sample + coefficient * s1 - s2
-                        s2 = s1
-                        s1 = s0
-                        index += 1
-                    }
-                    let power = s1 * s1 + s2 * s2 - coefficient * s1 * s2
-                    var value = sqrt(max(0, power)) / Float(sampleCount)
-                    value *= gains[b]
-                    value = min(1.0, value * 15.0)
-                    spectrum[b] = value
-                }
-            } else {
-                for b in 0..<bars { spectrum[b] = 0 }
-            }
-        }
     }
+
+    scratch.updateSpectrum(newSamples: cappedFrameCount)
 
     // Butterchurn FFT (shared scratch method).
-    scratch.withMonoReadOnly { mono in
-        scratch.processButterchurnFFT(samples: mono, validCount: cappedFrameCount)
+    if scratch.takeButterchurnRefresh() {
+        scratch.processButterchurnFFT()
     }
 
-    _ = feed.tryPublish(from: scratch, oscilloscopeSamples: 76, validFrameCount: cappedFrameCount)
+    let hopDuration = Double(VisualizerScratchBuffers.analyzerHop) / sampleRate
+    _ = feed.tryPublish(from: scratch, oscilloscopeSamples: 76, hopDuration: hopDuration)
 }
