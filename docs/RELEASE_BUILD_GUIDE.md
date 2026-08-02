@@ -13,7 +13,7 @@ Key facts (from `project.yml`):
 | Signing | `CODE_SIGN_STYLE: Automatic`; Debug `Apple Development`, Release `Developer ID Application` |
 | Hardened runtime | `ENABLE_HARDENED_RUNTIME: true` (all configurations) |
 | Entitlements | `MacAmpApp/MacAmp.entitlements` |
-| Version | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` (Info.plist reads both) |
+| Version | `CFBundleShortVersionString` is `Development`; the "Stamp version with commit SHA" build phase sets `CFBundleVersion` to the short commit SHA |
 | Release output | `CONFIGURATION_BUILD_DIR: $(PROJECT_DIR)/dist` (`dist/` is gitignored; don't delete it) |
 | Notary profile | `notarytool-password` (Keychain) |
 
@@ -52,7 +52,7 @@ Signing settings live in `project.yml` (see the table above). Change them there 
 
 Pre-flight:
 ```bash
-grep -E "MARKETING_VERSION|CURRENT_PROJECT_VERSION|PRODUCT_NAME|CONFIGURATION_BUILD_DIR" project.yml
+grep -E "PRODUCT_NAME|CONFIGURATION_BUILD_DIR" project.yml
 ls -d build/ dist/ 2>/dev/null
 ```
 
@@ -180,7 +180,6 @@ Finally, test the DMG on a Mac that has never run the app: drag to Applications,
 
 ## Distribution Checklist
 
-- [ ] `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` bumped in `project.yml`
 - [ ] Signed with Developer ID, hardened runtime, entitlements included, no `get-task-allow`
 - [ ] App notarized and stapled
 - [ ] DMG created from a staging folder holding only `MacAmp.app`, signed, notarized, and stapled
