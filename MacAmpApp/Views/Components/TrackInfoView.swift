@@ -1,15 +1,17 @@
 import SwiftUI
 import AppKit
 
-/// Read-only File Info dialog for the current track, modeled on Winamp's
+/// Read-only File Info panel for the current track, modeled on Winamp's
 /// classic File Info window. The left side is a labeled grid of edit fields
 /// (read-only for now); the right side is two read-only text boxes — Format
 /// Info and Replay Gain — whose contents follow Winamp's templated lines.
 struct TrackInfoView: View {
+    /// Dismisses the panel. Supplied by the window that hosts this view.
+    let onDone: () -> Void
+
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(AppSettings.self) private var settings
-    @Environment(\.dismiss) private var dismiss
 
     @State private var info: FileInfo?
     @State private var fields = FieldRegistry()
@@ -33,7 +35,7 @@ struct TrackInfoView: View {
             content
             HStack {
                 Spacer()
-                Button("Done") { dismiss() }
+                Button("Done") { onDone() }
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -352,7 +354,7 @@ private final class FieldRegistry {
 #Preview {
     let audioPlayer = AudioPlayer()
     let streamPlayer = StreamPlayer()
-    return TrackInfoView()
+    return TrackInfoView(onDone: {})
         .environment(audioPlayer)
         .environment(PlaybackCoordinator(audioPlayer: audioPlayer, streamPlayer: streamPlayer))
         .environment(AppSettings.instance())
