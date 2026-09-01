@@ -27,6 +27,8 @@ final class WindowCoordinator {
 
     let registry: WindowRegistry
     private let settings: AppSettings
+    private let audioPlayer: AudioPlayer
+    private let playbackCoordinator: PlaybackCoordinator
     let skinManager: SkinManager
     private let windowFocusState: WindowFocusState
     let framePersistence: WindowFramePersistence
@@ -41,6 +43,7 @@ final class WindowCoordinator {
     private var hotkeyMonitor: WinampHotkeyMonitor?
     private var menuShortcutMonitor: MainShortcutMonitor?
     private var textEditingShortcutMonitor: TextEditingShortcutMonitor?
+    private var trackInfoController: TrackInfoWindowController?
     let userActionDispatcher: UserActionDispatcher
 
     var mainWindow: NSWindow? { registry.mainWindow }
@@ -52,6 +55,8 @@ final class WindowCoordinator {
     init(skinManager: SkinManager, audioPlayer: AudioPlayer, dockingController: DockingController, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState, userActionDispatcher: UserActionDispatcher) {
         // Store shared state references
         self.settings = settings
+        self.audioPlayer = audioPlayer
+        self.playbackCoordinator = playbackCoordinator
         self.skinManager = skinManager
         self.windowFocusState = windowFocusState
         self.userActionDispatcher = userActionDispatcher
@@ -281,6 +286,22 @@ final class WindowCoordinator {
         playlistWindow?.level = level
         videoWindow?.level = level
         milkdropWindow?.level = level
+        trackInfoController?.applyWindowLevel(alwaysOnTop: alwaysOnTop)
+    }
+
+    // MARK: - File Info
+
+    /// Open the File Info panel for the track already staged in
+    /// `settings.trackInfoTrack`, creating it on first use.
+    func showTrackInfo() {
+        let controller = trackInfoController ?? TrackInfoWindowController(
+            audioPlayer: audioPlayer,
+            playbackCoordinator: playbackCoordinator,
+            settings: settings
+        )
+        trackInfoController = controller
+        controller.applyWindowLevel(alwaysOnTop: settings.isAlwaysOnTop)
+        controller.show()
     }
 
     func showAllWindows() { visibility.showAllWindows() }

@@ -9,7 +9,6 @@ struct WinampMainWindow: View {
     @Environment(DockingController.self) private var dockingController
     @Environment(AppSettings.self) private var settings
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
-    @Environment(UserActionDispatcher.self) private var dispatcher
     @Environment(WindowFocusState.self) private var windowFocusState
     @Environment(\.openWindow) private var openWindow
 
@@ -59,15 +58,6 @@ struct WinampMainWindow: View {
         )
         .fixedSize()
         .background(Color.black)
-        .sheet(isPresented: Binding(
-            get: { settings.showTrackInfoDialog },
-            set: { settings.showTrackInfoDialog = $0 }
-        )) {
-            TrackInfoView()
-        }
-        .onChange(of: settings.showTrackInfoDialog) { _, newValue in
-            if !newValue { dispatcher.restoreTrackInfoFocus() }
-        }
         .onChange(of: settings.showOptionsMenuTrigger) { _, newValue in
             if newValue {
                 optionsPresenter.showOptionsMenu(
