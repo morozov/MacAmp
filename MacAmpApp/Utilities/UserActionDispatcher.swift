@@ -89,8 +89,7 @@ final class UserActionDispatcher {
         case .toggleTimeDisplayMode:
             settings.toggleTimeDisplayMode()
         case .showTrackInfo:
-            settings.trackInfoTrack = trackInfoTarget()
-            WindowCoordinator.shared?.showTrackInfo()
+            showTrackInfo()
         case .showOptionsMenu:
             settings.showOptionsMenuTrigger = true
         case .openPreferences:
@@ -112,6 +111,21 @@ final class UserActionDispatcher {
         } else if !playbackCoordinator.isPlaying {
             audioPlayer.play()
         }
+    }
+
+    /// Open File Info on the resolved target. With no target and no stream
+    /// playing the panel has nothing to describe, so the action does nothing
+    /// rather than putting up a window that only says so.
+    private func showTrackInfo() {
+        let target = trackInfoTarget()
+        guard target != nil || isPlayingStream else { return }
+        settings.trackInfoTrack = target
+        WindowCoordinator.shared?.showTrackInfo()
+    }
+
+    private var isPlayingStream: Bool {
+        if case .radioStation = playbackCoordinator.currentSource { return true }
+        return false
     }
 
     /// File Info target, matching Winamp: the playlist editor shows info for the
