@@ -119,8 +119,8 @@ struct TrackInfoView: View {
                     inlineLabel("BPM")
                     valueField(info?.bpm, key: "BPM")
                 }
-                row("Title", info?.title ?? target?.title)
-                row("Artist", info?.artist ?? target?.artist)
+                row("Title", trackTitle)
+                row("Artist", trackArtist)
                 row("Album", info?.album)
                 row("Album Artist", info?.albumArtist)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -135,6 +135,22 @@ struct TrackInfoView: View {
             }
             .padding(.vertical, 2)
         }
+    }
+
+    private var trackTitle: String? { Self.title(of: target, info: info) }
+
+    private var trackArtist: String? { Self.artist(of: target, info: info) }
+
+    /// The file's title tag, else the playlist entry's title. A CUE sheet track
+    /// shares its file with the other tracks of the sheet, so the file's tags
+    /// describe the whole sheet; its own title comes from the sheet instead.
+    static func title(of track: Track?, info: FileInfo?) -> String? {
+        track?.cueSlice != nil ? track?.title : info?.title ?? track?.title
+    }
+
+    /// The artist counterpart of `title(of:info:)`.
+    static func artist(of track: Track?, info: FileInfo?) -> String? {
+        track?.cueSlice != nil ? track?.artist : info?.artist ?? track?.artist
     }
 
     /// A single-field row: label in the shared label column, field filling the
