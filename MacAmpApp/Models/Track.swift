@@ -5,11 +5,14 @@ import Foundation
 /// A logical track defined by a CUE sheet entry. A CUE-derived `Track` carries
 /// a `cueSlice` describing the slice's position within the underlying audio
 /// file: `startTime` is the absolute offset in the file, `duration` is the
-/// gap to the next slice's start (or to EOF for the last slice).
+/// gap to the next slice's start (or to EOF for the last slice). `trackNumber`
+/// is the sheet's `TRACK` number, nil for slices restored from a playlist saved
+/// without it.
 struct CueSlice: Equatable, Sendable {
     let startTime: Double
     let duration: Double
     let cueSheetURL: URL
+    let trackNumber: Int?
 
     /// Absolute end time within the underlying audio file.
     var endTime: Double { startTime + duration }

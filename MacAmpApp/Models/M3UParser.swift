@@ -127,8 +127,8 @@ struct M3UParser {
 
     // MARK: - Slice directive parsing
 
-    /// Parse `#EXTMACAMP-CUE:start=<s>,duration=<s>,sheet=<path>` payload.
-    /// Returns nil if any required key is missing or malformed.
+    /// Parse `#EXTMACAMP-CUE:start=<s>,duration=<s>[,track=<n>],sheet=<path>`
+    /// payload. Returns nil if any required key is missing or malformed.
     private static func parseSliceDirective(payload: String, baseURL: URL?) -> CueSlice? {
         var keys: [String: String] = [:]
         for chunk in payload.split(separator: ",") {
@@ -153,7 +153,12 @@ struct M3UParser {
             sheetURL = URL(fileURLWithPath: sheetStr)
         }
 
-        return CueSlice(startTime: start, duration: dur, cueSheetURL: sheetURL)
+        return CueSlice(
+            startTime: start,
+            duration: dur,
+            cueSheetURL: sheetURL,
+            trackNumber: keys["track"].flatMap { Int($0) }
+        )
     }
 
     /// Resolve a URL string to an absolute URL
@@ -249,6 +254,7 @@ struct M3UWriter {
             .replacingOccurrences(of: "%", with: "%25")
             .replacingOccurrences(of: ",", with: "%2C")
             .replacingOccurrences(of: "=", with: "%3D")
-        return "#EXTMACAMP-CUE:start=\(slice.startTime),duration=\(slice.duration),sheet=\(sheetPath)"
+        let track = slice.trackNumber.map { ",track=\($0)" } ?? ""
+        return "#EXTMACAMP-CUE:start=\(slice.startTime),duration=\(slice.duration)\(track),sheet=\(sheetPath)"
     }
 }

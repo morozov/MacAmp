@@ -229,7 +229,8 @@ enum CueParser {
             let slice = CueSlice(
                 startTime: start,
                 duration: duration,
-                cueSheetURL: sheetURL
+                cueSheetURL: sheetURL,
+                trackNumber: raw.number
             )
             tracks.append(Track(
                 url: audioFileURL,

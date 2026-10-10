@@ -113,7 +113,7 @@ struct TrackInfoView: View {
                 // the Title/Album fields end), and nothing overflows the box.
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     primaryLabel("Track #")
-                    valueField(info?.trackNumber, key: "Track #")
+                    valueField(trackNumber, key: "Track #")
                     inlineLabel("Disc #")
                     valueField(info?.discNumber, key: "Disc #")
                     inlineLabel("BPM")
@@ -141,6 +141,8 @@ struct TrackInfoView: View {
 
     private var trackArtist: String? { Self.artist(of: target, info: info) }
 
+    private var trackNumber: String? { Self.trackNumber(of: target, info: info) }
+
     /// The file's title tag, else the playlist entry's title. A CUE sheet track
     /// shares its file with the other tracks of the sheet, so the file's tags
     /// describe the whole sheet; its own title comes from the sheet instead.
@@ -151,6 +153,14 @@ struct TrackInfoView: View {
     /// The artist counterpart of `title(of:info:)`.
     static func artist(of track: Track?, info: FileInfo?) -> String? {
         track?.cueSlice != nil ? track?.artist : info?.artist ?? track?.artist
+    }
+
+    /// The file's track number tag, or a CUE sheet track's number from the
+    /// sheet. The file's tag never stands in for the sheet's: it numbers the
+    /// file, not the slice.
+    static func trackNumber(of track: Track?, info: FileInfo?) -> String? {
+        guard let slice = track?.cueSlice else { return info?.trackNumber }
+        return slice.trackNumber.map(String.init)
     }
 
     /// A single-field row: label in the shared label column, field filling the
