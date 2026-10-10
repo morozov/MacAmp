@@ -171,6 +171,10 @@ struct M3UParser {
             return URL(string: trimmed)
         }
 
+        if let base = baseURL, !base.isFileURL {
+            return URL(string: trimmed, relativeTo: base)?.absoluteURL
+        }
+
         // Handle absolute file paths (Unix-style)
         if trimmed.hasPrefix("/") {
             return URL(fileURLWithPath: trimmed)
