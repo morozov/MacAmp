@@ -121,6 +121,7 @@ final class AudioFileStreamParser: QueueConfined {
             var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
             let status = AudioFileStreamGetProperty(streamID, propertyID, &size, &asbd)
             if status == noErr {
+                asbd = AudioFileStreamParser.preferredFormat(in: AudioFileStreamParser.formatList(of: streamID), fallback: asbd)
                 parser.inputFormat = asbd
                 parser.onFormatAvailable?(asbd)
                 AppLog.info(.audio, "AudioFileStreamParser: Format detected — "
@@ -150,6 +151,39 @@ final class AudioFileStreamParser: QueueConfined {
         default:
             break
         }
+    }
+
+    /// The formats the stream can be decoded as, best first. For HE-AAC the
+    /// data format describes only the core AAC layer at half the sample rate;
+    /// the list adds the full HE-AAC (and HE-AAC v2) layers.
+    private static func formatList(of streamID: AudioFileStreamID) -> [AudioFormatListItem] {
+        var size: UInt32 = 0
+        var writable: DarwinBoolean = false
+        guard AudioFileStreamGetPropertyInfo(streamID, kAudioFileStreamProperty_FormatList, &size, &writable) == noErr,
+              size > 0 else { return [] }
+        var items = [AudioFormatListItem](repeating: AudioFormatListItem(),
+                                          count: Int(size) / MemoryLayout<AudioFormatListItem>.size)
+        guard AudioFileStreamGetProperty(streamID, kAudioFileStreamProperty_FormatList, &size, &items) == noErr else {
+            return []
+        }
+        return items
+    }
+
+    /// The first format in `items` this system can decode, or `fallback`.
+    static func preferredFormat(
+        in items: [AudioFormatListItem],
+        fallback: AudioStreamBasicDescription,
+        decodable: Set<AudioFormatID> = decodableFormatIDs()
+    ) -> AudioStreamBasicDescription {
+        items.first { decodable.contains($0.mASBD.mFormatID) }?.mASBD ?? fallback
+    }
+
+    private static func decodableFormatIDs() -> Set<AudioFormatID> {
+        var size: UInt32 = 0
+        guard AudioFormatGetPropertyInfo(kAudioFormatProperty_DecodeFormatIDs, 0, nil, &size) == noErr else { return [] }
+        var ids = [AudioFormatID](repeating: 0, count: Int(size) / MemoryLayout<AudioFormatID>.size)
+        guard AudioFormatGetProperty(kAudioFormatProperty_DecodeFormatIDs, 0, nil, &size, &ids) == noErr else { return [] }
+        return Set(ids)
     }
 
     /// Packets callback — called when compressed audio packets are available.
