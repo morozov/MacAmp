@@ -22,6 +22,26 @@ final class FileInfoChordUITests: UIChordTestCase {
         done.click()
     }
 
+    func test_stepButtons_walkThePlaylist() {
+        let row = app.otherElements.matching(identifier: "MacAmp.Playlist.Row.0").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "playlist row not found")
+        row.click()
+
+        sendChord("3", .option)
+
+        let previous = app.buttons["<<"]
+        let next = app.buttons[">>"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5), "File Info should show the step buttons")
+        XCTAssertFalse(previous.isEnabled, "<< should be disabled on the first entry")
+        XCTAssertTrue(next.isEnabled, ">> should be enabled on the first entry")
+
+        next.click()
+        XCTAssertTrue(waitUntil(timeout: 2, { previous.isEnabled }, satisfies: { $0 }),
+                      ">> should step off the first entry")
+
+        app.buttons["Done"].click()
+    }
+
     func test_option3_doesNothing_withNoTrack() {
         focusWindow("MacAmp.MainWindow")
         sendChord("3", .option)

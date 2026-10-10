@@ -2,12 +2,17 @@ import SwiftUI
 import AppKit
 
 /// Read-only File Info panel for the current track, modeled on Winamp's
-/// classic File Info window. The left side is a labeled grid of edit fields
+/// classic File Info window. Buttons beside the path step to the previous and
+/// next playlist entries. The left side is a labeled grid of edit fields
 /// (read-only for now); the right side is two read-only text boxes — Format
 /// Info and Replay Gain — whose contents follow Winamp's templated lines.
 struct TrackInfoView: View {
     /// Dismisses the panel. Supplied by the window that hosts this view.
     let onDone: () -> Void
+
+    /// Points the panel at another track. Supplied by the window that hosts
+    /// this view, which loads the track's info before showing it.
+    let onSelect: (Track) -> Void
 
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
@@ -49,10 +54,32 @@ struct TrackInfoView: View {
     @ViewBuilder
     private var header: some View {
         if let url = currentURL {
-            pathField(url.path)
+            HStack(spacing: 6) {
+                pathField(url.path)
+                if let index = playlistIndex {
+                    stepButton("<<", help: "Previous file", to: index - 1)
+                    stepButton(">>", help: "Next file", to: index + 1)
+                }
+            }
         } else if isStream {
             pathField(playbackCoordinator.displayTitle)
         }
+    }
+
+    /// Position of the shown track in the playlist, or nil when it is not
+    /// there (removed since the panel opened).
+    private var playlistIndex: Int? {
+        guard let id = target?.id else { return nil }
+        return audioPlayer.playlist.firstIndex { $0.id == id }
+    }
+
+    /// Points the panel at the playlist entry at `index`. Disabled past either
+    /// end of the playlist.
+    private func stepButton(_ title: String, help: String, to index: Int) -> some View {
+        let playlist = audioPlayer.playlist
+        return Button(title) { onSelect(playlist[index]) }
+            .disabled(!playlist.indices.contains(index))
+            .help(help)
     }
 
     private func pathField(_ text: String) -> some View {
@@ -371,7 +398,7 @@ private final class FieldRegistry {
 #Preview {
     let audioPlayer = AudioPlayer()
     let streamPlayer = StreamPlayer()
-    return TrackInfoView(onDone: {})
+    return TrackInfoView(onDone: {}, onSelect: { _ in })
         .environment(audioPlayer)
         .environment(PlaybackCoordinator(audioPlayer: audioPlayer, streamPlayer: streamPlayer))
         .environment(AppSettings.instance())

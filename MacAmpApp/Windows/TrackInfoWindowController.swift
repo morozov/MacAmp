@@ -39,7 +39,10 @@ final class TrackInfoWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: panel)
 
         panel.contentViewController = NSHostingController(
-            rootView: TrackInfoView(onDone: { [weak panel] in panel?.close() })
+            rootView: TrackInfoView(
+                onDone: { [weak panel] in panel?.close() },
+                onSelect: { [weak self] in self?.present($0, orderFront: false) }
+            )
                 .environment(audioPlayer)
                 .environment(playbackCoordinator)
                 .environment(settings)
@@ -53,24 +56,38 @@ final class TrackInfoWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) is not supported")
     }
 
-    /// Load the info for `track`, then present the panel for it, or bring it
-    /// forward when it is already open, so the panel never shows a track whose
-    /// info is still loading. A nil track describes the playing stream.
+    /// Present the panel for `track`, or bring it forward when it is already
+    /// open. A nil track describes the playing stream.
     func show(_ track: Track?) {
+        present(track, orderFront: true)
+    }
+
+    /// Load the info for `track`, then point the panel at it, so the panel
+    /// never shows a track whose info is still loading. Stepping to a track
+    /// of the file already shown, such as a sibling CUE track, reuses that
+    /// file's info.
+    private func present(_ track: Track?, orderFront: Bool) {
         request += 1
         let current = request
         Task {
             let info: FileInfo?
             if let track, !track.isStream {
-                info = await MetadataLoader.loadFileInfo(from: track.url)
+                if !orderFront, track.url == settings.trackInfoTrack?.url,
+                   let loaded = settings.trackInfoFileInfo {
+                    info = loaded
+                } else {
+                    info = await MetadataLoader.loadFileInfo(from: track.url)
+                }
             } else {
                 info = nil
             }
             guard current == request else { return }
             settings.trackInfoTrack = track
             settings.trackInfoFileInfo = info
-            settings.showTrackInfoDialog = true
-            window?.makeKeyAndOrderFront(nil)
+            if orderFront {
+                settings.showTrackInfoDialog = true
+                window?.makeKeyAndOrderFront(nil)
+            }
         }
     }
 
