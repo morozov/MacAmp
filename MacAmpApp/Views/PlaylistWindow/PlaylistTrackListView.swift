@@ -7,7 +7,9 @@ struct PlaylistTrackListView: View {
     let sizeState: PlaylistWindowSizeState
     let playlistStyle: PlaylistStyle
     @Binding var scrollOffsetPixels: CGFloat
-    let onTrackTap: (Int) -> Void
+    let onTrackPress: (_ index: Int, _ yFromTop: CGFloat, _ windowY: CGFloat) -> Void
+    let onTrackDrag: (_ windowY: CGFloat) -> Void
+    let onTrackRelease: (_ windowY: CGFloat) -> Void
     let selectedIndices: Set<Int>
     let dropIndex: Int?
 
@@ -23,10 +25,12 @@ struct PlaylistTrackListView: View {
                         .background(trackBackground(track: track, index: index))
                         .overlay(
                             ClickCatcherView(
-                                onSingleClick: { onTrackTap(index) },
+                                onSingleClick: { onTrackPress(index, $0, $1) },
                                 onDoubleClick: {
                                     Task { await playbackCoordinator.play(track: track) }
-                                }
+                                },
+                                onDrag: onTrackDrag,
+                                onMouseUp: onTrackRelease
                             )
                         )
                         .accessibilityElement(children: .combine)

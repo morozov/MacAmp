@@ -141,7 +141,12 @@ struct WinampPlaylistWindow: View {
                     sizeState: sizeState,
                     playlistStyle: playlistStyle,
                     scrollOffsetPixels: $ui.scrollOffsetPixels,
-                    onTrackTap: { ui.handleTrackTap(index: $0) },
+                    onTrackPress: { ui.pressRow(index: $0, yFromTop: $1, windowY: $2) },
+                    onTrackDrag: { windowY in
+                        ui.dragRows(windowY: windowY, viewportHeight: sizeState.contentHeight,
+                                    maxScroll: maxScrollOffsetPixels) { audioPlayer.moveTracks(at: $0, by: $1) }
+                    },
+                    onTrackRelease: { ui.releaseRow(windowY: $0) },
                     selectedIndices: ui.selectedIndices,
                     dropIndex: ui.dropIndex
                 )
@@ -205,6 +210,7 @@ struct WinampPlaylistWindow: View {
         // Webamp's CSS, not derived from any particular sprite.
         .position(x: windowWidth - 11, y: PlaylistWindowSizeState.topBarHeight + (sizeState.contentHeight / 2))
         .onChange(of: audioPlayer.playlist.count) { _, _ in
+            ui.cancelRowDrag()
             ui.clampScrollOffset(maxOffsetPixels: maxScrollOffsetPixels)
         }
         .onChange(of: sizeState.contentHeight) { _, _ in

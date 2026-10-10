@@ -155,6 +155,29 @@ final class PlaylistController {
         AppLog.debug(.audio, "Moved tracks \(range) to \(insertionPoint), \(playlist.count) total")
     }
 
+    /// Move every track at `indices` one row up (`step` -1) or down (`step` 1),
+    /// each swapping with its neighbor, so gaps between selected tracks are
+    /// kept. Nothing moves when a selected track is already at the edge in
+    /// that direction. Returns whether the tracks moved.
+    @discardableResult
+    func moveTracks(at indices: Set<Int>, by step: Int) -> Bool {
+        guard step == 1 || step == -1, !indices.isEmpty,
+              indices.allSatisfy(playlist.indices.contains) else { return false }
+        if indices.contains(step == 1 ? playlist.count - 1 : 0) { return false }
+
+        let pinnedTrackID = currentIndex.flatMap {
+            playlist.indices.contains($0) ? playlist[$0].id : nil
+        }
+        for index in indices.sorted(by: step == 1 ? (>) : (<)) {
+            playlist.swapAt(index, index + step)
+        }
+        if let pinnedTrackID,
+           let newIndex = playlist.firstIndex(where: { $0.id == pinnedTrackID }) {
+            currentIndex = newIndex
+        }
+        return true
+    }
+
     /// Remove a track at the specified index
     func removeTrack(at index: Int) {
         guard playlist.indices.contains(index) else { return }

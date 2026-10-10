@@ -665,6 +665,22 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         playlistController.moveTracks(from: range, to: destination)
     }
 
+    /// Move the tracks at `indices` one row up or down; see
+    /// `PlaylistController.moveTracks(at:by:)`. When the move changes which
+    /// slices follow the playing one in the current CUE run, re-seek so the
+    /// run is rebuilt in the new order.
+    @discardableResult
+    func moveTracks(at indices: Set<Int>, by step: Int) -> Bool {
+        guard playlistController.moveTracks(at: indices, by: step) else { return false }
+        if let current = currentTrack, current.isCueSlice,
+           isPlaying || isPaused, engine.audioFile != nil,
+           let position = runSlices.firstIndex(where: { $0.id == current.id }),
+           runSlices[position...].map(\.id) != computeRunSlices(startingAt: current).map(\.id) {
+            seek(to: currentTime, resume: isPlaying)
+        }
+        return true
+    }
+
     func replacePlaylist(with tracks: [Track]) {
         playlistGeneration &+= 1
         playlistController.clear()

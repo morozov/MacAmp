@@ -99,10 +99,97 @@ final class PlaylistWindowInteractionState {
             }
             anchorIndex = index
         } else {
-            selectedIndices = [index]
+            // A plain press on a selected row keeps the selection so it can be
+            // dragged; releasing without Cmd narrows it to that row.
+            if !selectedIndices.contains(index) { selectedIndices = [index] }
             anchorIndex = index
         }
         cursorIndex = index
+    }
+
+    // MARK: - Row dragging
+
+    /// A press on a row that may turn into a drag. Mirrors the list-box
+    /// capture in Winamp's playlist editor: while the button is held, every
+    /// row the pointer crosses moves the selected tracks one row with it.
+    private struct RowDrag {
+        let pressedIndex: Int
+        let pressedYFromTop: CGFloat
+        let pressedWindowY: CGFloat
+        let pressedScroll: CGFloat
+        /// The row the selection was last moved for.
+        var row: Int
+        /// The press was a Shift-click that selected a range.
+        let selectedRange: Bool
+    }
+
+    private var rowDrag: RowDrag?
+
+    /// Distance past the top or bottom of the list at which a drag scrolls it.
+    private static let dragScrollMargin: CGFloat = 10
+
+    func pressRow(index: Int, yFromTop: CGFloat, windowY: CGFloat) {
+        let selectedRange = NSEvent.modifierFlags.contains(.shift) && anchorIndex != nil
+        handleTrackTap(index: index)
+        rowDrag = RowDrag(pressedIndex: index, pressedYFromTop: yFromTop, pressedWindowY: windowY,
+                          pressedScroll: scrollOffsetPixels, row: index, selectedRange: selectedRange)
+    }
+
+    /// The pointer's height below the top of the track list's content, which
+    /// includes the rows scrolled out of view. Window y grows upward.
+    private func contentY(of drag: RowDrag, windowY: CGFloat) -> CGFloat {
+        CGFloat(drag.pressedIndex) * PlaylistWindowSizeState.trackRowHeight + drag.pressedYFromTop
+            + (drag.pressedWindowY - windowY) + (scrollOffsetPixels - drag.pressedScroll)
+    }
+
+    private func row(of drag: RowDrag, windowY: CGFloat) -> Int {
+        Int((contentY(of: drag, windowY: windowY) / PlaylistWindowSizeState.trackRowHeight).rounded(.down))
+    }
+
+    /// Move the selected tracks one row per row the pointer has crossed, then
+    /// scroll one row when the pointer is past the top or bottom of the list.
+    /// A move that a selected track at the edge blocks is skipped, so the
+    /// selection then trails the pointer.
+    func dragRows(windowY: CGFloat, viewportHeight: CGFloat, maxScroll: CGFloat,
+                  moveTracks: (Set<Int>, Int) -> Bool) {
+        guard var drag = rowDrag else { return }
+        let target = row(of: drag, windowY: windowY)
+        guard target != drag.row else { return }
+
+        while drag.row != target {
+            let step = target > drag.row ? 1 : -1
+            let moved = selectedIndices
+            if moveTracks(moved, step) {
+                selectedIndices = Set(moved.map { $0 + step })
+                if let anchor = anchorIndex, moved.contains(anchor) { anchorIndex = anchor + step }
+                if let cursor = cursorIndex, moved.contains(cursor) { cursorIndex = cursor + step }
+            }
+            drag.row += step
+        }
+        rowDrag = drag
+
+        let viewportY = contentY(of: drag, windowY: windowY) - scrollOffsetPixels
+        if viewportY < -Self.dragScrollMargin {
+            scrollOffsetPixels = max(0, scrollOffsetPixels - PlaylistWindowSizeState.trackRowHeight)
+        } else if viewportY > viewportHeight + Self.dragScrollMargin {
+            scrollOffsetPixels = min(maxScroll, scrollOffsetPixels + PlaylistWindowSizeState.trackRowHeight)
+        }
+    }
+
+    /// Abandon a press in progress, for when tracks are added or removed under
+    /// it and the rows it recorded no longer match the playlist.
+    func cancelRowDrag() {
+        rowDrag = nil
+    }
+
+    /// End a press. Without Cmd, and unless the press selected a Shift range,
+    /// releasing over a selected row narrows the selection to that row.
+    func releaseRow(windowY: CGFloat) {
+        guard let drag = rowDrag else { return }
+        rowDrag = nil
+        guard !drag.selectedRange, !NSEvent.modifierFlags.contains(.command) else { return }
+        let released = row(of: drag, windowY: windowY)
+        if selectedIndices.contains(released) { selectedIndices = [released] }
     }
 
     func handleKeyPress(
