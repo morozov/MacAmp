@@ -50,6 +50,7 @@ final class WinampMainWindowInteractionState {
     func startScrolling() {
         guard scrollTimer == nil else { return }
         guard isViewVisible else { return }
+        guard marqueeDragTranslation == nil else { return }
 
         // .common run-loop mode keeps this firing during user gestures (.eventTracking).
         let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
@@ -87,6 +88,53 @@ final class WinampMainWindowInteractionState {
             guard let self, self.isViewVisible else { return }
             self.startScrolling()
         }
+    }
+
+    // MARK: - Marquee Dragging
+
+    /// Horizontal translation already applied by the drag in progress, or nil
+    /// when no drag is active.
+    private var marqueeDragTranslation: CGFloat?
+
+    /// Move the marquee text with the pointer. Auto-scrolling stops for the
+    /// duration of the drag. Text that fits the display does not move.
+    func dragMarquee(to translation: CGFloat) {
+        if marqueeDragTranslation == nil {
+            scrollTimer?.invalidate()
+            scrollTimer = nil
+            scrollRestartTask?.cancel()
+        }
+        let delta = translation - (marqueeDragTranslation ?? 0)
+        marqueeDragTranslation = translation
+
+        let textWidth = CGFloat(displayTitleProvider().count * 5)
+        let displayWidth = WinampMainWindowLayout.trackInfo.width
+        guard textWidth > displayWidth else { return }
+        scrollOffset = Self.wrappedOffset(scrollOffset + delta, textWidth: textWidth, displayWidth: displayWidth)
+    }
+
+    /// Resume auto-scrolling from where the drag left the text, after a
+    /// two-second pause.
+    func endMarqueeDrag() {
+        marqueeDragTranslation = nil
+        scrollRestartTask?.cancel()
+        scrollRestartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            guard let self, self.isViewVisible else { return }
+            self.startScrolling()
+        }
+    }
+
+    /// Keeps a dragged offset within the range auto-scrolling cycles through,
+    /// from `displayWidth` down to `-(textWidth + 20)`, wrapping at either end.
+    static func wrappedOffset(_ offset: CGFloat, textWidth: CGFloat, displayWidth: CGFloat) -> CGFloat {
+        let low = -(textWidth + 20)
+        let period = displayWidth - low
+        var wrapped = offset
+        while wrapped < low { wrapped += period }
+        while wrapped > displayWidth { wrapped -= period }
+        return wrapped
     }
 
     // MARK: - Position Slider Scrubbing
@@ -157,6 +205,7 @@ final class WinampMainWindowInteractionState {
         scrollTimer = nil
         scrollRestartTask?.cancel()
         scrollRestartTask = nil
+        marqueeDragTranslation = nil
         scrubResetTask?.cancel()
         scrubResetTask = nil
         transientMessageTask?.cancel()

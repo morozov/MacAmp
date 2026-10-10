@@ -33,11 +33,16 @@ struct MainWindowTrackInfoLayer: View {
                 .at(CGPoint(x: Layout.trackInfo.minX, y: Layout.trackInfo.minY))
         }
 
-        // A double-click opens File Info.
+        // Dragging scrolls the text by hand; a double-click opens File Info.
         Color.clear
             .contentShape(Rectangle())
             .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height)
             .onTapGesture(count: 2) { dispatcher.perform(.showTrackInfo) }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { interactionState.dragMarquee(to: $0.translation.width) }
+                    .onEnded { _ in interactionState.endMarqueeDrag() }
+            )
             .accessibilityElement()
             .accessibilityIdentifier("MacAmp.MainWindow.Marquee")
             .at(CGPoint(x: Layout.trackInfo.minX, y: Layout.trackInfo.minY))
