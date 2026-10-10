@@ -116,8 +116,7 @@ final class UserActionDispatcher {
     private func showTrackInfo() {
         let target = trackInfoTarget()
         guard target != nil || isPlayingStream else { return }
-        settings.trackInfoTrack = target
-        WindowCoordinator.shared?.showTrackInfo()
+        WindowCoordinator.shared?.showTrackInfo(target)
     }
 
     private var isPlayingStream: Bool {

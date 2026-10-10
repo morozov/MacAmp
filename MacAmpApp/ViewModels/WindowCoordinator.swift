@@ -302,9 +302,9 @@ final class WindowCoordinator {
 
     // MARK: - File Info
 
-    /// Open the File Info panel for the track already staged in
-    /// `settings.trackInfoTrack`, creating it on first use.
-    func showTrackInfo() {
+    /// Open the File Info panel for `track`, or for the playing stream when
+    /// nil, creating the panel on first use.
+    func showTrackInfo(_ track: Track?) {
         let controller = trackInfoController ?? TrackInfoWindowController(
             audioPlayer: audioPlayer,
             playbackCoordinator: playbackCoordinator,
@@ -312,7 +312,7 @@ final class WindowCoordinator {
         )
         trackInfoController = controller
         controller.applyWindowLevel(alwaysOnTop: settings.isAlwaysOnTop)
-        controller.show()
+        controller.show(track)
     }
 
     func showAllWindows() { visibility.showAllWindows() }

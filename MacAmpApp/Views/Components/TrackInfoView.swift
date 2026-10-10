@@ -13,7 +13,6 @@ struct TrackInfoView: View {
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(AppSettings.self) private var settings
 
-    @State private var info: FileInfo?
     @State private var fields = FieldRegistry()
 
     private let labelWidth: CGFloat = 78
@@ -21,6 +20,8 @@ struct TrackInfoView: View {
     /// The track resolved when the dialog opened (selected playlist item, else
     /// the playing track).
     private var target: Track? { settings.trackInfoTrack }
+
+    private var info: FileInfo? { settings.trackInfoFileInfo }
 
     private var currentURL: URL? { target?.url }
 
@@ -41,16 +42,6 @@ struct TrackInfoView: View {
         }
         .padding(16)
         .frame(width: currentURL != nil ? 660 : 380)
-        .task(id: currentURL) { await load() }
-    }
-
-    // MARK: - Loading
-
-    private func load() async {
-        guard let url = currentURL else { info = nil; return }
-        info = nil
-        let loaded = await MetadataLoader.loadFileInfo(from: url)
-        if currentURL == url { info = loaded }
     }
 
     // MARK: - Header

@@ -208,6 +208,10 @@ final class AppSettings {
     /// selected playlist item if any, else the playing track. Transient.
     var trackInfoTrack: Track?
 
+    /// File facts for `trackInfoTrack`, loaded before the dialog shows it.
+    /// Transient.
+    var trackInfoFileInfo: FileInfo?
+
     // MARK: - Video Window (TASK 2: Day 6)
 
     /// V - Video Window visibility state (persisted)

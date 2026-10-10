@@ -16,6 +16,10 @@ private final class TrackInfoPanel: NSPanel {
 final class TrackInfoWindowController: NSWindowController, NSWindowDelegate {
     private let settings: AppSettings
 
+    /// Counts requests to point the panel at a track, so a slow load that a
+    /// later request overtook is dropped instead of applied.
+    private var request = 0
+
     init(audioPlayer: AudioPlayer, playbackCoordinator: PlaybackCoordinator, settings: AppSettings) {
         self.settings = settings
 
@@ -49,12 +53,25 @@ final class TrackInfoWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) is not supported")
     }
 
-    /// Present the panel, or bring it forward when it is already open. The
-    /// view reads its track from `settings.trackInfoTrack`, so an open panel
-    /// reloads itself when the caller points it at a different track.
-    func show() {
-        settings.showTrackInfoDialog = true
-        window?.makeKeyAndOrderFront(nil)
+    /// Load the info for `track`, then present the panel for it, or bring it
+    /// forward when it is already open, so the panel never shows a track whose
+    /// info is still loading. A nil track describes the playing stream.
+    func show(_ track: Track?) {
+        request += 1
+        let current = request
+        Task {
+            let info: FileInfo?
+            if let track, !track.isStream {
+                info = await MetadataLoader.loadFileInfo(from: track.url)
+            } else {
+                info = nil
+            }
+            guard current == request else { return }
+            settings.trackInfoTrack = track
+            settings.trackInfoFileInfo = info
+            settings.showTrackInfoDialog = true
+            window?.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// Keep the panel one step above the skinned windows, whose level follows
@@ -65,7 +82,9 @@ final class TrackInfoWindowController: NSWindowController, NSWindowDelegate {
             : .floating
     }
 
+    /// Closing drops any load still in flight, so it cannot reopen the panel.
     func windowWillClose(_ notification: Notification) {
+        request += 1
         settings.showTrackInfoDialog = false
     }
 }
