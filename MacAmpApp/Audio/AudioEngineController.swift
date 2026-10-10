@@ -211,6 +211,10 @@ final class AudioEngineController {
         let sampleRate = file.processingFormat.sampleRate
         let fileDuration = Double(file.length) / sampleRate
 
+        // Everything queued for the old position describes audio that will not
+        // be heard, so the analyzer must forget it before the reader refills.
+        reader.stop()
+
         // If seeking to or past the end, trigger completion immediately
         if time >= fileDuration - 0.01 {
             playheadOffset = fileDuration
@@ -220,10 +224,6 @@ final class AudioEngineController {
 
         let clampedStart = max(0, min(time, fileDuration))
         let startFrame = AVAudioFramePosition(clampedStart * sampleRate)
-
-        // Everything queued for the old position describes audio that will not
-        // be heard, so the analyzer must forget it before the reader refills.
-        reader.stop()
 
         // Determine end frame: bounded by endTime if provided, otherwise EOF.
         let endFrame: AVAudioFramePosition
@@ -346,6 +346,7 @@ final class AudioEngineController {
     }
 
     func stopAudio() {
+        reader.stop()
         playerNode.stop()
     }
 
@@ -368,6 +369,24 @@ final class AudioEngineController {
     }
 
     #if DEBUG
+    /// Test seam: chunks the playback reader has handed to the player node.
+    var scheduledChunkCountForTesting: Int { reader.scheduledChunkCountForTesting }
+
+    /// Test seam: observe what file playback sends toward the output, ahead of
+    /// the mixer the visualizer taps, with the output itself silenced.
+    func installOutputTapForTesting(_ block: @escaping AVAudioNodeTapBlock) {
+        audioEngine.mainMixerNode.outputVolume = 0
+        eqNode.removeTap(onBus: 0)
+        eqNode.installTap(onBus: 0, bufferSize: 1024, format: nil, block: block)
+    }
+
+    func removeOutputTapForTesting() {
+        eqNode.removeTap(onBus: 0)
+    }
+
+    /// Test seam: the sample time of the last render cycle at the tap point.
+    var outputSampleTimeForTesting: AVAudioFramePosition? { eqNode.lastRenderTime?.sampleTime }
+
     var isStreamSilenceGateActive: Bool {
         (streamSilenceGate?.load(ordering: .relaxed) ?? 0) != 0
     }

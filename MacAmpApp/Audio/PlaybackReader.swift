@@ -169,22 +169,43 @@ final class PlaybackReader: @unchecked Sendable {
         if isLast { scheduledEnd = true }
         let completionSeekID = seekID
 
-        playerNode.scheduleBuffer(
-            scheduled,
-            completionCallbackType: isLast ? .dataPlayedBack : .dataConsumed
-        ) { [weak self] _ in
-            guard let self else { return }
-            if isLast {
-                Task { @MainActor in
-                    self.onEnded(completionSeekID)
-                }
-            } else {
-                self.queue.async {
-                    self.readAndScheduleChunk(epoch: expected)
+        #if DEBUG
+        beforeScheduleForTesting?()
+        #endif
+
+        // Checked and scheduled under the lock `stop()` bumps the epoch under,
+        // so a chunk decoded for an abandoned run can't reach the player after
+        // the caller has stopped it.
+        epoch.withLockUnchecked { current in
+            guard current == expected else { return }
+            playerNode.scheduleBuffer(
+                scheduled,
+                completionCallbackType: isLast ? .dataPlayedBack : .dataConsumed
+            ) { [weak self] _ in
+                guard let self else { return }
+                if isLast {
+                    Task { @MainActor in
+                        self.onEnded(completionSeekID)
+                    }
+                } else {
+                    self.queue.async {
+                        self.readAndScheduleChunk(epoch: expected)
+                    }
                 }
             }
+            #if DEBUG
+            scheduledChunkCountForTesting += 1
+            #endif
         }
     }
+
+    #if DEBUG
+    /// Test seam: runs on the reader queue after a chunk is decoded and before
+    /// it is scheduled.
+    var beforeScheduleForTesting: (@Sendable () -> Void)?
+    /// Test seam: chunks handed to the player node so far.
+    private(set) var scheduledChunkCountForTesting = 0
+    #endif
 
     private func finishRun(epoch expected: UInt64) {
         guard !scheduledEnd else { return }

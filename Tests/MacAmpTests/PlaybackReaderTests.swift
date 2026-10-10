@@ -159,6 +159,92 @@ struct PlaybackReaderTests {
         engine.stop()
     }
 
+    @MainActor
+    @Test("A chunk decoded for an abandoned run never reaches the player")
+    func abandonedChunkIsDropped() async throws {
+        let sampleRate = 44100.0
+        let url = try makeToneFile(seconds: 2.0, frequency: 440, sampleRate: sampleRate)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 2, interleaved: false)!
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+        engine.mainMixerNode.outputVolume = 0
+        engine.prepare()
+        try engine.start()
+
+        let reader = PlaybackReader(playerNode: player, feed: SpectrumBandFeed()) { _ in }
+        // Abandon the run while its first chunk sits decoded but not yet scheduled.
+        let once = Ended()
+        reader.beforeScheduleForTesting = { [weak reader] in
+            guard !once.value else { return }
+            once.mark()
+            reader?.stop()
+        }
+        let file = try AVAudioFile(forReading: url)
+        reader.start(url: url, startFrame: 0, endFrame: file.length, outputFormat: format, seekID: nil)
+
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(once.value, "the hook never ran")
+        #expect(reader.scheduledChunkCountForTesting == 0, "a chunk from the abandoned run was scheduled")
+
+        engine.stop()
+    }
+
+    @MainActor
+    @Test("Once stopped, the reader does not refill a stopped player")
+    func stoppedReaderStaysStopped() async throws {
+        let sampleRate = 44100.0
+        let url = try makeToneFile(seconds: 5.0, frequency: 440, sampleRate: sampleRate)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 2, interleaved: false)!
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+        engine.mainMixerNode.outputVolume = 0
+        engine.prepare()
+        try engine.start()
+
+        let reader = PlaybackReader(playerNode: player, feed: SpectrumBandFeed()) { _ in }
+        let file = try AVAudioFile(forReading: url)
+        reader.start(url: url, startFrame: 0, endFrame: file.length, outputFormat: format, seekID: nil)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let primed = reader.scheduledChunkCountForTesting
+        #expect(primed > 0)
+
+        // Stopping the player releases every queued chunk, which would otherwise
+        // ask the reader for the next one.
+        reader.stop()
+        player.stop()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(reader.scheduledChunkCountForTesting == primed, "the reader refilled a stopped player")
+
+        engine.stop()
+    }
+
+    @MainActor
+    @Test("Stopping playback stops the reader too")
+    func stopAudioStopsTheReader() async throws {
+        let url = try makeToneFile(seconds: 5.0, frequency: 440, sampleRate: 44100)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let engine = AudioEngineController(eqNode: AVAudioUnitEQ(numberOfBands: 10), visualizerPipeline: VisualizerPipeline())
+        try engine.loadFile(url: url)
+        _ = engine.scheduleFrom(time: 0, seekID: nil)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let primed = engine.scheduledChunkCountForTesting
+        #expect(primed > 0)
+
+        engine.stopAudio()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(engine.scheduledChunkCountForTesting == primed, "the reader refilled the stopped player")
+        engine.shutdown()
+    }
+
     @Test("A seek drops frames staged for the abandoned position")
     func resetDropsStaleFrames() {
         let feed = SpectrumBandFeed()

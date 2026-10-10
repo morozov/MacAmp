@@ -1098,6 +1098,10 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         engine.audioWorkgroup
     }
 
+    #if DEBUG
+    var engineForTesting: AudioEngineController { engine }
+    #endif
+
     // MARK: - Seeking / Scrubbing
 
     func seekToPercent(_ percent: Double, resume: Bool? = nil) {
