@@ -4,6 +4,7 @@ import SwiftUI
 /// Only re-evaluates when displayTitle or scrollOffset changes.
 struct MainWindowTrackInfoLayer: View {
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
+    @Environment(UserActionDispatcher.self) private var dispatcher
     let interactionState: WinampMainWindowInteractionState
 
     private typealias Layout = WinampMainWindowLayout
@@ -31,6 +32,15 @@ struct MainWindowTrackInfoLayer: View {
                 .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height, alignment: .leading)
                 .at(CGPoint(x: Layout.trackInfo.minX, y: Layout.trackInfo.minY))
         }
+
+        // A double-click opens File Info.
+        Color.clear
+            .contentShape(Rectangle())
+            .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height)
+            .onTapGesture(count: 2) { dispatcher.perform(.showTrackInfo) }
+            .accessibilityElement()
+            .accessibilityIdentifier("MacAmp.MainWindow.Marquee")
+            .at(CGPoint(x: Layout.trackInfo.minX, y: Layout.trackInfo.minY))
     }
 }
 

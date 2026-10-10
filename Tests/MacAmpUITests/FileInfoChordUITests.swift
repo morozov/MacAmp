@@ -42,6 +42,22 @@ final class FileInfoChordUITests: UIChordTestCase {
         app.buttons["Done"].click()
     }
 
+    func test_marqueeDoubleClick_opensFileInfo() {
+        let row = app.otherElements.matching(identifier: "MacAmp.Playlist.Row.1").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "playlist row not found")
+        row.click()
+
+        focusWindow("MacAmp.MainWindow")
+        let marquee = app.otherElements.matching(identifier: "MacAmp.MainWindow.Marquee").firstMatch
+        XCTAssertTrue(marquee.waitForExistence(timeout: 5), "marquee not found")
+        marquee.doubleClick()
+
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5),
+                      "double-clicking the marquee should open the File Info window")
+        done.click()
+    }
+
     func test_option3_doesNothing_withNoTrack() {
         focusWindow("MacAmp.MainWindow")
         sendChord("3", .option)
