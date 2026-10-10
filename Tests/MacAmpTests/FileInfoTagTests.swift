@@ -30,4 +30,11 @@ struct FileInfoTagTests {
         #expect(info.trackGain == "-6.50 dB")
         #expect(info.albumGain == "-7.25 dB")
     }
+
+    @Test("Only MPEG reports a frame count", arguments: [("tagged.mp3", true), ("tagged.flac", false)])
+    func frameCountOnlyForMPEG(fixture: String, hasFrames: Bool) async throws {
+        let url = try #require(Bundle(for: BundleToken.self).url(forResource: fixture, withExtension: nil))
+        let info = await MetadataLoader.loadFileInfo(from: url)
+        #expect((info.frameCount != nil) == hasFrames)
+    }
 }

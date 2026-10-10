@@ -160,7 +160,7 @@ extension MetadataLoader {
         var sampleRate: Double
         var channels: UInt32
         var payloadBytes: UInt64
-        var packetCount: UInt64
+        var packetCount: UInt64?
         var bitrateBps: UInt32
         var dataOffset: Int64
         var isMPEG: Bool
@@ -200,7 +200,9 @@ extension MetadataLoader {
             sampleRate: asbd.mSampleRate,
             channels: asbd.mChannelsPerFrame,
             payloadBytes: u64(kAudioFilePropertyAudioDataByteCount),
-            packetCount: u64(kAudioFilePropertyAudioDataPacketCount),
+            // Only MPEG reports its frame count, and asking any other format
+            // for it can read the whole file: about 5 s for a 600 MB FLAC.
+            packetCount: isMPEG ? u64(kAudioFilePropertyAudioDataPacketCount) : nil,
             bitrateBps: u32(kAudioFilePropertyBitRate),
             dataOffset: offset,
             isMPEG: isMPEG
