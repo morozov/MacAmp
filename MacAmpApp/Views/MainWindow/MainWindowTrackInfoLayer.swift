@@ -17,13 +17,13 @@ struct MainWindowTrackInfoLayer: View {
 
         if textWidth > displayWidth {
             HStack(spacing: 0) {
-                TrackInfoSprites(text: trackText)
+                TrackInfoSprites(text: WinampMainWindowInteractionState.marqueeText(for: trackText))
                     .offset(x: interactionState.scrollOffset, y: -2)
                     .onAppear { interactionState.startScrolling() }
                     .onChange(of: playbackCoordinator.displayTitle) { _, _ in interactionState.resetScrolling() }
                     .onChange(of: interactionState.transientMessage) { _, _ in interactionState.resetScrolling() }
             }
-            .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height)
+            .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height, alignment: .leading)
             .clipped()
             .at(CGPoint(x: Layout.trackInfo.minX, y: Layout.trackInfo.minY))
         } else {

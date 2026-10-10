@@ -40,10 +40,16 @@ struct MarqueeDragTests {
         state.cleanup()
     }
 
-    @Test("Dragging past either end wraps around the auto-scroll cycle",
-          arguments: [(CGFloat(-221), CGFloat(151)), (153, -219), (-100, -100)])
+    @Test("Offsets wrap within one loop of the title and its separator",
+          arguments: [(CGFloat(-235), CGFloat(0)), (-236, -1), (5, -230), (-100, -100), (0, 0)])
     func wraps(offset: CGFloat, expected: CGFloat) {
-        // Text 200 px wide on a 152 px display cycles from 152 down to -220.
-        #expect(WinampMainWindowInteractionState.wrappedOffset(offset, textWidth: 200, displayWidth: 152) == expected)
+        // A 200 px title plus the 35 px separator loops every 235 px.
+        #expect(WinampMainWindowInteractionState.wrappedOffset(offset, textWidth: 200) == expected)
+    }
+
+    @Test("A long title is drawn twice around the separator; a short one once")
+    func marqueeText() {
+        #expect(WinampMainWindowInteractionState.marqueeText(for: longTitle) == longTitle + "  ***  " + longTitle)
+        #expect(WinampMainWindowInteractionState.marqueeText(for: "Short") == "Short")
     }
 }

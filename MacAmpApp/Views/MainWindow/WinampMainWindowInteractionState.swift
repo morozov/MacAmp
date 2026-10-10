@@ -61,11 +61,7 @@ final class WinampMainWindowInteractionState {
                 let displayWidth = WinampMainWindowLayout.trackInfo.width
 
                 if textWidth > displayWidth {
-                    self.scrollOffset -= 5
-
-                    if abs(self.scrollOffset) >= textWidth + 20 {
-                        self.scrollOffset = displayWidth
-                    }
+                    self.scrollOffset = Self.wrappedOffset(self.scrollOffset - 5, textWidth: textWidth)
                 }
             }
         }
@@ -110,7 +106,7 @@ final class WinampMainWindowInteractionState {
         let textWidth = CGFloat(displayTitleProvider().count * 5)
         let displayWidth = WinampMainWindowLayout.trackInfo.width
         guard textWidth > displayWidth else { return }
-        scrollOffset = Self.wrappedOffset(scrollOffset + delta, textWidth: textWidth, displayWidth: displayWidth)
+        scrollOffset = Self.wrappedOffset(scrollOffset + delta, textWidth: textWidth)
     }
 
     /// Resume auto-scrolling from where the drag left the text, after a
@@ -126,14 +122,22 @@ final class WinampMainWindowInteractionState {
         }
     }
 
-    /// Keeps a dragged offset within the range auto-scrolling cycles through,
-    /// from `displayWidth` down to `-(textWidth + 20)`, wrapping at either end.
-    static func wrappedOffset(_ offset: CGFloat, textWidth: CGFloat, displayWidth: CGFloat) -> CGFloat {
-        let low = -(textWidth + 20)
-        let period = displayWidth - low
-        var wrapped = offset
-        while wrapped < low { wrapped += period }
-        while wrapped > displayWidth { wrapped -= period }
+    /// Separates the two copies of a title too long for the display.
+    static let marqueeSeparator = "  ***  "
+
+    /// What the marquee draws: a title that fits as is, a longer one followed
+    /// by the separator and a second copy, so the text loops with no gap.
+    static func marqueeText(for title: String) -> String {
+        guard CGFloat(title.count * 5) > WinampMainWindowLayout.trackInfo.width else { return title }
+        return title + marqueeSeparator + title
+    }
+
+    /// Keeps an offset within one loop of the title and its separator, from 0
+    /// down to just above `-(textWidth + separator width)`, wrapping at either end.
+    static func wrappedOffset(_ offset: CGFloat, textWidth: CGFloat) -> CGFloat {
+        let period = textWidth + CGFloat(marqueeSeparator.count * 5)
+        var wrapped = offset.truncatingRemainder(dividingBy: period)
+        if wrapped > 0 { wrapped -= period }
         return wrapped
     }
 
