@@ -109,6 +109,16 @@ extension MetadataLoader {
             return nil
         }
 
+        /// A Vorbis comment (FLAC, Ogg) by field name. Field names are
+        /// case-insensitive.
+        func byComment(_ name: String) async -> String? {
+            let identifier = "vorb/\(name)".lowercased()
+            for item in tagged where item.identifier?.rawValue.lowercased() == identifier {
+                if let v = await string(of: item) { return v }
+            }
+            return nil
+        }
+
         func firstOf(_ producers: () async -> String?...) async -> String? {
             for produce in producers {
                 if let v = await produce() { return v }
@@ -119,21 +129,21 @@ extension MetadataLoader {
         info.title = await firstOf({ await byCommon(.commonKeyTitle) }, { await byFrame("TIT2") })
         info.artist = await firstOf({ await byCommon(.commonKeyArtist) }, { await byFrame("TPE1") })
         info.album = await firstOf({ await byCommon(.commonKeyAlbumName) }, { await byFrame("TALB") })
-        info.albumArtist = await byFrame("TPE2")
-        info.trackNumber = await byFrame("TRCK")
-        info.discNumber = await byFrame("TPOS")
-        info.genre = await firstOf({ await byFrame("TCON") }, { await byCommon(.commonKeyType) })
-        if let rawBPM = await byFrame("TBPM") {
+        info.albumArtist = await firstOf({ await byFrame("TPE2") }, { await byComment("ALBUMARTIST") })
+        info.trackNumber = await firstOf({ await byFrame("TRCK") }, { await byComment("TRACKNUMBER") })
+        info.discNumber = await firstOf({ await byFrame("TPOS") }, { await byComment("DISCNUMBER") })
+        info.genre = await firstOf({ await byFrame("TCON") }, { await byComment("GENRE") }, { await byCommon(.commonKeyType) })
+        if let rawBPM = await firstOf({ await byFrame("TBPM") }, { await byComment("BPM") }) {
             // TBPM is a number; some tags append the unit ("130 BPM"). Keep the
             // number only — the field already sits under a "BPM" label.
             let number = rawBPM.prefix { $0.isNumber || $0 == "." }
             info.bpm = number.isEmpty ? nil : String(number)
         }
-        info.composer = await byFrame("TCOM")
-        info.publisher = await byFrame("TPUB")
-        info.comment = await byFrame("COMM")
+        info.composer = await firstOf({ await byFrame("TCOM") }, { await byComment("COMPOSER") })
+        info.publisher = await firstOf({ await byFrame("TPUB") }, { await byComment("PUBLISHER") }, { await byComment("ORGANIZATION") })
+        info.comment = await firstOf({ await byFrame("COMM") }, { await byComment("COMMENT") })
 
-        if let raw = await firstOf({ await byFrame("TDRC") }, { await byFrame("TYER") }, { await byCommon(.commonKeyCreationDate) }) {
+        if let raw = await firstOf({ await byFrame("TDRC") }, { await byFrame("TYER") }, { await byComment("DATE") }, { await byCommon(.commonKeyCreationDate) }) {
             info.year = year(from: raw)
         }
 
@@ -262,12 +272,18 @@ extension MetadataLoader {
         return digits.count >= 4 ? String(digits.prefix(4)) : (digits.isEmpty ? nil : String(digits))
     }
 
-    /// Find an ID3 `TXXX` user-text frame by description and format its numeric
-    /// value as `%+.2f dB`. Returns `nil` when no matching frame is present.
+    /// Find an ID3 `TXXX` user-text frame or a Vorbis comment by description
+    /// and format its numeric value as `%+.2f dB`. Returns `nil` when no
+    /// matching tag is present.
     private static func replayGain(_ description: String, in items: [AVMetadataItem]) async -> String? {
-        for item in items where item.identifier?.rawValue.hasSuffix("/TXXX") ?? false {
-            let info = item.extraAttributes?[.info] as? String
-            guard info?.lowercased() == description else { continue }
+        for item in items {
+            let identifier = item.identifier?.rawValue ?? ""
+            if identifier.hasSuffix("/TXXX") {
+                let info = item.extraAttributes?[.info] as? String
+                guard info?.lowercased() == description else { continue }
+            } else if identifier.lowercased() != "vorb/\(description)" {
+                continue
+            }
             guard let raw = try? await item.load(.stringValue) else { continue }
             let token = raw.replacingOccurrences(of: "dB", with: "")
                 .trimmingCharacters(in: .whitespaces)
