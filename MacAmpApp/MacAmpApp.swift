@@ -71,6 +71,14 @@ struct MacAmpApp: App {
         }
         // Commands are defined once here and apply to all window groups
         .commands {
+            // SwiftUI's auto Edit menu binds ⌘A to Select All. On the playlist
+            // window, the underlying NSHostingView responds to selectAll: (a
+            // default NSResponder method), enabling the Edit > Select All item
+            // and hijacking ⌘A before it reaches our Always On Top. Removing
+            // the pasteboard group strips Cut/Copy/Paste/Delete/Select All
+            // from the menu; NSText still handles those at the responder
+            // level for text fields.
+            CommandGroup(replacing: .pasteboard) { }
             AppCommands(windowCoordinator: windowCoordinator, audioPlayer: audioPlayer, settings: settings, playbackCoordinator: playbackCoordinator)
             SkinsCommands(skinManager: skinManager)
         }

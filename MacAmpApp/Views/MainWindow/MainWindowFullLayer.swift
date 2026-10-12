@@ -210,7 +210,7 @@ struct MainWindowFullLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Options menu (Ctrl+O, Ctrl+T for time)")
+        .help("Options menu (\(WinampKeyBindings.openOptionsMenu.displayLabel), \(WinampKeyBindings.timeMode.displayLabel) for time)")
         .at(Layout.clutterButtonO)
 
         let aSprite = settings.isAlwaysOnTop ? "MAIN_CLUTTER_BAR_BUTTON_A_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_A"
@@ -219,7 +219,7 @@ struct MainWindowFullLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Toggle always on top (Ctrl+A)")
+        .help("Toggle always on top (\(WinampKeyBindings.alwaysOnTop.displayLabel))")
         .at(Layout.clutterButtonA)
 
         let iSprite = settings.showTrackInfoDialog ? "MAIN_CLUTTER_BAR_BUTTON_I_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_I"
@@ -228,7 +228,7 @@ struct MainWindowFullLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Track information (Ctrl+I)")
+        .help("Track information (\(WinampKeyBindings.trackInfo.displayLabel))")
         .at(Layout.clutterButtonI)
     }
 
@@ -249,7 +249,7 @@ struct MainWindowFullLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Video Window (Ctrl+V)")
+        .help("Video Window (\(WinampKeyBindings.videoWindow.displayLabel))")
         .at(Layout.clutterButtonV)
     }
 }
