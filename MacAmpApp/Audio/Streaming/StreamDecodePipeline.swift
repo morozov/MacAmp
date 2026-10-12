@@ -272,6 +272,8 @@ final class StreamDecodePipeline {
                 if let httpResponse = response as? HTTPURLResponse {
                     let metaInt = StreamDecodePipeline.extractICYMetaInt(from: httpResponse.allHeaderFields) ?? 0
                     context?.configureFramer(metaInterval: metaInt)
+                    let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? ""
+                    context?.applyContentTypeHint(StreamDecodePipeline.formatHint(forContentType: contentType))
                 }
                 // State updates still go to MainActor
                 Task { @MainActor [weak self] in
@@ -580,6 +582,16 @@ final class StreamDecodePipeline {
         return 0
     }
 
+    nonisolated static func formatHint(forContentType contentType: String) -> AudioFileTypeID {
+        let mime = contentType.split(separator: ";").first?
+            .trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        switch mime {
+        case "audio/mpeg", "audio/mp3": return kAudioFileMP3Type
+        case "audio/aac", "audio/aacp", "audio/x-aac": return kAudioFileAAC_ADTSType
+        default: return 0
+        }
+    }
+
     #if DEBUG
     // MARK: - Test Seams (DEBUG only)
 
@@ -629,6 +641,7 @@ private final class DecodeContext: @unchecked Sendable {
 
     private var framer = ICYFramer()
     private var parser: AudioFileStreamParser?
+    private var formatHint: AudioFileTypeID = 0
     private var decoder: AudioConverterDecoder?
     private var magicCookie: Data?
     private var prebufferedFrames: Int = 0
@@ -733,32 +746,49 @@ private final class DecodeContext: @unchecked Sendable {
         self.onChannelCountAvailable = onChannelCountAvailable
         self.onBitrateMarker = onBitrateMarker
 
+        self.formatHint = formatHint
+
         decodeQueue.async { [self] in
-            let parser = AudioFileStreamParser(formatHint: formatHint)
-            parser.confinementQueue = decodeQueue
+            installParser(formatHint: formatHint)
+        }
+    }
 
-            parser.onFormatAvailable = { [weak self] asbd in
-                self?.handleFormatAvailable(asbd)
-            }
-            parser.onMagicCookie = { [weak self] cookie in
-                guard let self else { return }
-                dispatchPrecondition(condition: .onQueue(self.decodeQueue))
-                self.magicCookie = cookie
-            }
-            parser.onError = { [weak self] message in
-                guard let self else { return }
-                self.onError(message, self.generation)
-            }
-            parser.onPackets = { [weak self] data, descriptions in
-                self?.handlePackets(data: data, descriptions: descriptions)
-            }
+    private func installParser(formatHint: AudioFileTypeID) {
+        let parser = AudioFileStreamParser(formatHint: formatHint)
+        parser.confinementQueue = decodeQueue
 
-            self.parser = parser
+        parser.onFormatAvailable = { [weak self] asbd in
+            self?.handleFormatAvailable(asbd)
+        }
+        parser.onMagicCookie = { [weak self] cookie in
+            guard let self else { return }
+            dispatchPrecondition(condition: .onQueue(self.decodeQueue))
+            self.magicCookie = cookie
+        }
+        parser.onError = { [weak self] message in
+            guard let self else { return }
+            self.onError(message, self.generation)
+        }
+        parser.onPackets = { [weak self] data, descriptions in
+            self?.handlePackets(data: data, descriptions: descriptions)
+        }
 
-            // Check for deferred init error (AudioFileStreamOpen failed before callbacks were wired)
-            if let error = parser.initError {
-                self.onError(error, self.generation)
-            }
+        self.parser = parser
+
+        // Check for deferred init error (AudioFileStreamOpen failed before callbacks were wired)
+        if let error = parser.initError {
+            self.onError(error, self.generation)
+        }
+    }
+
+    /// Replace the parser with one using the response's Content-Type hint when the URL gave none.
+    /// Dispatched to decode queue, so it runs before the first body bytes are parsed.
+    func applyContentTypeHint(_ hint: AudioFileTypeID) {
+        decodeQueue.async { [self] in
+            guard !isShutdown, formatHint == 0, hint != 0 else { return }
+            formatHint = hint
+            parser?.close()
+            installParser(formatHint: hint)
         }
     }
 
