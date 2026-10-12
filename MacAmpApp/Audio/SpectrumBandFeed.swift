@@ -13,9 +13,10 @@ import os
 /// go through a lock. Writers hold it only for a memcpy-sized region.
 final class SpectrumBandFeed: @unchecked Sendable {
     /// Frames retained before the oldest is overwritten. At one frame per 256
-    /// samples this holds about three seconds at 44.1 kHz, comfortably more
-    /// than the decoder reads ahead.
-    private static let capacity = 512
+    /// samples this holds about twelve seconds at 44.1 kHz, more than the
+    /// longest read-ahead of either source: the stream ring buffer holds about
+    /// eleven seconds of decoded audio.
+    private static let capacity = 2048
 
     private let width = SpectrumBandAnalyzer.bandCount
 

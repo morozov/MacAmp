@@ -46,6 +46,12 @@ final class StreamPlayer: BitrateSource {
 
     private let pipeline = StreamDecodePipeline()
 
+    /// Where the decoded audio's analyzer frames go; set before the first `play`.
+    var spectrumFeed: SpectrumBandFeed? {
+        get { pipeline.spectrumFeed }
+        set { pipeline.spectrumFeed = newValue }
+    }
+
     @ObservationIgnored private var ringBuffer: LockFreeRingBuffer?
 
     // MARK: - Elapsed Time (anchor-based, not accumulator — avoids timer drift)

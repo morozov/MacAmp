@@ -60,6 +60,9 @@ final class StreamDecodePipeline {
     /// Fires when buffered frames reach `resumePrebufferThreshold` after a pause→resume.
     /// One-shot per resume cycle (re-armed by `resetPrebufferTracking`).
     var onPrebufferReady: (@MainActor @Sendable () -> Void)?
+    /// Receives analyzer frames for the decoded audio, so the spectrum analyzer
+    /// reads a stream the same way it reads a file.
+    var spectrumFeed: SpectrumBandFeed?
 
     // MARK: - Ring Buffer (shared with AudioPlayer's AVAudioSourceNode)
 
@@ -190,9 +193,12 @@ final class StreamDecodePipeline {
     /// Start streaming from a direct audio URL (not a playlist).
     private func startDirectStream(url: URL, ringBuffer: LockFreeRingBuffer, generation currentGeneration: UInt64) {
         let formatHint = Self.formatHint(for: url)
+        let spectrumGeneration = spectrumFeed?.reset() ?? 0
         let context = DecodeContext(
             decodeQueue: decodeQueue,
             ringBuffer: ringBuffer,
+            spectrumFeed: spectrumFeed,
+            spectrumGeneration: spectrumGeneration,
             formatHint: formatHint,
             generation: currentGeneration,
             onFormatReady: { [weak self] sampleRate, gen in
@@ -637,6 +643,9 @@ final class StreamDecodePipeline {
 private final class DecodeContext: @unchecked Sendable {
     private let decodeQueue: DispatchQueue
     private let ringBuffer: LockFreeRingBuffer
+    private let spectrumFeed: SpectrumBandFeed?
+    private let spectrumGeneration: UInt64
+    private let spectrumFeeder = SpectrumBandFeeder()
     private let generation: UInt64
 
     private var framer = ICYFramer()
@@ -725,6 +734,8 @@ private final class DecodeContext: @unchecked Sendable {
     init(
         decodeQueue: DispatchQueue,
         ringBuffer: LockFreeRingBuffer,
+        spectrumFeed: SpectrumBandFeed?,
+        spectrumGeneration: UInt64,
         formatHint: AudioFileTypeID,
         generation: UInt64,
         onFormatReady: @escaping @Sendable (Float64, UInt64) -> Void,
@@ -737,6 +748,8 @@ private final class DecodeContext: @unchecked Sendable {
     ) {
         self.decodeQueue = decodeQueue
         self.ringBuffer = ringBuffer
+        self.spectrumFeed = spectrumFeed
+        self.spectrumGeneration = spectrumGeneration
         self.generation = generation
         self.onFormatReady = onFormatReady
         self.onMetadata = onMetadata
@@ -947,7 +960,21 @@ private final class DecodeContext: @unchecked Sendable {
             guard !isShutdown, !isPausedByUser else { break }
             guard let (pcmBuffer, frameCount) = decoder.decode() else { break }
 
+            let chunkStartFrame = ringBuffer.writeHeadFrames
             let framesWritten = ringBuffer.write(from: pcmBuffer, frameCount: frameCount)
+            if let spectrumFeed {
+                // Stamped with the ring's frame position, the same clock the render
+                // block advances, so the display can look up what is audible now.
+                spectrumFeeder.append(
+                    interleaved: pcmBuffer,
+                    channelCount: ringBuffer.channelCount,
+                    frameCount: frameCount,
+                    startFrame: Int64(truncatingIfNeeded: chunkStartFrame),
+                    sampleRate: detectedSampleRate,
+                    to: spectrumFeed,
+                    generation: spectrumGeneration
+                )
+            }
             prebufferedFrames += framesWritten
 
             if !formatReadyFired && prebufferedFrames >= prebufferThreshold {

@@ -1371,10 +1371,14 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         }
     }
 
+    /// The feed that file and stream decoding both write analyzer frames to.
+    var analyzerFeed: SpectrumBandFeed { visualizerPipeline.analyzerFeed }
+
     func spectrumBands() -> [Float] {
         visualizerPipeline.spectrumBands(
-            isPlaying: isVisualizerRendering,
-            playbackTime: engine.currentPlaybackSeconds
+            isPlaying: isVisualizerRendering && !engine.isStreamSilent,
+            playbackTime: engine.spectrumPlaybackSeconds,
+            usesTap: currentMediaType == .video
         )
     }
 

@@ -25,7 +25,7 @@ final class PlaybackReader: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.macamp.playback-reader", qos: .userInitiated)
     private let playerNode: AVAudioPlayerNode
     private let feed: SpectrumBandFeed
-    private let analyzer = SpectrumBandAnalyzer()
+    private let feeder = SpectrumBandFeeder()
 
     /// Called on the main actor once the last chunk of a run has been played.
     private let onEnded: @MainActor (UUID?) -> Void
@@ -43,12 +43,6 @@ final class PlaybackReader: @unchecked Sendable {
     /// Bumped by `stop()` so chunks in flight for a superseded position are
     /// dropped instead of scheduled.
     private let epoch = OSAllocatedUnfairLock(initialState: UInt64(0))
-
-    /// Mono mixdown of the chunk being analyzed, plus the tail of the previous
-    /// one so a window straddling the boundary still sees real samples.
-    private var mono: [Float] = []
-    private var carry: [Float] = []
-    private var bands: [Float] = Array(repeating: 0, count: SpectrumBandAnalyzer.bandCount)
 
     init(
         playerNode: AVAudioPlayerNode,
@@ -74,7 +68,7 @@ final class PlaybackReader: @unchecked Sendable {
             self.converter = nil
             self.seekID = nil
             self.scheduledEnd = true
-            self.carry = []
+            self.feeder.reset()
         }
     }
 
@@ -111,7 +105,7 @@ final class PlaybackReader: @unchecked Sendable {
                 self.seekID = seekID
                 self.generation = generation
                 self.scheduledEnd = false
-                self.carry = []
+                self.feeder.reset()
 
                 let sourceFormat = file.processingFormat
                 self.converter = sourceFormat == outputFormat ? nil : AVAudioConverter(from: sourceFormat, to: outputFormat)
@@ -244,41 +238,17 @@ final class PlaybackReader: @unchecked Sendable {
 
     // MARK: - Analysis
 
-    /// Emit one analyzer frame per hop across the chunk, stamped with the file
-    /// time each window ends at.
+    /// Hand the chunk to the shared feeder, stamped with the file time it starts at.
     private func analyze(_ buffer: AVAudioPCMBuffer, startingAt startFrame: AVAudioFramePosition, sampleRate: Double) {
-        guard sampleRate > 0, let channels = buffer.floatChannelData else { return }
-
-        let frameCount = Int(buffer.frameLength)
-        let channelCount = Int(buffer.format.channelCount)
-        let carried = carry.count
-
-        mono.removeAll(keepingCapacity: true)
-        mono.append(contentsOf: carry)
-        mono.reserveCapacity(carried + frameCount)
-
-        let scale = 1.0 / Float(max(1, channelCount))
-        for frame in 0..<frameCount {
-            var sum: Float = 0
-            for channel in 0..<channelCount {
-                sum += channels[channel][frame]
-            }
-            mono.append(sum * scale)
-        }
-
-        let hop = SpectrumBandAnalyzer.hop
-        var end = carried + hop
-        while end <= mono.count {
-            analyzer.analyze(mono, endingAt: end, into: &bands, at: 0)
-            // The window ends here, so this is the audio heard at that instant.
-            let time = Double(startFrame + AVAudioFramePosition(end - carried)) / sampleRate
-            feed.append(bands, at: time, generation: generation)
-            end += hop
-        }
-
-        // Keep enough tail for the next chunk's first window to reach back into
-        // real audio rather than into silence.
-        let keep = min(mono.count, SpectrumBandAnalyzer.windowSize)
-        carry = Array(mono.suffix(keep))
+        guard let channels = buffer.floatChannelData else { return }
+        feeder.append(
+            planar: channels,
+            channelCount: Int(buffer.format.channelCount),
+            frameCount: Int(buffer.frameLength),
+            startFrame: startFrame,
+            sampleRate: sampleRate,
+            to: feed,
+            generation: generation
+        )
     }
 }

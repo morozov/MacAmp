@@ -149,6 +149,7 @@ final class PlaybackCoordinator {
     init(audioPlayer: AudioPlayer, streamPlayer: StreamPlayer) {
         self.audioPlayer = audioPlayer
         self.streamPlayer = streamPlayer
+        self.streamPlayer.spectrumFeed = audioPlayer.analyzerFeed
 
         self.audioPlayer.onTrackMetadataUpdate = { [weak self] track in
             guard let self else { return }

@@ -64,10 +64,30 @@ final class AudioEngineController {
         return max(0, seconds)
     }
 
+    /// The position analyzer frames are stamped against: the file's playhead, or
+    /// the stream ring buffer's read head while a stream is playing.
+    var spectrumPlaybackSeconds: Double {
+        if isBridgeActive, let ring = streamRingBuffer, streamSampleRate > 0 {
+            return Double(ring.readHeadFrames) / streamSampleRate
+        }
+        return currentPlaybackSeconds
+    }
+
+    /// True while the stream bridge is rendering silence: gated off, rebuffering,
+    /// or with nothing left to play. The analyzer shows no bars then, as it does
+    /// for a file that is not playing.
+    var isStreamSilent: Bool {
+        guard isBridgeActive, let ring = streamRingBuffer else { return false }
+        return (streamSilenceGate?.load(ordering: .relaxed) ?? 0) != 0
+            || ring.isRebuffering
+            || ring.availableFrames == 0
+    }
+
     // MARK: - Stream Bridge State
 
     private var streamSourceNode: AVAudioSourceNode?
     private var streamRingBuffer: LockFreeRingBuffer?
+    private var streamSampleRate: Float64 = 0
     /// Bridge-scoped silence gate. Single writer (MainActor `setStreamSilenced`,
     /// releasing store), single reader (render block, acquiring load).
     private var streamSilenceGate: ManagedAtomic<UInt8>?
@@ -474,6 +494,7 @@ final class AudioEngineController {
         guard !isBridgeActive else { return }
 
         streamRingBuffer = ringBuffer
+        streamSampleRate = sampleRate
 
         // Allocate gate before the render block captures it; lifetime ends in deactivateStreamBridge.
         let gate = ManagedAtomic<UInt8>(0)

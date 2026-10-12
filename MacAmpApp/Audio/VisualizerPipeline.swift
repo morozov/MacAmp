@@ -270,20 +270,22 @@ final class VisualizerPipeline {
 
     /// Spectrum analyzer band levels for this instant.
     ///
-    /// File playback answers from `analyzerFeed`, which the decoder fills ahead
-    /// of the playhead, so the bars line up with what is audible. Sources that
-    /// never pass through the decoder — streams and video — fall back to the
-    /// tap, which hands over 100 ms of already-rendered audio at a time; that
-    /// batch is played back over the span it describes, leaving those sources
-    /// up to one delivery behind.
+    /// Files and streams answer from `analyzerFeed`, which the decoder fills
+    /// ahead of the playhead, so the bars line up with what is audible and do
+    /// not depend on the volume or EQ. Video never passes through the decoder,
+    /// so it alone falls back to the tap, which hands over 100 ms of
+    /// already-rendered audio at a time; that batch is played back over the
+    /// span it describes, leaving video up to one delivery behind.
     ///
     /// - Parameters:
     ///   - isPlaying: Whether audio is currently rendering; when false the bands
     ///     read zero rather than holding their last values.
-    ///   - playbackTime: Seconds into the current file, used to pick the frame
-    ///     describing the audible instant.
+    ///   - playbackTime: Seconds into the current file or stream, used to pick
+    ///     the frame describing the audible instant.
+    ///   - usesTap: Whether the source is video, which the feed never covers.
+    ///     For any other source, a time the feed has no frame for reads as silence.
     /// - Returns: 75 band levels on a 0...255 scale, low frequencies first.
-    func spectrumBands(isPlaying: Bool, playbackTime: Double) -> [Float] {
+    func spectrumBands(isPlaying: Bool, playbackTime: Double, usesTap: Bool) -> [Float] {
         let width = VisualizerScratchBuffers.spectrumBandCount
         guard isPlaying else {
             return [Float](repeating: 0, count: width)
@@ -293,7 +295,7 @@ final class VisualizerPipeline {
             return frame
         }
 
-        guard spectrumFrameCount > 0, spectrumHopDuration > 0 else {
+        guard usesTap, spectrumFrameCount > 0, spectrumHopDuration > 0 else {
             return [Float](repeating: 0, count: width)
         }
 
