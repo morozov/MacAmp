@@ -401,4 +401,27 @@ struct HLSSegmentLoaderTests {
         #expect(segment?.sequence == 110)
         #expect(segment?.followsDiscontinuity == true)
     }
+
+    @Test("A garbled playlist is invalid; a feature the loader cannot play is unsupported")
+    func invalidAndUnsupported() async {
+        let garbled = FakeServer(["<html><body>502 Bad Gateway</body></html>"])
+        do {
+            _ = try await loader(garbled, FakeClock()).next()
+            Issue.record("expected an error")
+        } catch let error as HLSSegmentLoader.LoadError {
+            guard case .invalidPlaylist = error else { Issue.record("wrong error \(error)"); return }
+        } catch {
+            Issue.record("wrong error \(error)")
+        }
+
+        let encrypted = FakeServer(["#EXTM3U\n#EXT-X-TARGETDURATION:5\n#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:5.0,\na.ts\n"])
+        do {
+            _ = try await loader(encrypted, FakeClock()).next()
+            Issue.record("expected an error")
+        } catch let error as HLSSegmentLoader.LoadError {
+            guard case .unsupported = error else { Issue.record("wrong error \(error)"); return }
+        } catch {
+            Issue.record("wrong error \(error)")
+        }
+    }
 }

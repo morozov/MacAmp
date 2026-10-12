@@ -96,6 +96,21 @@ final class StreamDecodePipeline {
     private var dataTask: URLSessionDataTask?
     private var delegateProxy: SessionDelegateProxy?
 
+    // MARK: - HLS
+
+    /// How HLS playlists and segments are fetched. Tests replace it.
+    var hlsFetch: HLSSegmentLoader.Fetch = HLSSegmentLoader.fetchWithURLSession
+
+    /// How a playlist URL is fetched to decide what it holds. Tests replace it.
+    var playlistFetch: @Sendable (URL) async throws -> (Data, URLResponse) = { url in
+        try await URLSession.shared.data(from: url)
+    }
+
+    /// True while the running stream is HLS. Such a stream has no connection to suspend, and a
+    /// live one cannot resume where it paused, so `StreamPlayer` pauses it by stopping it.
+    private(set) var isHLS = false
+    private var hlsTask: Task<Void, Never>?
+
     /// True while the URLSession data task is suspended for backpressure.
     /// Set by `suspendIngestIfNeeded` when the decoder reports a near-full
     /// ring; cleared by `resumeIngestIfDrained` when the main-actor poll
@@ -173,10 +188,26 @@ final class StreamDecodePipeline {
             Task { @MainActor [weak self] in
                 guard let self, currentGeneration == self.generation else { return }
                 do {
-                    let streamURL = try await Self.resolvePlaylistURL(url)
+                    let source = try await Self.resolveSource(url, fetch: self.playlistFetch)
                     guard currentGeneration == self.generation else { return }
-                    AppLog.info(.audio, "StreamDecodePipeline: Resolved playlist → \(streamURL.absoluteString)")
-                    self.startDirectStream(url: streamURL, ringBuffer: ringBuffer, generation: currentGeneration)
+                    switch source {
+                    case .direct(let streamURL):
+                        AppLog.info(.audio, "StreamDecodePipeline: Resolved playlist → \(streamURL.absoluteString)")
+                        self.startDirectStream(url: streamURL, ringBuffer: ringBuffer, generation: currentGeneration)
+                    case .hls(let mediaURL):
+                        AppLog.info(.audio, "StreamDecodePipeline: HLS stream → \(mediaURL.absoluteString)")
+                        self.startHLSStream(mediaURL: mediaURL, ringBuffer: ringBuffer, generation: currentGeneration)
+                    }
+                } catch let error as PlaylistResolveError {
+                    guard currentGeneration == self.generation else { return }
+                    if case .hlsUnsupported(let message) = error {
+                        self.setState(.error(message))
+                        self.onTermination?(.decodeError(message))
+                    } else {
+                        let message = "Failed to resolve playlist: \(error.localizedDescription)"
+                        self.setState(.error(message))
+                        self.onTermination?(.playlistResolutionFailed(message))
+                    }
                 } catch {
                     guard currentGeneration == self.generation else { return }
                     let message = "Failed to resolve playlist: \(error.localizedDescription)"
@@ -190,16 +221,22 @@ final class StreamDecodePipeline {
         startDirectStream(url: url, ringBuffer: ringBuffer, generation: currentGeneration)
     }
 
-    /// Start streaming from a direct audio URL (not a playlist).
-    private func startDirectStream(url: URL, ringBuffer: LockFreeRingBuffer, generation currentGeneration: UInt64) {
-        let formatHint = Self.formatHint(for: url)
+    /// The decode chain for one stream. `bounded` is set for HLS, whose feeder waits for room in
+    /// the ring instead of relying on a connection to suspend.
+    private func makeDecodeContext(
+        ringBuffer: LockFreeRingBuffer,
+        formatHint: AudioFileTypeID,
+        bounded: Bool,
+        generation currentGeneration: UInt64
+    ) -> DecodeContext {
         let spectrumGeneration = spectrumFeed?.reset() ?? 0
-        let context = DecodeContext(
+        return DecodeContext(
             decodeQueue: decodeQueue,
             ringBuffer: ringBuffer,
             spectrumFeed: spectrumFeed,
             spectrumGeneration: spectrumGeneration,
             formatHint: formatHint,
+            bounded: bounded,
             generation: currentGeneration,
             onFormatReady: { [weak self] sampleRate, gen in
                 Task { @MainActor [weak self] in
@@ -263,6 +300,17 @@ final class StreamDecodePipeline {
                 }
             }
         )
+    }
+
+    /// Start streaming from a direct audio URL (not a playlist).
+    private func startDirectStream(url: URL, ringBuffer: LockFreeRingBuffer, generation currentGeneration: UInt64) {
+        let formatHint = Self.formatHint(for: url)
+        let context = makeDecodeContext(
+            ringBuffer: ringBuffer,
+            formatHint: formatHint,
+            bounded: false,
+            generation: currentGeneration
+        )
         decodeContext = context
 
         // Create URLSession with delegate proxy
@@ -314,6 +362,135 @@ final class StreamDecodePipeline {
         dataTask?.resume()
 
         AppLog.info(.audio, "StreamDecodePipeline: Starting — \(url.absoluteString)")
+    }
+
+    // MARK: - HLS stream
+
+    /// Bytes handed to the decoder at a time. Each chunk is decoded and written before the next
+    /// is sent, which bounds how far the ring can overshoot its fill mark.
+    private nonisolated static let hlsChunkBytes = 4096
+
+    private enum HLSOutcome: Sendable {
+        case ended
+        case failed(any Error)
+        case cancelled
+    }
+
+    /// Stream a live HLS playlist: fetch its segments, unwrap their audio, and feed it to the
+    /// same parser, decoder and ring buffer an ICY stream uses.
+    private func startHLSStream(mediaURL: URL, ringBuffer: LockFreeRingBuffer, generation currentGeneration: UInt64) {
+        isHLS = true
+        let context = makeDecodeContext(
+            ringBuffer: ringBuffer,
+            formatHint: kAudioFileAAC_ADTSType,
+            bounded: true,
+            generation: currentGeneration
+        )
+        decodeContext = context
+        setState(.connecting)
+
+        let loader = HLSSegmentLoader(playlistURL: mediaURL, fetch: hlsFetch)
+        hlsTask = Task { [weak self] in
+            let outcome = await Self.runHLS(loader: loader, context: context, ringBuffer: ringBuffer)
+            await self?.finishHLS(outcome, generation: currentGeneration)
+        }
+        AppLog.info(.audio, "StreamDecodePipeline: Starting HLS — \(mediaURL.absoluteString)")
+    }
+
+    /// Pull segments and feed their audio to `context`, waiting whenever the ring is half full
+    /// so the ring never overflows and nothing is downloaded that cannot yet be played.
+    private nonisolated static func runHLS(
+        loader: HLSSegmentLoader,
+        context: DecodeContext,
+        ringBuffer: LockFreeRingBuffer
+    ) async -> HLSOutcome {
+        let demuxer = TransportStreamAudioDemuxer()
+        let resumeMark = Int(Double(ringBuffer.capacity) * DecodeContext.ingestResumeRatio)
+
+        func waitForRoom() async throws {
+            while ringBuffer.availableFrames >= resumeMark {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+        }
+
+        do {
+            while let segment = try await loader.next() {
+                if segment.followsDiscontinuity { demuxer.markDiscontinuity() }
+                for event in try demuxer.demux(segment: segment.data) {
+                    switch event {
+                    case .discontinuity:
+                        await context.discontinuity()
+                    case .audio(let audio):
+                        var offset = audio.startIndex
+                        while offset < audio.endIndex {
+                            try await waitForRoom()
+                            let end = min(offset + hlsChunkBytes, audio.endIndex)
+                            var yielded = await context.feed(Data(audio[offset..<end]))
+                            while yielded {
+                                try await waitForRoom()
+                                yielded = await context.drain()
+                            }
+                            offset = end
+                        }
+                    }
+                }
+            }
+            return .ended
+        } catch is CancellationError {
+            return .cancelled
+        } catch {
+            return .failed(error)
+        }
+    }
+
+    private func finishHLS(_ outcome: HLSOutcome, generation currentGeneration: UInt64) {
+        guard currentGeneration == generation else { return }
+        switch outcome {
+        case .cancelled:
+            return
+        case .ended:
+            // The playlist ended, which for a live stream is the server closing it.
+            handleStreamComplete(error: nil, generation: currentGeneration)
+        case .failed(let error):
+            let (reason, message) = Self.terminationReason(forHLS: error)
+            stopInternal()
+            setState(.error(message))
+            onTermination?(reason)
+            AppLog.error(.audio, "StreamDecodePipeline: HLS failed — \(message)")
+        }
+    }
+
+    private static func terminationReason(forHLS error: any Error) -> (StreamTerminationReason, String) {
+        switch error {
+        case let loadError as HLSSegmentLoader.LoadError:
+            switch loadError {
+            case .http(let status):
+                let message = "HTTP \(status)"
+                // 429 is reconnectable like 5xx, as for a direct stream.
+                return status == 429 || status >= 500 ? (.httpServerError(status), message) : (.httpClientError(status), message)
+            case .network(let message, let code):
+                return (.networkError(message, code), message)
+            case .stalled:
+                let message = "HLS playlist stopped updating"
+                return (.networkError(message, NSURLErrorTimedOut), message)
+            case .onDemand:
+                let message = "On-demand HLS streams are not supported"
+                return (.decodeError(message), message)
+            case .invalidPlaylist(let message):
+                // A garbled playlist may be a passing fault at the origin, so a retry is worthwhile.
+                return (.playlistResolutionFailed(message), message)
+            case .unsupported(let message):
+                return (.decodeError(message), message)
+            case .overlappingPull:
+                let message = "HLS loader misuse"
+                return (.decodeError(message), message)
+            }
+        case is TransportStreamAudioDemuxer.DemuxError:
+            let message = "Unsupported HLS audio codec"
+            return (.decodeError(message), message)
+        default:
+            return (.networkError(error.localizedDescription, (error as NSError).code), error.localizedDescription)
+        }
     }
 
     /// Suspends the URLSession data task, then awaits a decode-queue barrier that raises
@@ -370,6 +547,7 @@ final class StreamDecodePipeline {
     }
 
     isolated deinit {
+        hlsTask?.cancel()
         dataTask?.cancel()
         urlSession?.invalidateAndCancel()
         decodeContext?.shutdown()
@@ -386,6 +564,9 @@ final class StreamDecodePipeline {
         urlSession?.invalidateAndCancel()
         urlSession = nil
         delegateProxy = nil
+        hlsTask?.cancel()
+        hlsTask = nil
+        isHLS = false
         decodeContext?.shutdown()
         decodeContext = nil
         ringBuffer = nil
@@ -506,8 +687,16 @@ final class StreamDecodePipeline {
 
     /// Download and parse a playlist file to extract the first stream URL.
     /// Supports M3U/M3U8 and PLS formats.
-    private static func resolvePlaylistURL(_ url: URL) async throws -> URL {
-        let (data, response) = try await URLSession.shared.data(from: url)
+    private enum ResolvedSource {
+        case direct(URL)
+        case hls(URL)
+    }
+
+    private static func resolveSource(
+        _ url: URL,
+        fetch: @Sendable (URL) async throws -> (Data, URLResponse)
+    ) async throws -> ResolvedSource {
+        let (data, response) = try await fetch(url)
 
         // Check Content-Type for format hint
         let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? ""
@@ -516,12 +705,16 @@ final class StreamDecodePipeline {
             throw PlaylistResolveError.encodingError
         }
 
+        if HLSPlaylist.isHLS(content) {
+            return try hlsSource(content, playlistURL: response.url ?? url)
+        }
+
         let ext = url.pathExtension.lowercased()
 
         // Try PLS first if extension or content-type suggests it
         if ext == "pls" || contentType.contains("scpls") {
             if let streamURL = parsePLS(content: content) {
-                return streamURL
+                return .direct(streamURL)
             }
         }
 
@@ -529,15 +722,43 @@ final class StreamDecodePipeline {
         // Pass relativeTo: url so relative entries resolve against the playlist URL
         if let parsed = try? M3UParser.parse(content: content, relativeTo: url),
            let firstStream = parsed.entries.first(where: { !$0.url.isFileURL }) {
-            return firstStream.url
+            return .direct(firstStream.url)
         }
 
         // Fallback: try PLS even if extension didn't match
         if let streamURL = parsePLS(content: content) {
-            return streamURL
+            return .direct(streamURL)
         }
 
         throw PlaylistResolveError.noStreamFound
+    }
+
+    /// The media playlist to stream from an HLS playlist: the playlist itself, or for a
+    /// master playlist its audio-only variant with the least bandwidth.
+    private static func hlsSource(_ content: String, playlistURL: URL) throws -> ResolvedSource {
+        let playlist: HLSPlaylist
+        do {
+            playlist = try HLSPlaylist.parse(content, relativeTo: playlistURL)
+        } catch HLSPlaylist.ParseError.unsupportedEncryption {
+            throw PlaylistResolveError.hlsUnsupported("Encrypted HLS streams are not supported")
+        } catch HLSPlaylist.ParseError.unsupportedInitSegment {
+            throw PlaylistResolveError.hlsUnsupported("HLS streams with initialization segments are not supported")
+        } catch HLSPlaylist.ParseError.unsupportedByteRange {
+            throw PlaylistResolveError.hlsUnsupported("HLS streams with byte ranges are not supported")
+        } catch {
+            // A malformed playlist may be a passing fault, so unlike an unsupported one it is retried.
+            throw PlaylistResolveError.malformedHLS
+        }
+
+        switch playlist {
+        case .media:
+            return .hls(playlistURL)
+        case .master(let master):
+            guard let variant = master.lowestAudioOnlyVariant else {
+                throw PlaylistResolveError.hlsUnsupported("This HLS stream has no audio-only variant")
+            }
+            return .hls(variant.url)
+        }
     }
 
     /// Parse a PLS playlist file to extract the first stream URL.
@@ -564,10 +785,16 @@ final class StreamDecodePipeline {
     private enum PlaylistResolveError: LocalizedError {
         case encodingError
         case noStreamFound
+        /// An HLS playlist this player cannot play. Retrying will not help.
+        case hlsUnsupported(String)
+        /// A playlist that looks like HLS but could not be read.
+        case malformedHLS
 
         var errorDescription: String? {
             switch self {
             case .encodingError: return "Unable to read playlist file"
+            case .hlsUnsupported(let message): return message
+            case .malformedHLS: return "Unreadable HLS playlist"
             case .noStreamFound: return "No stream URL found in playlist"
             }
         }
@@ -648,8 +875,16 @@ private final class DecodeContext: @unchecked Sendable {
     private let spectrumFeeder = SpectrumBandFeeder()
     private let generation: UInt64
 
+    /// HLS contexts hold back decoding when the ring fills (see `decodeQueued`) and end the
+    /// stream if its audio format changes. ICY contexts keep decoding everything they are given.
+    private let bounded: Bool
+
     private var framer = ICYFramer()
     private var parser: AudioFileStreamParser?
+    private var establishedFormat: AudioStreamBasicDescription?
+    /// Set on the decode queue the moment the stream is rejected, so nothing more is decoded or
+    /// written while the main-actor shutdown it requested is still on its way.
+    private var failed = false
     private var formatHint: AudioFileTypeID = 0
     private var decoder: AudioConverterDecoder?
     private var magicCookie: Data?
@@ -737,6 +972,7 @@ private final class DecodeContext: @unchecked Sendable {
         spectrumFeed: SpectrumBandFeed?,
         spectrumGeneration: UInt64,
         formatHint: AudioFileTypeID,
+        bounded: Bool,
         generation: UInt64,
         onFormatReady: @escaping @Sendable (Float64, UInt64) -> Void,
         onMetadata: @escaping @Sendable (ICYFramer.ICYMetadata, UInt64) -> Void,
@@ -750,6 +986,7 @@ private final class DecodeContext: @unchecked Sendable {
         self.ringBuffer = ringBuffer
         self.spectrumFeed = spectrumFeed
         self.spectrumGeneration = spectrumGeneration
+        self.bounded = bounded
         self.generation = generation
         self.onFormatReady = onFormatReady
         self.onMetadata = onMetadata
@@ -840,6 +1077,67 @@ private final class DecodeContext: @unchecked Sendable {
         }
     }
 
+    // MARK: - HLS feeding
+
+    /// Parse ADTS bytes from an HLS segment. Each call completes only once the bytes
+    /// have been parsed and every packet that fits has been decoded and written, so the
+    /// caller never has more than one chunk in flight.
+    /// - Returns: true while decoded packets remain queued because the ring is too full;
+    ///   the caller waits for room and calls `drain()`.
+    func feed(_ data: Data) async -> Bool {
+        await withCheckedContinuation { continuation in
+            decodeQueue.async { [self] in
+                guard !isShutdown, !isPausedByUser else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                let token = joinWorkgroupIfAvailable()
+                defer {
+                    if let t = token { leaveWorkgroup(token: t) }
+                }
+                parser?.parse(data)
+                continuation.resume(returning: yielded)
+            }
+        }
+    }
+
+    /// Decode the packets a previous `feed` left queued. Same result as `feed`.
+    func drain() async -> Bool {
+        await withCheckedContinuation { continuation in
+            decodeQueue.async { [self] in
+                guard !isShutdown, !isPausedByUser else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                let token = joinWorkgroupIfAvailable()
+                defer {
+                    if let t = token { leaveWorkgroup(token: t) }
+                }
+                decodeQueued()
+                continuation.resume(returning: yielded)
+            }
+        }
+    }
+
+    /// The audio after this point does not continue the audio before it. Call only
+    /// once `feed` and `drain` have returned false, so no earlier audio is still queued.
+    ///
+    /// The converter and the spectrum analysis start over, and the parser is opened afresh so
+    /// it detects the new audio's format again and `handleFormatAvailable` can compare it.
+    func discontinuity() async {
+        await withCheckedContinuation { continuation in
+            decodeQueue.async { [self] in
+                if !isShutdown {
+                    decoder?.clearQueue()
+                    spectrumFeeder.reset()
+                    parser?.close()
+                    installParser(formatHint: formatHint)
+                }
+                continuation.resume()
+            }
+        }
+    }
+
     /// On `paused=true`, in this exact order: gate up, drop in-flight packets, flush the
     /// ring. The serial queue guarantees no other handler runs between steps.
     func setPausedByUser(_ paused: Bool, completion: @escaping @Sendable () -> Void) {
@@ -899,7 +1197,17 @@ private final class DecodeContext: @unchecked Sendable {
 
     private func handleFormatAvailable(_ asbd: AudioStreamBasicDescription) {
         dispatchPrecondition(condition: .onQueue(decodeQueue))
-        guard !isShutdown, decoder == nil else { return }
+        guard !isShutdown else { return }
+        if decoder != nil {
+            // An HLS stream cannot change format mid-stream: the ring buffer, source node and
+            // decoder are all built for the first one.
+            if bounded, let established = establishedFormat, !Self.sameFormat(established, asbd) {
+                failed = true
+                onError("HLS audio format changed", generation)
+            }
+            return
+        }
+        establishedFormat = asbd
 
         let newDecoder = AudioConverterDecoder(inputFormat: asbd, magicCookie: magicCookie)
 
@@ -926,9 +1234,13 @@ private final class DecodeContext: @unchecked Sendable {
         AppLog.info(.audio, "DecodeContext: Decoder created — \(asbd.mSampleRate)Hz → \(newDecoder.sampleRate)Hz")
     }
 
+    private static func sameFormat(_ a: AudioStreamBasicDescription, _ b: AudioStreamBasicDescription) -> Bool {
+        a.mFormatID == b.mFormatID && a.mSampleRate == b.mSampleRate && a.mChannelsPerFrame == b.mChannelsPerFrame
+    }
+
     private func handlePackets(data: Data, descriptions: [AudioStreamPacketDescription]) {
         dispatchPrecondition(condition: .onQueue(decodeQueue))
-        guard !isShutdown, let decoder else { return }
+        guard !isShutdown, !failed, let decoder else { return }
 
         // Split batched packets into individual entries.
         // AudioFileStream delivers multiple packets in one callback (concatenated data
@@ -955,9 +1267,28 @@ private final class DecodeContext: @unchecked Sendable {
             }
         }
 
-        // Decode all enqueued packets
+        decodeQueued()
+    }
+
+    /// True when the last `decodeQueued` stopped with packets still queued because the
+    /// ring was too full.
+    private var yielded = false
+
+    /// Decode and write every queued packet. A bounded context stops at the ingest-suspend
+    /// high-water mark and leaves the rest queued: a few kilobytes of near-silent AAC
+    /// can expand into more audio than the ring has room for.
+    private func decodeQueued() {
+        dispatchPrecondition(condition: .onQueue(decodeQueue))
+        yielded = false
+        guard !isShutdown, !failed, let decoder else { return }
+        let suspendMark = Int(Double(ringBuffer.capacity) * Self.ingestSuspendRatio)
+
         while decoder.hasQueuedPackets {
             guard !isShutdown, !isPausedByUser else { break }
+            if bounded && ringBuffer.availableFrames >= suspendMark {
+                yielded = true
+                break
+            }
             guard let (pcmBuffer, frameCount) = decoder.decode() else { break }
 
             let chunkStartFrame = ringBuffer.writeHeadFrames
@@ -1012,7 +1343,6 @@ private final class DecodeContext: @unchecked Sendable {
             // render thread and start dropping data via the ring's drop-oldest
             // path (which would manifest to the user as "same pitch, faster"
             // because the readHead keeps getting pushed forward).
-            let suspendMark = Int(Double(ringBuffer.capacity) * Self.ingestSuspendRatio)
             if ringBuffer.availableFrames >= suspendMark {
                 onBackpressureRequest(generation)
             }

@@ -23,8 +23,10 @@ actor HLSSegmentLoader {
         case stalled
         /// The playlist is on-demand, which is not supported.
         case onDemand
-        /// The playlist could not be read or is not one this loader handles.
+        /// The playlist could not be read, or is not the kind of playlist expected here.
         case invalidPlaylist(String)
+        /// The playlist uses a feature this loader does not support, such as encryption.
+        case unsupported(String)
         /// `next()` was called again before the previous call returned.
         case overlappingPull
     }
@@ -122,6 +124,12 @@ actor HLSSegmentLoader {
         let playlist: HLSPlaylist
         do {
             playlist = try HLSPlaylist.parse(text, relativeTo: baseURL)
+        } catch HLSPlaylist.ParseError.unsupportedEncryption {
+            throw LoadError.unsupported("Encrypted HLS streams are not supported")
+        } catch HLSPlaylist.ParseError.unsupportedInitSegment {
+            throw LoadError.unsupported("HLS streams with initialization segments are not supported")
+        } catch HLSPlaylist.ParseError.unsupportedByteRange {
+            throw LoadError.unsupported("HLS streams with byte ranges are not supported")
         } catch {
             throw LoadError.invalidPlaylist("\(error)")
         }
