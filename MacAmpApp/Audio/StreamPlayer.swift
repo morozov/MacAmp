@@ -181,6 +181,11 @@ final class StreamPlayer: BitrateSource {
             pipeline.stop()
         } else if case .buffering = pipeline.state {
             pipeline.stop()
+        } else if pipeline.isHLS {
+            // A live HLS stream has no connection to hold and cannot resume where it paused, so
+            // pausing stops it and resume starts again at the live edge, as for a stream still
+            // connecting. The stop tears down the bridge and does not reconnect while paused.
+            pipeline.stop()
         } else {
             // Chained so a rapid prior resume completes before this pause runs.
             chainTransport { [weak self] in
@@ -714,6 +719,7 @@ final class StreamPlayer: BitrateSource {
     internal var isResumeWarmingForTesting: Bool { isResumeWarming }
     internal var userPausedForTesting: Bool { userPaused }
     internal var pipelineStateForTesting: StreamDecodePipeline.StreamState { pipeline.state }
+    internal var pipelineForTesting: StreamDecodePipeline { pipeline }
 
     /// Counts every invocation of `attemptReconnect()` since process start.
     /// Used by `longPauseSuppressesReconnect` to assert no reconnect fires while paused.
