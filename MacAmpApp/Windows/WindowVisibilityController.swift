@@ -34,6 +34,7 @@ final class WindowVisibilityController {
         } else {
             registry.eqWindow?.orderFront(nil)
         }
+        onWindowShown?()
     }
 
     func hideEQWindow() {
@@ -62,6 +63,7 @@ final class WindowVisibilityController {
         } else {
             registry.playlistWindow?.orderFront(nil)
         }
+        onWindowShown?()
     }
 
     func hidePlaylistWindow() {
@@ -88,6 +90,7 @@ final class WindowVisibilityController {
             main.deminiaturize(nil)
         } else {
             main.makeKeyAndOrderFront(nil)
+            onWindowShown?()
         }
         isMainWindowVisible = true
     }
@@ -105,6 +108,7 @@ final class WindowVisibilityController {
         AppLog.debug(.window, "showVideo() called")
         guard !deferWhileMinimized(.video) else { return }
         registry.videoWindow?.makeKeyAndOrderFront(nil)
+        onWindowShown?()
     }
 
     func hideVideo() {
@@ -116,6 +120,7 @@ final class WindowVisibilityController {
         AppLog.debug(.window, "showMilkdrop() called, window exists: \(registry.milkdropWindow != nil)")
         guard !deferWhileMinimized(.milkdrop) else { return }
         registry.milkdropWindow?.makeKeyAndOrderFront(nil)
+        onWindowShown?()
         AppLog.debug(.window, "milkdropWindow.isVisible: \(registry.milkdropWindow?.isVisible ?? false)")
     }
 
@@ -131,6 +136,8 @@ final class WindowVisibilityController {
     @ObservationIgnored private var deminiaturizeToken: NotificationCenter.ObservationToken?
     /// Runs after the group returns from the Dock.
     @ObservationIgnored var onGroupRestored: (@MainActor () -> Void)?
+    /// Runs after a window is shown, so one persisted on a missing display is pulled back on-screen.
+    @ObservationIgnored var onWindowShown: (@MainActor () -> Void)?
 
     var canMinimizeGroup: Bool {
         guard let main = registry.mainWindow else { return false }
@@ -207,6 +214,7 @@ final class WindowVisibilityController {
             registry.milkdropWindow?.orderFront(nil)
         }
 
+        onWindowShown?()
         focusAllWindows()
     }
 

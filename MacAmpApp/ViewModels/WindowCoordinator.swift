@@ -120,6 +120,7 @@ final class WindowCoordinator {
         framePersistence.persistAllWindowFrames()
         screenGuard.start()
         visibility.onGroupRestored = { [weak self] in self?.screenGuard.clampOnScreen() }
+        visibility.onWindowShown = { [weak self] in self?.screenGuard.clampOnScreen() }
         visibility.start()
 
         // Show windows only after the initial skin has loaded
