@@ -3,6 +3,7 @@ import SwiftUI
 struct PlaylistBottomControlsView: View {
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
+    @Environment(UserActionDispatcher.self) private var dispatcher
 
     let windowWidth: CGFloat
     let windowHeight: CGFloat
@@ -88,14 +89,12 @@ struct PlaylistBottomControlsView: View {
         let transportY = windowHeight - 11
         let baseX = windowWidth - 142
 
-        transportButton(action: { Task { await playbackCoordinator.previous() } }, x: baseX, y: transportY)
-        transportButton(action: { playbackCoordinator.togglePlayPause() }, x: baseX + 10, y: transportY)
-        transportButton(action: { playbackCoordinator.pause() }, x: baseX + 20, y: transportY)
-        transportButton(action: { playbackCoordinator.stop() }, x: baseX + 30, y: transportY)
-        transportButton(action: { Task { await playbackCoordinator.next() } }, x: baseX + 40, y: transportY)
-        transportButton(action: {
-            PlaylistWindowActions.shared.presentAddFilesPanel(audioPlayer: audioPlayer, playbackCoordinator: playbackCoordinator)
-        }, x: baseX + 50, y: transportY)
+        transportButton(action: { dispatcher.perform(.previousTrack) }, x: baseX, y: transportY)
+        transportButton(action: { dispatcher.perform(.togglePlayPause) }, x: baseX + 10, y: transportY)
+        transportButton(action: { dispatcher.perform(.togglePlayPause) }, x: baseX + 20, y: transportY)
+        transportButton(action: { dispatcher.perform(.stop) }, x: baseX + 30, y: transportY)
+        transportButton(action: { dispatcher.perform(.nextTrack) }, x: baseX + 40, y: transportY)
+        transportButton(action: { dispatcher.perform(.openFiles) }, x: baseX + 50, y: transportY)
     }
 
     private func transportButton(action: @escaping () -> Void, x: CGFloat, y: CGFloat) -> some View {

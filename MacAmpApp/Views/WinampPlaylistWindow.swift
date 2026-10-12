@@ -68,9 +68,7 @@ struct WinampPlaylistWindow: View {
                         sizeState: sizeState,
                         dragStartSize: $ui.dragStartSize,
                         isDragging: $ui.isDragging,
-                        resizePreview: ui.resizePreview,
-                        onShadeToggle: { settings.isPlaylistWindowShaded.toggle() },
-                        onClose: { WindowCoordinator.shared?.hidePlaylistWindow() }
+                        resizePreview: ui.resizePreview
                     )
                 }
             }
@@ -168,12 +166,7 @@ struct WinampPlaylistWindow: View {
             menuPresenter: menuPresenter
         )
 
-        PlaylistTitleBarButtons(
-            windowWidth: windowWidth,
-            shaded: false,
-            onShadeToggle: { settings.isPlaylistWindowShaded.toggle() },
-            onClose: { WindowCoordinator.shared?.hidePlaylistWindow() }
-        )
+        PlaylistTitleBarButtons(windowWidth: windowWidth, shaded: false)
 
         PlaylistScrollSlider(
             scrollOffsetPixels: $ui.scrollOffsetPixels,

@@ -40,6 +40,7 @@ final class WindowCoordinator {
     private var appActivationObserver: NSObjectProtocol?
     private var volumeScrollController: VolumeScrollWheelController?
     private var hotkeyMonitor: WinampHotkeyMonitor?
+    let userActionDispatcher: UserActionDispatcher
 
     var mainWindow: NSWindow? { registry.mainWindow }
     var eqWindow: NSWindow? { registry.eqWindow }
@@ -47,11 +48,12 @@ final class WindowCoordinator {
     var videoWindow: NSWindow? { registry.videoWindow }
     var milkdropWindow: NSWindow? { registry.milkdropWindow }
     // swiftlint:disable:next function_body_length
-    init(skinManager: SkinManager, audioPlayer: AudioPlayer, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState) {
+    init(skinManager: SkinManager, audioPlayer: AudioPlayer, settings: AppSettings, radioLibrary: RadioStationLibrary, playbackCoordinator: PlaybackCoordinator, windowFocusState: WindowFocusState, userActionDispatcher: UserActionDispatcher) {
         // Store shared state references
         self.settings = settings
         self.skinManager = skinManager
         self.windowFocusState = windowFocusState
+        self.userActionDispatcher = userActionDispatcher
 
         // Create all window controllers and wrap in registry
         registry = WindowRegistry(
@@ -59,31 +61,31 @@ final class WindowCoordinator {
                 skinManager: skinManager, audioPlayer: audioPlayer,
                 settings: settings,
                 radioLibrary: radioLibrary, playbackCoordinator: playbackCoordinator,
-                windowFocusState: windowFocusState
+                windowFocusState: windowFocusState, userActionDispatcher: userActionDispatcher
             ),
             eqController: WinampEqualizerWindowController(
                 skinManager: skinManager, audioPlayer: audioPlayer,
                 settings: settings,
                 radioLibrary: radioLibrary, playbackCoordinator: playbackCoordinator,
-                windowFocusState: windowFocusState
+                windowFocusState: windowFocusState, userActionDispatcher: userActionDispatcher
             ),
             playlistController: WinampPlaylistWindowController(
                 skinManager: skinManager, audioPlayer: audioPlayer,
                 settings: settings,
                 radioLibrary: radioLibrary, playbackCoordinator: playbackCoordinator,
-                windowFocusState: windowFocusState
+                windowFocusState: windowFocusState, userActionDispatcher: userActionDispatcher
             ),
             videoController: WinampVideoWindowController(
                 skinManager: skinManager, audioPlayer: audioPlayer,
                 settings: settings,
                 radioLibrary: radioLibrary, playbackCoordinator: playbackCoordinator,
-                windowFocusState: windowFocusState
+                windowFocusState: windowFocusState, userActionDispatcher: userActionDispatcher
             ),
             milkdropController: WinampMilkdropWindowController(
                 skinManager: skinManager, audioPlayer: audioPlayer,
                 settings: settings,
                 radioLibrary: radioLibrary, playbackCoordinator: playbackCoordinator,
-                windowFocusState: windowFocusState
+                windowFocusState: windowFocusState, userActionDispatcher: userActionDispatcher
             )
         )
 
@@ -200,17 +202,7 @@ final class WindowCoordinator {
         )
 
         // Install Winamp's plain-key hotkeys (Z/X/C/V/B/L/R/S, arrows, Option+W/E/G).
-        hotkeyMonitor = WinampHotkeyMonitor(
-            audioPlayer: audioPlayer,
-            playbackCoordinator: playbackCoordinator,
-            visibility: visibility,
-            presentOpenPanel: { [audioPlayer, playbackCoordinator] in
-                PlaylistWindowActions.shared.presentAddFilesPanel(
-                    audioPlayer: audioPlayer,
-                    playbackCoordinator: playbackCoordinator
-                )
-            }
-        )
+        hotkeyMonitor = WinampHotkeyMonitor(dispatcher: userActionDispatcher)
     }
 
     isolated deinit {

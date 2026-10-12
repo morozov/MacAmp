@@ -230,7 +230,6 @@ final class PlaybackCoordinator {
             }
         }
 
-        setupRemoteCommands()
     }
 
     // MARK: - Volume & Balance Routing
@@ -370,7 +369,7 @@ final class PlaybackCoordinator {
         await handlePlaylistAdvance(action: action)
     }
 
-    private func resume() {
+    func resume() {
         switch currentSource {
         case .localTrack:
             audioPlayer.play()
@@ -605,38 +604,4 @@ final class PlaybackCoordinator {
         commandCenter.previousTrackCommand.isEnabled = false
     }
 
-    /// Register handlers for keyboard media keys, Control Center transport buttons,
-    /// Bluetooth headphone buttons, and AirPlay receiver remotes.
-    /// All handlers dispatch to @MainActor via Task (handlers fire on arbitrary thread).
-    private func setupRemoteCommands() {
-        let center = MPRemoteCommandCenter.shared()
-
-        center.playCommand.addTarget { [weak self] _ in
-            Task { @MainActor [weak self] in self?.resume() }
-            return .success
-        }
-        center.pauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor [weak self] in self?.pause() }
-            return .success
-        }
-        center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor [weak self] in self?.togglePlayPause() }
-            return .success
-        }
-        center.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.next() }
-            return .success
-        }
-        center.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.previous() }
-            return .success
-        }
-        center.changePlaybackPositionCommand.addTarget { [weak self] event in
-            guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            Task { @MainActor [weak self] in
-                self?.audioPlayer.seek(to: event.positionTime)
-            }
-            return .success
-        }
-    }
 }

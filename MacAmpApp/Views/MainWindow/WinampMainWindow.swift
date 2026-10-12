@@ -34,14 +34,9 @@ struct WinampMainWindow: View {
             .at(CGPoint(x: 0, y: 0))
 
             if !settings.isMainWindowShaded {
-                MainWindowFullLayer(
-                    interactionState: interactionState,
-                    optionsPresenter: optionsPresenter,
-                    openFileDialog: openFileDialog
-                )
+                MainWindowFullLayer(interactionState: interactionState, optionsPresenter: optionsPresenter)
             } else {
-                MainWindowShadeLayer(interactionState: interactionState, optionsPresenter: optionsPresenter,
-                                     openFileDialog: openFileDialog)
+                MainWindowShadeLayer(interactionState: interactionState, optionsPresenter: optionsPresenter)
             }
         }
         .frame(
@@ -103,9 +98,6 @@ struct WinampMainWindow: View {
         }
     }
 
-    func openFileDialog() {
-        PlaylistWindowActions.shared.presentAddFilesPanel(audioPlayer: audioPlayer, playbackCoordinator: playbackCoordinator)
-    }
 }
 
 #Preview {

@@ -1,38 +1,60 @@
 import SwiftUI
 import AppKit
-import UniformTypeIdentifiers
 
 struct AppCommands: Commands {
     var windowCoordinator: WindowCoordinator
     @Bindable var audioPlayer: AudioPlayer
     @Bindable var settings: AppSettings
-    var playbackCoordinator: PlaybackCoordinator
+    var dispatcher: UserActionDispatcher
 
     var body: some Commands {
         CommandMenu("Options") {
-            Button(windowCoordinator.isMainWindowVisible ? "Hide Main" : "Show Main") { windowCoordinator.toggleMain() }
-                .keyboardShortcut(WinampKeyBindings.toggleMainWindow.shortcut)
-            Button(windowCoordinator.isPlaylistWindowVisible ? "Hide Playlist" : "Show Playlist") { _ = windowCoordinator.togglePlaylistWindowVisibility() }
-                .keyboardShortcut(WinampKeyBindings.togglePlaylistWindow.shortcut)
-            Button(windowCoordinator.isEQWindowVisible ? "Hide Equalizer" : "Show Equalizer") { _ = windowCoordinator.toggleEQWindowVisibility() }
-                .keyboardShortcut(WinampKeyBindings.toggleEqualizerWindow.shortcut)
+            Button(windowCoordinator.isMainWindowVisible ? "Hide Main" : "Show Main") {
+                dispatcher.perform(WinampKeyBindings.toggleMainWindow.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.toggleMainWindow.shortcut)
+
+            Button(windowCoordinator.isPlaylistWindowVisible ? "Hide Playlist" : "Show Playlist") {
+                dispatcher.perform(WinampKeyBindings.togglePlaylistWindow.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.togglePlaylistWindow.shortcut)
+
+            Button(windowCoordinator.isEQWindowVisible ? "Hide Equalizer" : "Show Equalizer") {
+                dispatcher.perform(WinampKeyBindings.toggleEqualizerWindow.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.toggleEqualizerWindow.shortcut)
 
             Divider()
 
-            Button("Shade/Unshade Main") { settings.isMainWindowShaded.toggle() }
-                .keyboardShortcut(WinampKeyBindings.shadeMainWindow.shortcut)
-            Button("Shade/Unshade Playlist") { settings.isPlaylistWindowShaded.toggle() }
-                .keyboardShortcut(WinampKeyBindings.shadePlaylistWindow.shortcut)
-            Button("Shade/Unshade Equalizer") { settings.isEqualizerWindowShaded.toggle() }
-                .keyboardShortcut(WinampKeyBindings.shadeEqualizerWindow.shortcut)
+            Button("Shade/Unshade Main") {
+                dispatcher.perform(WinampKeyBindings.shadeMainWindow.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.shadeMainWindow.shortcut)
 
-            Button("Windowshade Mode") { settings.isMainWindowShaded.toggle() }
-                .keyboardShortcut("w", modifiers: [.control])
-            Button("Minimize All") { windowCoordinator.minimizeApp() }
-                .keyboardShortcut("m", modifiers: [.option])
-                .disabled(!windowCoordinator.isMainWindowVisible)
+            Button("Shade/Unshade Playlist") {
+                dispatcher.perform(WinampKeyBindings.shadePlaylistWindow.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.shadePlaylistWindow.shortcut)
 
-            Button("Reset Window Positions") { windowCoordinator.resetWindowPositions() }
+            Button("Shade/Unshade Equalizer") {
+                dispatcher.perform(WinampKeyBindings.shadeEqualizerWindow.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.shadeEqualizerWindow.shortcut)
+
+            Button("Windowshade Mode") {
+                dispatcher.perform(WinampKeyBindings.windowshadeMode.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.windowshadeMode.shortcut)
+
+            Button("Minimize All") {
+                dispatcher.perform(WinampKeyBindings.minimizeAll.action)
+            }
+            .keyboardShortcut(WinampKeyBindings.minimizeAll.shortcut)
+            .disabled(!windowCoordinator.isMainWindowVisible)
+
+            Button("Reset Window Positions") {
+                dispatcher.perform(.resetWindowPositions)
+            }
 
             Divider()
 
@@ -40,123 +62,57 @@ struct AppCommands: Commands {
             // window's keyDown monitor intercepts it as Select All when the
             // playlist is key.
             Button(settings.isDoubleSizeMode ? "Normal Size" : "Double Size") {
-                settings.isDoubleSizeMode.toggle()
+                dispatcher.perform(WinampKeyBindings.doubleSize.action)
             }
             .keyboardShortcut(WinampKeyBindings.doubleSize.shortcut)
 
             Button("Always On Top") {
-                settings.isAlwaysOnTop.toggle()
+                dispatcher.perform(WinampKeyBindings.alwaysOnTop.action)
             }
             .keyboardShortcut(WinampKeyBindings.alwaysOnTop.shortcut)
 
             Button("Options Menu") {
-                settings.showOptionsMenuTrigger = true
+                dispatcher.perform(WinampKeyBindings.openOptionsMenu.action)
             }
             .keyboardShortcut(WinampKeyBindings.openOptionsMenu.shortcut)
 
             Button("Time: \(settings.timeDisplayMode == .elapsed ? "Show Remaining" : "Show Elapsed")") {
-                settings.toggleTimeDisplayMode()
+                dispatcher.perform(WinampKeyBindings.timeMode.action)
             }
             .keyboardShortcut(WinampKeyBindings.timeMode.shortcut)
 
             Button("Track Information") {
-                settings.showTrackInfoDialog = true
+                dispatcher.perform(WinampKeyBindings.trackInfo.action)
             }
             .keyboardShortcut(WinampKeyBindings.trackInfo.shortcut)
 
-            // Repeat: plain `R` via WinampHotkeyMonitor matches Webamp.
+            // Repeat: plain `R` via WinampHotkeyMonitor matches Webamp; this
+            // menu item has no shortcut and just dispatches the same action.
             Button(audioPlayer.repeatMode.label) {
-                audioPlayer.repeatMode = audioPlayer.repeatMode.next()
+                dispatcher.perform(WinampKeyBindings.cycleRepeatHotkey.action)
             }
 
             // Video Window toggle. Plain `V` (Webamp stop) is in the hotkey
             // monitor and `⌘V` is system Paste, so video uses `⌘⇧V`.
             Button(settings.showVideoWindow ? "Hide Video Window" : "Show Video Window") {
-                settings.showVideoWindow.toggle()
+                dispatcher.perform(WinampKeyBindings.videoWindow.action)
             }
             .keyboardShortcut(WinampKeyBindings.videoWindow.shortcut)
 
-            // Milkdrop Window toggle - setting change triggers observer
             Button(settings.showMilkdropWindow ? "Hide Milkdrop" : "Show Milkdrop") {
-                settings.showMilkdropWindow.toggle()
+                dispatcher.perform(WinampKeyBindings.milkdrop.action)
             }
             .keyboardShortcut(WinampKeyBindings.milkdrop.shortcut)
-
-            // NOTE: Ctrl+1/Ctrl+2 removed - VIDEO window now uses drag resize with 1x/2x button presets
-
-            // Vertical stacking - no horizontal movement needed
-            // Windows now stack vertically in fixed order: Main -> EQ -> Playlist
         }
-        
+
         CommandGroup(replacing: .newItem) {
             Button("Open Files...") {
-                presentOpenPanel()
+                dispatcher.perform(WinampKeyBindings.openFiles.action)
             }
             .keyboardShortcut(WinampKeyBindings.openFiles.shortcut)
         }
 
         // MacAmp has no settings window; hide the empty "Settings…" item.
         CommandGroup(replacing: .appSettings) {}
-    }
-
-    private func presentOpenPanel() {
-        let panel = NSOpenPanel()
-        panel.title = "Open Audio Files"
-        let cueType = UTType(filenameExtension: "cue") ?? .plainText
-        panel.allowedContentTypes = [.audio, cueType]
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-
-        panel.begin { response in
-            guard response == .OK else { return }
-            Task { @MainActor in
-                let wasEmpty = audioPlayer.playlist.isEmpty
-                for url in panel.urls {
-                    let ext = url.pathExtension.lowercased()
-                    if ext == "cue" {
-                        // Direct `.cue` open is an explicit user request, so a parse
-                        // failure surfaces as an alert rather than being swallowed.
-                        do {
-                            let parsed = try await CueParser.parse(fileURL: url)
-                            audioPlayer.addCueTracks(parsed.tracks)
-                        } catch {
-                            WinampAlertHelper.showError(
-                                title: "Failed to Load CUE Sheet",
-                                message: error.localizedDescription
-                            )
-                        }
-                    } else if let sidecar = CueParser.sidecarCueURL(for: url) {
-                        // Opportunistic sidecar: parse failure or a FILE directive that
-                        // resolves to a different audio file falls back silently to a
-                        // normal whole-file add.
-                        var sidecarConsumed = false
-                        do {
-                            let parsed = try await CueParser.parse(fileURL: sidecar)
-                            if parsed.audioFileURL.standardizedFileURL == url.standardizedFileURL {
-                                sidecarConsumed = audioPlayer.addCueTracks(parsed.tracks)
-                            } else {
-                                AppLog.debug(
-                                    .audio,
-                                    "Ignoring sidecar CUE \(sidecar.lastPathComponent): FILE resolves to '\(parsed.audioFileURL.lastPathComponent)', expected '\(url.lastPathComponent)'"
-                                )
-                            }
-                        } catch {
-                            AppLog.debug(
-                                .audio,
-                                "Ignoring sidecar CUE \(sidecar.lastPathComponent): \(error.localizedDescription)"
-                            )
-                        }
-                        if !sidecarConsumed {
-                            audioPlayer.addTrack(url: url)
-                        }
-                    } else {
-                        audioPlayer.addTrack(url: url)
-                    }
-                }
-                if wasEmpty, let firstTrack = audioPlayer.playlist.first {
-                    await playbackCoordinator.play(track: firstTrack)
-                }
-            }
-        }
     }
 }

@@ -11,8 +11,6 @@ struct PlaylistShadeView: View {
     @Binding var dragStartSize: Size2D?
     @Binding var isDragging: Bool
     let resizePreview: WindowResizePreviewOverlay
-    let onShadeToggle: () -> Void
-    let onClose: () -> Void
 
     private let characterWidth: CGFloat = 5
 
@@ -47,8 +45,7 @@ struct PlaylistShadeView: View {
                                  sizeState: sizeState, dragStartSize: $dragStartSize, isDragging: $isDragging,
                                  resizePreview: resizePreview, widthOnly: true)
 
-            PlaylistTitleBarButtons(windowWidth: windowWidth, shaded: true,
-                                    onShadeToggle: onShadeToggle, onClose: onClose)
+            PlaylistTitleBarButtons(windowWidth: windowWidth, shaded: true)
         }
         .frame(width: windowWidth, height: 14, alignment: .topLeading)
     }

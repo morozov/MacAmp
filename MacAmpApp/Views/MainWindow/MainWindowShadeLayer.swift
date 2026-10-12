@@ -6,10 +6,10 @@ struct MainWindowShadeLayer: View {
     @Environment(AppSettings.self) private var settings
     @Environment(AudioPlayer.self) private var audioPlayer
     @Environment(WindowFocusState.self) private var windowFocusState
+    @Environment(UserActionDispatcher.self) private var dispatcher
 
     let interactionState: WinampMainWindowInteractionState
     let optionsPresenter: MainWindowOptionsMenuPresenter
-    let openFileDialog: () -> Void
 
     private typealias Layout = WinampMainWindowLayout
 
@@ -38,17 +38,17 @@ struct MainWindowShadeLayer: View {
     @ViewBuilder
     private func buildShadeTransportButtons() -> some View {
         Group {
-            SkinHitButton(width: 7, height: 10) { Task { await playbackCoordinator.previous() } }
+            SkinHitButton(width: 7, height: 10) { dispatcher.perform(.previousTrack) }
                 .at(Layout.shadePreviousButton)
-            SkinHitButton(width: 10, height: 10) { playbackCoordinator.togglePlayPause() }
+            SkinHitButton(width: 10, height: 10) { dispatcher.perform(.togglePlayPause) }
                 .at(Layout.shadePlayButton)
-            SkinHitButton(width: 9, height: 10) { playbackCoordinator.pause() }
+            SkinHitButton(width: 9, height: 10) { dispatcher.perform(.togglePlayPause) }
                 .at(Layout.shadePauseButton)
-            SkinHitButton(width: 9, height: 10) { playbackCoordinator.stop() }
+            SkinHitButton(width: 9, height: 10) { dispatcher.perform(.stop) }
                 .at(Layout.shadeStopButton)
-            SkinHitButton(width: 10, height: 10) { Task { await playbackCoordinator.next() } }
+            SkinHitButton(width: 10, height: 10) { dispatcher.perform(.nextTrack) }
                 .at(Layout.shadeNextButton)
-            SkinHitButton(width: 10, height: 10) { openFileDialog() }
+            SkinHitButton(width: 10, height: 10) { dispatcher.perform(.openFiles) }
                 .at(Layout.shadeEjectButton)
         }
     }
@@ -105,7 +105,7 @@ struct MainWindowShadeLayer: View {
         }
         .frame(width: 30, height: 6, alignment: .topLeading)
         .contentShape(Rectangle())
-        .onTapGesture { settings.toggleTimeDisplayMode() }
+        .onTapGesture { dispatcher.perform(.toggleTimeDisplayMode) }
         .at(Layout.shadeTime)
     }
 
@@ -121,17 +121,17 @@ struct MainWindowShadeLayer: View {
             .at(Layout.optionsButton)
 
             SkinHitButton(pressedSprite: "MAIN_MINIMIZE_BUTTON_DEPRESSED", width: 9, height: 9) {
-                WindowCoordinator.shared?.minimizeApp()
+                dispatcher.perform(.minimizeApp)
             }
             .at(Layout.minimizeButton)
 
             SkinHitButton(pressedSprite: "MAIN_SHADE_BUTTON_SELECTED_DEPRESSED", width: 9, height: 9) {
-                settings.isMainWindowShaded.toggle()
+                dispatcher.perform(.shadeMainWindow)
             }
             .at(Layout.shadeButton)
 
             SkinHitButton(pressedSprite: "MAIN_CLOSE_BUTTON_DEPRESSED", width: 9, height: 9) {
-                NSApplication.shared.terminate(nil)
+                dispatcher.perform(.quitApp)
             }
             .at(Layout.closeButton)
         }

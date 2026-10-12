@@ -8,10 +8,10 @@ struct MainWindowFullLayer: View {
     @Environment(AppSettings.self) private var settings
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(WindowFocusState.self) private var windowFocusState
+    @Environment(UserActionDispatcher.self) private var dispatcher
 
     let interactionState: WinampMainWindowInteractionState
     let optionsPresenter: MainWindowOptionsMenuPresenter
-    let openFileDialog: () -> Void
 
     private typealias Layout = WinampMainWindowLayout
 
@@ -33,7 +33,7 @@ struct MainWindowFullLayer: View {
             buildSpectrumAnalyzer()
 
             // Transport buttons
-            MainWindowTransportLayer(openFileDialog: openFileDialog)
+            MainWindowTransportLayer()
 
             // Shuffle/Repeat buttons
             buildShuffleRepeatButtons()
@@ -62,17 +62,17 @@ struct MainWindowFullLayer: View {
             .at(Layout.optionsButton)
 
             SkinHitButton(pressedSprite: "MAIN_MINIMIZE_BUTTON_DEPRESSED", width: 9, height: 9) {
-                WindowCoordinator.shared?.minimizeApp()
+                dispatcher.perform(.minimizeApp)
             }
             .at(Layout.minimizeButton)
 
             SkinHitButton(pressedSprite: "MAIN_SHADE_BUTTON_DEPRESSED", width: 9, height: 9) {
-                settings.isMainWindowShaded.toggle()
+                dispatcher.perform(.shadeMainWindow)
             }
             .at(Layout.shadeButton)
 
             SkinHitButton(pressedSprite: "MAIN_CLOSE_BUTTON_DEPRESSED", width: 9, height: 9) {
-                NSApplication.shared.terminate(nil)
+                dispatcher.perform(.quitApp)
             }
             .at(Layout.closeButton)
         }
@@ -99,7 +99,7 @@ struct MainWindowFullLayer: View {
         .frame(width: 56, height: 13, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture {
-            settings.toggleTimeDisplayMode()
+            dispatcher.perform(.toggleTimeDisplayMode)
         }
         .at(Layout.timeDisplay)
     }
@@ -137,7 +137,7 @@ struct MainWindowFullLayer: View {
     @ViewBuilder
     private func buildShuffleRepeatButtons() -> some View {
         Group {
-            Button(action: { audioPlayer.shuffleEnabled.toggle() }, label: {
+            Button(action: { dispatcher.perform(.toggleShuffle) }, label: {
                 let spriteKey = audioPlayer.shuffleEnabled ? "MAIN_SHUFFLE_BUTTON_SELECTED" : "MAIN_SHUFFLE_BUTTON"
                 SimpleSpriteImage(spriteKey, width: 47, height: 15)
             })
@@ -145,9 +145,7 @@ struct MainWindowFullLayer: View {
             .focusable(false)
             .at(Layout.shuffleButton)
 
-            Button(action: {
-                audioPlayer.repeatMode = audioPlayer.repeatMode.isActive ? .off : .all
-            }, label: {
+            Button(action: { dispatcher.perform(.cycleRepeatMode) }, label: {
                 let spriteKey = audioPlayer.repeatMode.isActive ? "MAIN_REPEAT_BUTTON_SELECTED" : "MAIN_REPEAT_BUTTON"
                 SimpleSpriteImage(spriteKey, width: 28, height: 15)
             })
@@ -162,23 +160,22 @@ struct MainWindowFullLayer: View {
 
     @ViewBuilder
     private func buildWindowToggleButtons() -> some View {
-        // Read through the observable box so SwiftUI re-renders (and action
-        // closures recapture the coordinator) when the singleton is published
-        // from MacAmpApp.init — `WindowCoordinator.shared` is a plain static
-        // and isn't tracked by the Observation runtime.
+        // Read through the observable box: `WindowCoordinator.shared` is a
+        // plain static the Observation runtime can't track, so a view body
+        // that resolved it at first eval would lock in `nil`.
         let coordinator = WindowCoordinatorBox.shared.value
         let eqVisible = coordinator?.isEQWindowVisible ?? false
         let playlistVisible = coordinator?.isPlaylistWindowVisible ?? false
 
         Group {
-            Button(action: { _ = coordinator?.toggleEQWindowVisibility() }, label: {
+            Button(action: { dispatcher.perform(.toggleEqualizerWindow) }, label: {
                 SimpleSpriteImage(eqVisible ? "MAIN_EQ_BUTTON_SELECTED" : "MAIN_EQ_BUTTON", width: 23, height: 12)
             })
             .buttonStyle(.plain)
             .focusable(false)
             .at(Layout.eqButton)
 
-            Button(action: { _ = coordinator?.togglePlaylistWindowVisibility() }, label: {
+            Button(action: { dispatcher.perform(.togglePlaylistWindow) }, label: {
                 SimpleSpriteImage(playlistVisible ? "MAIN_PLAYLIST_BUTTON_SELECTED" : "MAIN_PLAYLIST_BUTTON", width: 23, height: 12)
             })
             .buttonStyle(.plain)
@@ -191,14 +188,7 @@ struct MainWindowFullLayer: View {
 
     @ViewBuilder
     private func buildClutterBarOAI() -> some View {
-        Button(action: {
-            optionsPresenter.showOptionsMenu(
-                from: Layout.clutterButtonO,
-                settings: settings,
-                audioPlayer: audioPlayer,
-                isDoubleSizeMode: settings.isDoubleSizeMode
-            )
-        }, label: {
+        Button(action: { dispatcher.perform(.showOptionsMenu) }, label: {
             SimpleSpriteImage("MAIN_CLUTTER_BAR_BUTTON_O", width: 8, height: 8)
         })
         .buttonStyle(.plain)
@@ -207,7 +197,7 @@ struct MainWindowFullLayer: View {
         .at(Layout.clutterButtonO)
 
         let aSprite = settings.isAlwaysOnTop ? "MAIN_CLUTTER_BAR_BUTTON_A_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_A"
-        Button(action: { settings.isAlwaysOnTop.toggle() }, label: {
+        Button(action: { dispatcher.perform(.toggleAlwaysOnTop) }, label: {
             SimpleSpriteImage(aSprite, width: 8, height: 7)
         })
         .buttonStyle(.plain)
@@ -216,7 +206,7 @@ struct MainWindowFullLayer: View {
         .at(Layout.clutterButtonA)
 
         let iSprite = settings.showTrackInfoDialog ? "MAIN_CLUTTER_BAR_BUTTON_I_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_I"
-        Button(action: { settings.showTrackInfoDialog = true }, label: {
+        Button(action: { dispatcher.perform(.showTrackInfo) }, label: {
             SimpleSpriteImage(iSprite, width: 8, height: 7)
         })
         .buttonStyle(.plain)
@@ -228,7 +218,7 @@ struct MainWindowFullLayer: View {
     @ViewBuilder
     private func buildClutterBarDV() -> some View {
         let dSprite = settings.isDoubleSizeMode ? "MAIN_CLUTTER_BAR_BUTTON_D_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_D"
-        Button(action: { settings.isDoubleSizeMode.toggle() }, label: {
+        Button(action: { dispatcher.perform(.toggleDoubleSize) }, label: {
             SimpleSpriteImage(dSprite, width: 8, height: 8)
         })
         .buttonStyle(.plain)
@@ -237,7 +227,7 @@ struct MainWindowFullLayer: View {
         .at(Layout.clutterButtonD)
 
         let vSprite = settings.showVideoWindow ? "MAIN_CLUTTER_BAR_BUTTON_V_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_V"
-        Button(action: { settings.showVideoWindow.toggle() }, label: {
+        Button(action: { dispatcher.perform(.toggleVideoWindow) }, label: {
             SimpleSpriteImage(vSprite, width: 8, height: 7)
         })
         .buttonStyle(.plain)

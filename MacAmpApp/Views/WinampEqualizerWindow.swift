@@ -9,6 +9,7 @@ struct WinampEqualizerWindow: View {
     @Environment(AppSettings.self) var settings
     @Environment(PlaybackCoordinator.self) var playbackCoordinator
     @Environment(WindowFocusState.self) var windowFocusState
+    @Environment(UserActionDispatcher.self) var dispatcher
     @State private var showPresetPicker: Bool = false
 
     // Computed: Is this window currently focused?
@@ -136,12 +137,12 @@ struct WinampEqualizerWindow: View {
     @ViewBuilder
     private func buildTitlebarButtons(shaded: Bool) -> some View {
         SkinHitButton(pressedSprite: shaded ? "EQ_MINIMIZE_BUTTON_ACTIVE" : maximizePressedSprite, width: 9, height: 9) {
-            settings.isEqualizerWindowShaded.toggle()
+            dispatcher.perform(.shadeEqualizerWindow)
         }
         .at(EQCoords.shadeButton)
 
         SkinHitButton(pressedSprite: shaded ? "EQ_SHADE_CLOSE_BUTTON_ACTIVE" : "EQ_CLOSE_BUTTON_ACTIVE", width: 9, height: 9) {
-            WindowCoordinator.shared?.hideEQWindow()
+            dispatcher.perform(.toggleEqualizerWindow)
         }
         .at(EQCoords.closeButton)
     }
@@ -155,10 +156,7 @@ struct WinampEqualizerWindow: View {
     @ViewBuilder
     private func buildControlButtons() -> some View {
         Group {
-            // ON button
-            Button(action: {
-                audioPlayer.toggleEq(isOn: !audioPlayer.isEqOn)
-            }) {
+            Button(action: { dispatcher.perform(.toggleEqualizerEnabled) }) {
                 let spriteKey = audioPlayer.isEqOn ? "EQ_ON_BUTTON_SELECTED" : "EQ_ON_BUTTON"
                 SimpleSpriteImage(spriteKey, width: 26, height: 12)
             }
@@ -166,10 +164,7 @@ struct WinampEqualizerWindow: View {
             .focusable(false)
             .at(EQCoords.onButton)
 
-            // AUTO button
-            Button(action: {
-                audioPlayer.setAutoEQEnabled(!audioPlayer.eqAutoEnabled)
-            }) {
+            Button(action: { dispatcher.perform(.toggleEqualizerAuto) }) {
                 let spriteKey = audioPlayer.eqAutoEnabled ? "EQ_AUTO_BUTTON_SELECTED" : "EQ_AUTO_BUTTON"
                 SimpleSpriteImage(spriteKey, width: 32, height: 12)
             }
