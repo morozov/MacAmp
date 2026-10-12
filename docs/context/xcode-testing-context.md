@@ -41,10 +41,13 @@ All @MainActor-annotated suites catch UI-bound state regressions and async order
 ## Running Tests (CLI)
 
 ```bash
-xcodebuild test -project MacAmpApp.xcodeproj -scheme MacAmpApp -destination 'platform=macOS' -testPlan MacAmpApp -derivedDataPath build/DerivedDataTests
+swift test                      # whole suite
+swift test --filter <SuiteName> # one suite
 ```
 
-> **Note:** `swift test` via SPM currently has an unrelated "multiple producers" build error. Use Xcode (`xcodebuild`) for running tests.
+`swift test` runs the unit tests in a plain test process, without launching the app. `xcodebuild test` hosts the test bundle inside `MacAmp.app` and launches it, so it is not used for unit tests.
+
+The tests run alongside whatever the user is doing and must not reach them. `UnitTestSupport.isActive` is true in the test process. Under it the audio engine mutes its device output, `PlaybackCoordinator` publishes no Now Playing information, and `UnitTestSupport.applicationSupportDirectory` is a throwaway directory instead of the user's Application Support. Gate anything new that would be heard, seen or written on it, and never order a window front or run an alert modally in a test.
 
 ## Adding or Updating Tests
 

@@ -109,6 +109,8 @@ final class AppSettings {
         let appSupport: URL
         if let base {
             appSupport = base
+        } else if UnitTestSupport.isActive, let standIn = UnitTestSupport.applicationSupportDirectory {
+            appSupport = standIn
         } else {
             appSupport = try fileManager.url(
                 for: .applicationSupportDirectory,

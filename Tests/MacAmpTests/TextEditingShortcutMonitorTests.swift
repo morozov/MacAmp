@@ -25,8 +25,6 @@ struct TextEditingShortcutMonitorTests {
 
         alert.layout()
         let window = alert.window
-        window.makeKeyAndOrderFront(nil)
-        defer { window.orderOut(nil) }
         input.stringValue = "select_me_please"
         _ = window.makeFirstResponder(input)
         let fieldEditor = try #require(window.firstResponder as? NSText)
@@ -34,7 +32,7 @@ struct TextEditingShortcutMonitorTests {
 
         let monitor = TextEditingShortcutMonitor()
         let event = try #require(makeKeyDown("a", modifiers: [.command], in: window))
-        let consumed = monitor.handle(event)
+        let consumed = monitor.handle(event, in: window)
 
         #expect(consumed == nil, "monitor must consume ⌘A in a text-editing context")
         #expect(
@@ -48,10 +46,9 @@ struct TextEditingShortcutMonitorTests {
     @Test("⌘A in a window with no NSText first responder passes through")
     func cmdA_outsideTextEditing_passesThrough() throws {
         let window = makeWindow()
-        defer { window.orderOut(nil) }
         let monitor = TextEditingShortcutMonitor()
         let event = try #require(makeKeyDown("a", modifiers: [.command], in: window))
-        let consumed = monitor.handle(event)
+        let consumed = monitor.handle(event, in: window)
         #expect(consumed === event)
     }
 
@@ -60,13 +57,11 @@ struct TextEditingShortcutMonitorTests {
         let window = makeWindow()
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
         window.contentView?.addSubview(field)
-        window.makeKeyAndOrderFront(nil)
         _ = window.makeFirstResponder(field)
-        defer { window.orderOut(nil) }
 
         let monitor = TextEditingShortcutMonitor()
         let event = try #require(makeKeyDown("a", modifiers: [], in: window))
-        let consumed = monitor.handle(event)
+        let consumed = monitor.handle(event, in: window)
         #expect(consumed === event)
     }
 
@@ -75,13 +70,11 @@ struct TextEditingShortcutMonitorTests {
         let window = makeWindow()
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
         window.contentView?.addSubview(field)
-        window.makeKeyAndOrderFront(nil)
         _ = window.makeFirstResponder(field)
-        defer { window.orderOut(nil) }
 
         let monitor = TextEditingShortcutMonitor()
         let event = try #require(makeKeyDown("a", modifiers: [.command, .shift], in: window))
-        let consumed = monitor.handle(event)
+        let consumed = monitor.handle(event, in: window)
         #expect(consumed === event)
     }
 
@@ -90,13 +83,11 @@ struct TextEditingShortcutMonitorTests {
         let window = makeWindow()
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
         window.contentView?.addSubview(field)
-        window.makeKeyAndOrderFront(nil)
         _ = window.makeFirstResponder(field)
-        defer { window.orderOut(nil) }
 
         let monitor = TextEditingShortcutMonitor()
         let event = try #require(makeKeyDown("b", modifiers: [.command], in: window))
-        let consumed = monitor.handle(event)
+        let consumed = monitor.handle(event, in: window)
         #expect(consumed === event)
     }
 

@@ -6,12 +6,11 @@ import Testing
 /// ID3v2.4 frames in `tagged.mp3`, Vorbis comments in `tagged.flac`.
 @Suite("FileInfo tags", .tags(.audio, .parsing))
 struct FileInfoTagTests {
-    private final class BundleToken {}
 
     @Test("Every field the dialog shows is read from the file's tags",
           arguments: ["tagged.mp3", "tagged.flac"])
     func readsAllFields(fixture: String) async throws {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: fixture, withExtension: nil))
+        let url = try #require(Fixtures.url(fixture, withExtension: nil))
         let info = await MetadataLoader.loadFileInfo(from: url)
         let mp3 = fixture.hasSuffix(".mp3")
 
@@ -33,7 +32,7 @@ struct FileInfoTagTests {
 
     @Test("Only MPEG reports a frame count", arguments: [("tagged.mp3", true), ("tagged.flac", false)])
     func frameCountOnlyForMPEG(fixture: String, hasFrames: Bool) async throws {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: fixture, withExtension: nil))
+        let url = try #require(Fixtures.url(fixture, withExtension: nil))
         let info = await MetadataLoader.loadFileInfo(from: url)
         #expect((info.frameCount != nil) == hasFrames)
     }

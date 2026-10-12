@@ -76,7 +76,7 @@ final class EQPresetStore {
 
     private func appSupportDirectory() -> URL? {
         let fm = FileManager.default
-        guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        guard let base = UnitTestSupport.applicationSupportDirectory else { return nil }
         let dir = base.appendingPathComponent("MacAmp", isDirectory: true)
         if !fm.fileExists(atPath: dir.path) {
             do {

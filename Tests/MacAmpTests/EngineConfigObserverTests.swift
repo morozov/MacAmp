@@ -4,131 +4,149 @@ import Testing
 @testable import MacAmp
 
 @MainActor
-@Suite("Engine Configuration Observer", .tags(.audio))
+@Suite("Engine Configuration Observer", .tags(.audio), .timeLimit(.minutes(1)))
 struct EngineConfigObserverTests {
 
+    /// Counts the observer's callbacks. Tests await a count instead of sleeping, so a busy
+    /// main actor delays them without failing them.
+    @MainActor
+    private final class Callbacks {
+        private struct Waiter {
+            let id: UUID
+            let condition: () -> Bool
+            let continuation: CheckedContinuation<Void, any Error>
+        }
+
+        private(set) var will = 0
+        private(set) var did = 0
+        private var waiters: [Waiter] = []
+
+        init(_ observer: AudioEngineConfigurationObserver) {
+            observer.onWillReconfigure = { [unowned self] in will += 1; resumeWaiters() }
+            observer.onDidReconfigure = { [unowned self] in did += 1; resumeWaiters() }
+        }
+
+        /// Returns once `condition` holds; throws when the test is cancelled, such as by its time limit.
+        /// The waiting test is enqueued on the main actor in the turn that makes `condition` true,
+        /// ahead of anything the observer schedules for later.
+        func wait(until condition: @escaping () -> Bool) async throws {
+            if condition() { return }
+            let id = UUID()
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    let waiter = Waiter(id: id, condition: condition, continuation: continuation)
+                    if Task.isCancelled {
+                        continuation.resume(throwing: CancellationError())
+                    } else {
+                        waiters.append(waiter)
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor in self.cancel(id) }
+            }
+        }
+
+        private func cancel(_ id: UUID) {
+            guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
+            waiters.remove(at: index).continuation.resume(throwing: CancellationError())
+        }
+
+        private func resumeWaiters() {
+            waiters.removeAll { waiter in
+                guard waiter.condition() else { return false }
+                waiter.continuation.resume()
+                return true
+            }
+        }
+    }
+
+    /// Longer than the observer's 150 ms debounce window. Only bounds checks that nothing fires;
+    /// a slow run can make them pass late, never fail.
+    private static let quietPeriod: Duration = .milliseconds(300)
+
+    private static func post(to engine: AVAudioEngine) {
+        NotificationCenter.default.post(name: .AVAudioEngineConfigurationChange, object: engine)
+    }
+
     @Test("Observer fires onWill once and onDid once for a single notification")
-    func observerFiresOnSyntheticNotification() async {
+    func observerFiresOnSyntheticNotification() async throws {
         let engine = AVAudioEngine()
         let observer = AudioEngineConfigurationObserver(engine: engine)
-        var willCount = 0
-        var didCount = 0
-        observer.onWillReconfigure = { willCount += 1 }
-        observer.onDidReconfigure = { didCount += 1 }
+        let callbacks = Callbacks(observer)
         observer.start()
 
-        NotificationCenter.default.post(
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
+        Self.post(to: engine)
+        try await callbacks.wait { callbacks.did == 1 }
+        try await Task.sleep(for: Self.quietPeriod)
 
-        // Wait for AsyncSequence delivery + 150 ms debounce window + slack.
-        try? await Task.sleep(for: .milliseconds(300))
-
-        #expect(willCount == 1)
-        #expect(didCount == 1)
+        #expect(callbacks.will == 1)
+        #expect(callbacks.did == 1)
         observer.stop()
     }
 
     @Test("Observer collapses a burst of notifications into one will/did pair")
-    func observerDebouncesBurst() async {
+    func observerDebouncesBurst() async throws {
         let engine = AVAudioEngine()
         let observer = AudioEngineConfigurationObserver(engine: engine)
-        var willCount = 0
-        var didCount = 0
-        observer.onWillReconfigure = { willCount += 1 }
-        observer.onDidReconfigure = { didCount += 1 }
+        let callbacks = Callbacks(observer)
         observer.start()
 
-        // Three notifications inside the 150 ms debounce window. Each new
-        // notification supersedes the in-flight debounce; only the LAST one
-        // ultimately fires onDid (after 150 ms of quiet).
-        for _ in 0..<3 {
-            NotificationCenter.default.post(
-                name: .AVAudioEngineConfigurationChange,
-                object: engine
-            )
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        // Each notification supersedes the in-flight debounce; only the last one
+        // ultimately fires onDid.
+        for _ in 0..<3 { Self.post(to: engine) }
+        try await callbacks.wait { callbacks.did == 1 }
+        try await Task.sleep(for: Self.quietPeriod)
 
-        // Wait for the final debounce to settle.
-        try? await Task.sleep(for: .milliseconds(300))
-
-        #expect(willCount == 1)
-        #expect(didCount == 1)
+        #expect(callbacks.will == 1)
+        #expect(callbacks.did == 1)
         observer.stop()
     }
 
     @Test("stop() during a pending burst cancels onDid; nothing fires later")
-    func observerStopDuringBurstCancelsDid() async {
+    func observerStopDuringBurstCancelsDid() async throws {
         // Documents the contract from commit c454c49: onDid is NOT guaranteed
         // after onWill if stop()/deinit interrupts the debounce window.
         let engine = AVAudioEngine()
         let observer = AudioEngineConfigurationObserver(engine: engine)
-        var willCount = 0
-        var didCount = 0
-        observer.onWillReconfigure = { willCount += 1 }
-        observer.onDidReconfigure = { didCount += 1 }
+        let callbacks = Callbacks(observer)
         observer.start()
 
-        NotificationCenter.default.post(
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
-
-        // Wait long enough for onWill to fire via the AsyncSequence but well
-        // under the 150 ms debounce window so onDid is still pending.
-        try? await Task.sleep(for: .milliseconds(40))
-        #expect(willCount == 1)
-        #expect(didCount == 0)
+        Self.post(to: engine)
+        try await callbacks.wait { callbacks.will == 1 }
+        #expect(callbacks.did == 0)
 
         // Tear down mid-burst — pending debounce task must be cancelled.
         observer.stop()
 
-        // Wait past the debounce window plus slack; onDid must remain 0.
-        try? await Task.sleep(for: .milliseconds(300))
-        #expect(willCount == 1)
-        #expect(didCount == 0)
+        try await Task.sleep(for: Self.quietPeriod)
+        #expect(callbacks.will == 1)
+        #expect(callbacks.did == 0)
     }
 
     @Test("Observer survives multiple start/stop cycles")
-    func observerSurvivesStartStopCycles() async {
+    func observerSurvivesStartStopCycles() async throws {
         let engine = AVAudioEngine()
         let observer = AudioEngineConfigurationObserver(engine: engine)
-        var willCount = 0
-        var didCount = 0
-        observer.onWillReconfigure = { willCount += 1 }
-        observer.onDidReconfigure = { didCount += 1 }
+        let callbacks = Callbacks(observer)
 
         // Cycle 1: start → notification → stop. Should fire one will/did pair.
         observer.start()
-        NotificationCenter.default.post(
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
-        try? await Task.sleep(for: .milliseconds(300))
+        Self.post(to: engine)
+        try await callbacks.wait { callbacks.did == 1 }
         observer.stop()
-        #expect(willCount == 1)
-        #expect(didCount == 1)
+        #expect(callbacks.will == 1)
 
         // Cycle 2: posting while stopped should be a no-op.
-        NotificationCenter.default.post(
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
-        try? await Task.sleep(for: .milliseconds(300))
-        #expect(willCount == 1)
-        #expect(didCount == 1)
+        Self.post(to: engine)
+        try await Task.sleep(for: Self.quietPeriod)
+        #expect(callbacks.will == 1)
+        #expect(callbacks.did == 1)
 
         // Cycle 3: restart and verify the pair fires again.
         observer.start()
-        NotificationCenter.default.post(
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
-        try? await Task.sleep(for: .milliseconds(300))
-        #expect(willCount == 2)
-        #expect(didCount == 2)
+        Self.post(to: engine)
+        try await callbacks.wait { callbacks.did == 2 }
+        #expect(callbacks.will == 2)
         observer.stop()
     }
 }

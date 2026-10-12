@@ -1,6 +1,9 @@
 import AVFoundation
 import Atomics
 import os
+#if SWIFT_PACKAGE
+import AudioWorkgroupShim
+#endif
 
 /// Snapshot of pre-reconfiguration engine + bridge state, captured by
 /// `AudioEngineController.handleEngineWillReconfigure()` and forwarded to
@@ -303,6 +306,9 @@ final class AudioEngineController {
     func startEngineIfNeeded() -> Bool {
         if !audioEngine.isRunning {
             audioEngine.prepare()
+            if UnitTestSupport.isActive {
+                muteDeviceOutput()
+            }
             do {
                 try audioEngine.start()
             } catch {
@@ -312,6 +318,25 @@ final class AudioEngineController {
         }
         return audioEngine.isRunning
     }
+
+    /// Silence the device output unit, which applies its volume after every node and tap.
+    private func muteDeviceOutput() {
+        guard let unit = audioEngine.outputNode.audioUnit else { return }
+        let status = AudioUnitSetParameter(unit, kHALOutputParam_Volume, kAudioUnitScope_Global, 0, 0, 0)
+        if status != noErr {
+            AppLog.error(.audio, "Muting output for tests failed: \(status)")
+        }
+    }
+
+    #if DEBUG
+    /// Test seam: the device output unit's volume.
+    var deviceOutputVolumeForTesting: Float? {
+        guard let unit = audioEngine.outputNode.audioUnit else { return nil }
+        var value: AudioUnitParameterValue = -1
+        guard AudioUnitGetParameter(unit, kHALOutputParam_Volume, kAudioUnitScope_Global, 0, &value) == noErr else { return nil }
+        return value
+    }
+    #endif
 
     // MARK: - Progress Timer
 

@@ -21,10 +21,15 @@ final class TextEditingShortcutMonitor {
     }
 
     func handle(_ event: NSEvent) -> NSEvent? {
+        handle(event, in: event.window)
+    }
+
+    /// Handles `event` as delivered to `window`.
+    func handle(_ event: NSEvent, in window: NSWindow?) -> NSEvent? {
         let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
         guard mods == .command,
               event.charactersIgnoringModifiers?.lowercased() == "a",
-              let target = event.window?.firstResponder as? NSText
+              let target = window?.firstResponder as? NSText
         else { return event }
         target.selectAll(nil)
         return nil

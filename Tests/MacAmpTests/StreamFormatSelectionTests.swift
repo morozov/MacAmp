@@ -8,7 +8,6 @@ import Testing
 /// AAC layer at half the sample rate.
 @Suite("Stream format selection", .tags(.audio, .parsing))
 struct StreamFormatSelectionTests {
-    private final class BundleToken {}
 
     private func asbd(_ id: AudioFormatID, _ rate: Float64) -> AudioStreamBasicDescription {
         AudioStreamBasicDescription(mSampleRate: rate, mFormatID: id, mFormatFlags: 0, mBytesPerPacket: 0,
@@ -33,7 +32,7 @@ struct StreamFormatSelectionTests {
 
     @Test("The HE-AAC format is chosen when the stream arrives in small pieces")
     func heAACChosenFromChunkedStream() throws {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: "he-aac", withExtension: "aac"))
+        let url = try #require(Fixtures.url("he-aac", withExtension: "aac"))
         let bytes = try Data(contentsOf: url)
 
         var formats: [AudioStreamBasicDescription] = []
@@ -53,7 +52,7 @@ struct StreamFormatSelectionTests {
 
     @Test("An HE-AAC stream decodes at its full rate with its high frequencies")
     func heAACDecodesWithSBR() throws {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: "he-aac", withExtension: "aac"))
+        let url = try #require(Fixtures.url("he-aac", withExtension: "aac"))
         let bytes = try Data(contentsOf: url)
 
         var format: AudioStreamBasicDescription?

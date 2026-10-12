@@ -17,18 +17,27 @@ let package = Package(
         .executableTarget(
             name: "MacAmp",
             dependencies: [
+                "AudioWorkgroupShim",
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
                 .product(name: "Atomics", package: "swift-atomics"),
             ],
             path: "MacAmpApp",
             exclude: [
                 "Info.plist",
-                "MacAmp.entitlements"
+                "MacAmp.entitlements",
+                "MacAmpApp-Bridging-Header.h",
+                "Audio/ObjCBridge",
             ],
             resources: [
                 .process("Skins"),
                 .process("Assets.xcassets")
             ]
+        ),
+        // SwiftPM targets can't mix languages; Xcode uses the bridging header.
+        .target(
+            name: "AudioWorkgroupShim",
+            path: "MacAmpApp/Audio/ObjCBridge",
+            publicHeadersPath: "."
         ),
         .testTarget(
             name: "MacAmpTests",
@@ -36,7 +45,10 @@ let package = Package(
                 "MacAmp",
                 .product(name: "Atomics", package: "swift-atomics"),
             ],
-            path: "Tests/MacAmpTests"
+            path: "Tests/MacAmpTests",
+            resources: [
+                .process("Fixtures"),
+            ]
         )
     ]
 )

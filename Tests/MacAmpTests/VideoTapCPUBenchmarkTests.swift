@@ -1,12 +1,13 @@
 import AudioToolbox
 import CoreAudioTypes
 import Foundation
+import Synchronization
 import Testing
 @testable import MacAmp
 
 /// Phase 8 gate 8.1 — CPU benchmark of the per-callback video-tap DSP path.
 ///
-/// Dense (every-iteration) timing of the full render-thread work — 10-band
+/// Dense (every-iteration) CPU timing of the full render-thread work — 10-band
 /// `BiquadCascade` × N channels + balance + `videoTapVisualizerRender` — over a
 /// representative 1024-frame buffer at 48 kHz, worst case (all EQ bands active,
 /// balance off-center).
@@ -30,23 +31,48 @@ struct VideoTapCPUBenchmarkTests {
     static let channels = 2
     static let iterations = 2_000
 
-    static func timebase() -> mach_timebase_info_data_t {
-        var tb = mach_timebase_info_data_t(); mach_timebase_info(&tb); return tb
-    }
-    static func nanos(_ ticks: UInt64, _ tb: mach_timebase_info_data_t) -> Double {
-        tb.numer == tb.denom ? Double(ticks) : Double(ticks) * Double(tb.numer) / Double(tb.denom)
-    }
+    /// CPU time of the calling thread. Time the thread spends preempted by other work —
+    /// such as the suites running in parallel — does not count.
+    static func threadCPUNanos() -> UInt64 { clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) }
 
     static let threadSanitizerActive = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "__tsan_init") != nil  // -2 = RTLD_DEFAULT
 
     @Test(
         "per-callback DSP fits the deadline even in Debug (99p ≤ 50%, max ≤ 75%)",
-        .disabled(if: threadSanitizerActive, "wall-clock timing is meaningless under TSan instrumentation; runs in non-TSan test runs")
+        .disabled(if: threadSanitizerActive, "timing is meaningless under TSan instrumentation; runs in non-TSan test runs")
     )
     func dspWithinBudget() {
-        let tb = Self.timebase()
-        let budgetNanos = Double(Self.frames) / Self.sampleRate * 1_000_000_000  // ≈ 21,333,333 ns
+        // A render thread runs at real-time priority; a low-QoS thread may land on an efficiency core.
+        let measured = Mutex<[Double]>([])
+        let done = DispatchSemaphore(value: 0)
+        let thread = Thread {
+            let samples = Self.measure()
+            measured.withLock { $0 = samples }
+            done.signal()
+        }
+        thread.qualityOfService = .userInteractive
+        thread.start()
+        done.wait()
 
+        let budgetNanos = Double(Self.frames) / Self.sampleRate * 1_000_000_000  // ≈ 21,333,333 ns
+        let samples = measured.withLock { $0 }.sorted()
+        let p50 = samples[samples.count / 2]
+        let p99 = samples[Int(Double(samples.count) * 0.99)]
+        let maxNs = samples.last ?? 0
+        let p99Pct = p99 / budgetNanos * 100
+        let maxPct = maxNs / budgetNanos * 100
+        let summary = String(format: "budget=%.0fµs p50=%.1fµs p99=%.1fµs(%.2f%%) max=%.1fµs(%.2f%%)",
+                             budgetNanos / 1000, p50 / 1000, p99 / 1000, p99Pct, maxNs / 1000, maxPct)
+
+        print("CPU BENCHMARK (Debug -Onone): \(summary)")  // captured into verification.md
+        // p99 is the hard regression signal (Debug-safe: ~11%, ceiling 50%). `max` is
+        // a loose "didn't hang" sanity check only.
+        #expect(p99 <= budgetNanos * 0.50, "99p exceeded 50% of budget even allowing for Debug — \(summary)")
+        #expect(maxNs <= budgetNanos, "a single sample exceeded the full buffer deadline (hung?) — \(summary)")
+    }
+
+    /// Per-iteration CPU time of the DSP chain, in nanoseconds.
+    private static func measure() -> [Double] {
         // Worst-case coefficients: all 10 bands active.
         let coefs = BiquadCoefficientSet.compute(
             for: EqualizerState(isEqOn: true, preampLinearGain: 1.0,
@@ -84,7 +110,7 @@ struct VideoTapCPUBenchmarkTests {
         samples.reserveCapacity(Self.iterations)
         for _ in 0..<Self.iterations {
             memcpy(left, srcL, byteCount); memcpy(right, srcR, byteCount)  // refresh input (untimed)
-            let start = mach_absolute_time()
+            let start = Self.threadCPUNanos()
             // Full per-callback DSP chain: preamp → cascade → balance → visualizer.
             for i in 0..<Self.frames { left[i] *= preamp; right[i] *= preamp }
             cascade.process(left, frameCount: Self.frames, channel: 0, stride: 1)
@@ -92,23 +118,8 @@ struct VideoTapCPUBenchmarkTests {
             for i in 0..<Self.frames { left[i] *= lGain; right[i] *= rGain }
             videoTapVisualizerRender(bufferList: abl.unsafeMutablePointer, frames: Self.frames,
                                      sampleRate: Self.sampleRate, scratch: scratch, feed: feed)
-            samples.append(Self.nanos(mach_absolute_time() &- start, tb))
+            samples.append(Double(Self.threadCPUNanos() - start))
         }
-
-        samples.sort()
-        let p50 = samples[samples.count / 2]
-        let p99 = samples[Int(Double(samples.count) * 0.99)]
-        let maxNs = samples.last ?? 0
-        let p99Pct = p99 / budgetNanos * 100
-        let maxPct = maxNs / budgetNanos * 100
-        let summary = String(format: "budget=%.0fµs p50=%.1fµs p99=%.1fµs(%.2f%%) max=%.1fµs(%.2f%%)",
-                             budgetNanos / 1000, p50 / 1000, p99 / 1000, p99Pct, maxNs / 1000, maxPct)
-
-        print("CPU BENCHMARK (Debug -Onone): \(summary)")  // captured into verification.md
-        // p99 is the hard regression signal (Debug-safe: ~11%, ceiling 50%). `max` is
-        // a loose "didn't hang" sanity check only — single-sample wall-clock includes
-        // scheduler stalls, so a tight max bound would be CI-flaky (Oracle).
-        #expect(p99 <= budgetNanos * 0.50, "99p exceeded 50% of budget even allowing for Debug — \(summary)")
-        #expect(maxNs <= budgetNanos, "a single sample exceeded the full buffer deadline (hung?) — \(summary)")
+        return samples
     }
 }

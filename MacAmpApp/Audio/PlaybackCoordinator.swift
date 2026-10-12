@@ -584,6 +584,7 @@ final class PlaybackCoordinator {
     /// Called at every playback state transition. Apple auto-extrapolates elapsed time
     /// from the last provided value + playback rate — no periodic timer needed.
     func updateNowPlayingInfo() {
+        guard !UnitTestSupport.isActive else { return }
         let center = MPNowPlayingInfoCenter.default()
 
         guard currentSource != nil else {
@@ -639,6 +640,7 @@ final class PlaybackCoordinator {
     /// Disables all context-dependent remote commands (seek, next, previous).
     private func clearNowPlayingInfo() {
         clearArtwork()
+        guard !UnitTestSupport.isActive else { return }
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = nil
         center.playbackState = .stopped

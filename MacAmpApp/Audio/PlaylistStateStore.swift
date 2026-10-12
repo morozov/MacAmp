@@ -23,7 +23,7 @@ final class PlaylistStateStore {
     /// cannot be resolved (effectively never on a normal install).
     nonisolated static func playlistFileURL() -> URL? {
         let fm = FileManager.default
-        guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard let base = UnitTestSupport.applicationSupportDirectory else {
             return nil
         }
         let dir = base.appendingPathComponent(UITestSupport.appSupportDirectoryName, isDirectory: true)

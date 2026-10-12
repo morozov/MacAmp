@@ -8,14 +8,13 @@ import Testing
 @MainActor
 @Suite("HLS stream pipeline", .tags(.audio), .serialized)
 struct HLSStreamPipelineTests {
-    private final class BundleToken {}
 
     private let playlistURL = URL(string: "https://edge.example.com/hls/live/96k.m3u8")!
     /// Frames in one fixture segment: 40 AAC frames of 1,024 samples.
     private let framesPerSegment = 40 * 1024
 
     private func fixture(_ name: String) throws -> Data {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: name, withExtension: "ts"))
+        let url = try #require(Fixtures.url(name, withExtension: "ts"))
         return try Data(contentsOf: url)
     }
 
@@ -73,7 +72,11 @@ struct HLSStreamPipelineTests {
         let run = start(server: server, events: events)
         defer { run.pipeline.stop() }
 
-        #expect(await wait { run.ring.writeHeadFrames >= UInt64(framesPerSegment * 3) })
+        // These arrive as separate events.
+        #expect(await wait {
+            guard case .playing = run.pipeline.state else { return false }
+            return run.ring.writeHeadFrames >= UInt64(framesPerSegment * 3) && !events.formatRates.isEmpty
+        })
         #expect(run.pipeline.isHLS)
         #expect(events.formatRates == [44100])
         #expect(events.termination.isEmpty)

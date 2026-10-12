@@ -323,8 +323,11 @@ struct LockFreeRingBufferConcurrencyTests {
 
         // Reader quiescence coordination for flush (mirrors production behavior:
         // tap is uninstalled before flush, so both producer and consumer are idle).
-        let readerShouldPause = ManagedAtomic<Bool>(false)
-        let readerPaused = ManagedAtomic<Bool>(false)
+        // Numbered, because the writer can request the next pause before the
+        // reader has seen the resume.
+        let pauseRequested = ManagedAtomic<Int>(0)
+        let pausedFor = ManagedAtomic<Int>(0)
+        let resumedFor = ManagedAtomic<Int>(0)
 
         await withTaskGroup(of: Void.self) { group in
             // Writer (producer)
@@ -335,13 +338,12 @@ struct LockFreeRingBufferConcurrencyTests {
                     // Flush every 1000 iterations to simulate format change.
                     // Quiesce the reader first, per flush()'s documented contract.
                     if i > 0 && i % 1000 == 0 {
-                        readerShouldPause.store(true, ordering: .releasing)
-                        while !readerPaused.load(ordering: .acquiring) {
+                        let request = pauseRequested.wrappingIncrementThenLoad(ordering: .releasing)
+                        while pausedFor.load(ordering: .acquiring) != request {
                             await Task.yield()
                         }
                         buffer.flush(newGeneration: true)
-                        readerPaused.store(false, ordering: .relaxed)
-                        readerShouldPause.store(false, ordering: .releasing)
+                        resumedFor.store(request, ordering: .releasing)
                     }
                 }
                 writerDone.store(true, ordering: .releasing)
@@ -354,9 +356,10 @@ struct LockFreeRingBufferConcurrencyTests {
                 var emptyReadsAfterDone = 0
                 while true {
                     // Honor pause requests: stop reading before writer flushes.
-                    if readerShouldPause.load(ordering: .acquiring) {
-                        readerPaused.store(true, ordering: .releasing)
-                        while readerShouldPause.load(ordering: .acquiring) {
+                    let request = pauseRequested.load(ordering: .acquiring)
+                    if request != pausedFor.load(ordering: .relaxed) {
+                        pausedFor.store(request, ordering: .releasing)
+                        while resumedFor.load(ordering: .acquiring) != request {
                             await Task.yield()
                         }
                     }

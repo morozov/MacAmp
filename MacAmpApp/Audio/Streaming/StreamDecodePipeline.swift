@@ -1,6 +1,9 @@
 import Foundation
 import AudioToolbox
 @preconcurrency import os
+#if SWIFT_PACKAGE
+import AudioWorkgroupShim
+#endif
 
 /// Orchestrates the full stream decode chain:
 /// `URLSession → ICYFramer → AudioFileStreamParser → AudioConverterDecoder → LockFreeRingBuffer`

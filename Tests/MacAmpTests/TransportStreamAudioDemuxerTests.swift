@@ -4,7 +4,6 @@ import Testing
 
 @Suite("Transport stream audio demuxer", .tags(.audio, .parsing))
 struct TransportStreamAudioDemuxerTests {
-    private final class BundleToken {}
 
     private typealias Event = TransportStreamAudioDemuxer.Event
 
@@ -112,7 +111,7 @@ struct TransportStreamAudioDemuxerTests {
 
     @Test("A real segment yields every ADTS frame, including those ahead of its tables")
     func realSegment() throws {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: "hls-segment", withExtension: "ts"))
+        let url = try #require(Fixtures.url("hls-segment", withExtension: "ts"))
         let events = try TransportStreamAudioDemuxer().demux(segment: Data(contentsOf: url))
 
         #expect(events.count == 1)

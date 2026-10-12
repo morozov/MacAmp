@@ -7,12 +7,11 @@ import Testing
 @MainActor
 @Suite("HLS stream player", .tags(.audio), .serialized)
 struct HLSStreamPlayerTests {
-    private final class BundleToken {}
 
     private let playlistURL = URL(string: "https://edge.example.com/hls/live/96k.m3u8")!
 
     private func makePlayer() throws -> (player: StreamPlayer, origin: HLSTestOrigin) {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: "hls-segment", withExtension: "ts"))
+        let url = try #require(Fixtures.url("hls-segment", withExtension: "ts"))
         let segment = try Data(contentsOf: url)
         let origin = HLSTestOrigin(playlists: [HLSTestOrigin.playlist(from: 1, count: 8)]) { _ in (segment, 200) }
         let player = StreamPlayer()
@@ -103,7 +102,7 @@ struct HLSStreamPlayerTests {
 
     @Test("After a pause and resume the engine plays the new ring buffer")
     func engineConsumesReplacementRing() async throws {
-        let url = try #require(Bundle(for: BundleToken.self).url(forResource: "hls-segment", withExtension: "ts"))
+        let url = try #require(Fixtures.url("hls-segment", withExtension: "ts"))
         let segment = try Data(contentsOf: url)
         let origin = HLSTestOrigin(playlists: [HLSTestOrigin.playlist(from: 1, count: 8)]) { _ in (segment, 200) }
         let audioPlayer = AudioPlayer()
