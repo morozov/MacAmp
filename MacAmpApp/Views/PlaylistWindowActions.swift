@@ -411,7 +411,7 @@ final class PlaylistWindowActions: NSObject {
             let streamTrack = Track(
                 url: url,
                 title: stationName,
-                artist: "Internet Radio",
+                artist: "",
                 duration: 0.0
             )
 

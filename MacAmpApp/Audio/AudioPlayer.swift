@@ -592,7 +592,7 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
                 let streamTrack = Track(
                     url: entry.url,
                     title: entry.title ?? "Unknown Station",
-                    artist: "Internet Radio",
+                    artist: "",
                     duration: 0.0
                 )
                 playlistController.addTrack(streamTrack)
