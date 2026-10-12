@@ -47,6 +47,7 @@ struct MacAmpApp: App {
         )
         WindowCoordinator.shared = coordinator
         _windowCoordinator = State(initialValue: coordinator)
+        WindowCoordinatorBox.shared.value = coordinator
     }
 
     var body: some Scene {
