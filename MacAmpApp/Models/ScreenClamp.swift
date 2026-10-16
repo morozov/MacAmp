@@ -27,14 +27,16 @@ enum ScreenClamp {
     }
 
     /// New frames for stranded groups, measured by visible members; groups that fit together move together.
+    /// A group is stranded when it leaves `bounds` (default: `visibleFrames`) and is moved inside `visibleFrames`,
+    /// so bounds that include the Dock leave a group over the Dock where it is.
     static func clamp<ID: Hashable>(
-        groups: [Set<ID>], frames: [ID: CGRect], visible: Set<ID>, visibleFrames: [CGRect]
+        groups: [Set<ID>], frames: [ID: CGRect], visible: Set<ID>, visibleFrames: [CGRect], bounds: [CGRect]? = nil
     ) -> [ID: CGRect] {
         var stranded: [(group: Set<ID>, union: CGRect)] = []
         for group in groups {
             guard let union = measuredUnion(of: group, frames: frames, visible: visible),
-                  let target = screen(for: union, visibleFrames: visibleFrames),
-                  !isNegligible(offset(for: union, in: target)) else { continue }
+                  let limit = screen(for: union, visibleFrames: bounds ?? visibleFrames),
+                  !isNegligible(offset(for: union, in: limit)) else { continue }
             stranded.append((group, union))
         }
         guard let firstUnion = stranded.first?.union else { return [:] }

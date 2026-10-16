@@ -42,6 +42,29 @@ struct ScreenClampTests {
         #expect(moved["main"]?.maxY == lg.maxY)
     }
 
+    @Test("A group over the Dock stays; an off-screen one lands above the Dock")
+    func dockOverlap() throws {
+        let belowMenuBar = CGRect(x: 0, y: 0, width: 3840, height: 1570)
+        let aboveDock = CGRect(x: 0, y: 80, width: 3840, height: 1490)
+        let overDock = ["main": main, "eq": eq.offsetBy(dx: 0, dy: -940)]
+        let kept = ScreenClamp.clamp(groups: [["main"], ["eq"]], frames: overDock, visible: ["main", "eq"],
+                                     visibleFrames: [aboveDock], bounds: [belowMenuBar])
+        #expect(kept.isEmpty)
+        let offScreen = ["eq": eq.offsetBy(dx: 0, dy: -2000)]
+        let moved = ScreenClamp.clamp(groups: [["eq"]], frames: offScreen, visible: ["eq"],
+                                      visibleFrames: [aboveDock], bounds: [belowMenuBar])
+        #expect(try #require(moved["eq"]).minY == aboveDock.minY)
+    }
+
+    @Test("A window hidden under the menu bar is pulled down even when the Dock may be covered")
+    func underMenuBar() {
+        let aboveDock = CGRect(x: 0, y: 80, width: 3840, height: 1490)
+        let shade = ["main": CGRect(x: 100, y: 1580, width: 275, height: 14)]
+        let moved = ScreenClamp.clamp(groups: [["main"]], frames: shade, visible: ["main"], visibleFrames: [aboveDock],
+                                      bounds: [CGRect(x: 0, y: 0, width: 3840, height: 1570)])
+        #expect(moved["main"]?.maxY == aboveDock.maxY)
+    }
+
     @Test("A window on a vanished display moves to the main screen")
     func lostDisplay() throws {
         let laptop = CGRect(x: 0, y: 0, width: 1512, height: 949)

@@ -63,7 +63,8 @@ final class WindowScreenGuard {
         }
         let groups = DockGraph.clusters(boxes: frames.mapValues(DockGraph.box(for:)))
         let moved = ScreenClamp.clamp(groups: groups, frames: frames, visible: visible,
-                                      visibleFrames: NSScreen.screens.map(\.visibleFrame))
+                                      visibleFrames: NSScreen.screens.map(\.visibleFrame),
+                                      bounds: NSScreen.screens.map(Self.belowMenuBar))
         guard !moved.isEmpty else { return }
         WindowSnapManager.shared.beginProgrammaticAdjustment()
         persistence.beginSuppressingPersistence()
@@ -166,6 +167,13 @@ final class WindowScreenGuard {
 
     /// Anchor priority: the first visible member wins, else the first member.
     private static let anchorOrder: [WindowKind] = [.main, .equalizer, .playlist, .video, .milkdrop]
+
+    /// The screen down to its bottom edge, so a window over the Dock stays; the menu bar can hide one entirely.
+    private static func belowMenuBar(_ screen: NSScreen) -> CGRect {
+        var frame = screen.frame
+        frame.size.height = screen.visibleFrame.maxY - frame.minY
+        return frame
+    }
 
     private static func currentDisplays() -> [CGDirectDisplayID: CGRect] {
         var result: [CGDirectDisplayID: CGRect] = [:]
