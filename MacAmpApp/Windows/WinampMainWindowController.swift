@@ -14,7 +14,7 @@ class WinampMainWindowController: NSWindowController {
         // Standard borderless NSWindow doesn't accept first responder
         let window = BorderlessWindow(
             contentRect: NSRect(x: 0, y: 0, width: 275, height: 116),
-            styleMask: [.borderless, .miniaturizable],  // no .titled; Main owns the player's Dock tile
+            styleMask: [.borderless],  // no .titled
             backing: .buffered,
             defer: false
         )

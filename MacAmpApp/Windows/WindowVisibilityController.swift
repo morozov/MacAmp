@@ -86,8 +86,8 @@ final class WindowVisibilityController {
 
     func showMain() {
         guard let main = registry.mainWindow else { return }
-        if main.isMiniaturized {
-            main.deminiaturize(nil)
+        if let proxy {
+            proxy.deminiaturize(nil)
         } else {
             main.makeKeyAndOrderFront(nil)
             onWindowShown?()
@@ -131,8 +131,11 @@ final class WindowVisibilityController {
 
     // MARK: - Group Minimize
 
-    /// Windows the group minimize hid; they come back with Main if still open in settings.
-    @ObservationIgnored private var minimizedWith: Set<WindowKind> = []
+    /// Windows the group minimize hid, front to back; they come back if still open in settings.
+    @ObservationIgnored private var minimizedWith: [WindowKind] = []
+    /// In the Dock while the group is minimized.
+    @ObservationIgnored private var proxy: NSWindow?
+    @ObservationIgnored private var isCapturingGroup = false
     @ObservationIgnored private var deminiaturizeToken: NotificationCenter.ObservationToken?
     /// Runs after the group returns from the Dock.
     @ObservationIgnored var onGroupRestored: (@MainActor () -> Void)?
@@ -141,28 +144,33 @@ final class WindowVisibilityController {
 
     var canMinimizeGroup: Bool {
         guard let main = registry.mainWindow else { return false }
-        return main.isVisible && !main.isMiniaturized
+        return main.isVisible && proxy == nil && !isCapturingGroup
     }
 
-    private var isGroupMinimized: Bool { registry.mainWindow?.isMiniaturized == true }
+    private var isGroupMinimized: Bool { proxy != nil }
 
-    /// Winamp minimize: one Dock tile (Main's); the other windows hide without changing their open state.
+    /// Winamp minimize: one Dock tile for the whole group; the windows hide without changing their open state.
+    /// A group that does not fit on one screen hides the app instead, since one proxy window cannot span displays.
     func minimizeGroup() {
-        guard canMinimizeGroup, let main = registry.mainWindow else { return }
-        registry.forEachWindow { window, kind in
-            guard kind != .main, window.isVisible else { return }
-            minimizedWith.insert(kind)
-            window.orderOut(nil)
+        guard canMinimizeGroup else { return }
+        let group = visibleGroup()
+        guard NSScreen.screens.contains(where: { screen in group.allSatisfy { screen.frame.contains($0.window.frame) } }) else {
+            NSApp.hide(nil)
+            return
         }
-        isMainWindowVisible = false
-        main.miniaturize(nil)
-    }
-
-    /// Observes Main for any deminiaturize, however Main was minimized.
-    func start() {
-        guard deminiaturizeToken == nil, let main = registry.mainWindow else { return }
-        deminiaturizeToken = NotificationCenter.default.addObserver(of: main, for: .didDeminiaturize) { [weak self] _ in
-            self?.restoreMinimizedGroup()
+        let frames = group.map(\.window.frame)
+        isCapturingGroup = true
+        Task {
+            let proxy = await GroupMinimizeProxy.make(for: group.map(\.window))
+            isCapturingGroup = false
+            // The capture awaits WebKit; the picture is stale if the group changed meanwhile.
+            guard canMinimizeGroup, visibleGroup().map(\.window) == group.map(\.window),
+                  group.map(\.window.frame) == frames else { return }
+            guard let proxy else {
+                NSApp.hide(nil)
+                return
+            }
+            hand(group, to: proxy)
         }
     }
 
@@ -171,10 +179,52 @@ final class WindowVisibilityController {
         deminiaturizeToken = nil
     }
 
+    /// The visible MacAmp windows, front to back.
+    private func visibleGroup() -> [(window: NSWindow, kind: WindowKind)] {
+        let numbers = NSWindow.windowNumbers(options: []) ?? []
+        return numbers.compactMap { number in
+            guard let window = NSApp.window(withWindowNumber: number.intValue), window.isVisible,
+                  let kind = registry.windowKind(for: window) else { return nil }
+            return (window, kind)
+        }
+    }
+
+    /// The proxy shows the same pixels as the group, so swapping one for the other is invisible.
+    private func hand(_ group: [(window: NSWindow, kind: WindowKind)], to proxy: NSWindow) {
+        guard let front = group.first?.window else { return }
+        proxy.order(.above, relativeTo: front.windowNumber)
+        // Commit the proxy's pixels before the group leaves, or the screen shows neither for a frame.
+        proxy.displayIfNeeded()
+        CATransaction.flush()
+        for (window, kind) in group {
+            minimizedWith.append(kind)
+            window.orderOut(nil)
+        }
+        isMainWindowVisible = false
+        self.proxy = proxy
+        deminiaturizeToken = NotificationCenter.default.addObserver(of: proxy, for: .didDeminiaturize) { [weak self] _ in
+            self?.restoreMinimizedGroup()
+        }
+        proxy.miniaturize(nil)
+    }
+
+    /// AppKit posts `didDeminiaturize` once the Dock has finished animating the proxy back to its frame.
     private func restoreMinimizedGroup() {
-        isMainWindowVisible = true
-        for kind in minimizedWith where isOpen(kind) { registry.window(for: kind)?.orderFront(nil) }
+        guard let proxy else { return }
+        var above = proxy.windowNumber
+        for kind in minimizedWith where isOpen(kind) {
+            guard let window = registry.window(for: kind) else { continue }
+            window.order(.below, relativeTo: above)
+            above = window.windowNumber
+        }
+        proxy.hasShadow = false
+        registry.mainWindow?.makeKey()
+        // A restore through orderFront(_:) orders the proxy in again after this handler returns.
+        DispatchQueue.main.async { proxy.orderOut(nil) }
+        stop()
+        self.proxy = nil
         minimizedWith = []
+        isMainWindowVisible = true
         onGroupRestored?()
     }
 
@@ -191,7 +241,7 @@ final class WindowVisibilityController {
     /// While minimized, a window turned on waits to come back with Main.
     private func deferWhileMinimized(_ kind: WindowKind) -> Bool {
         guard isGroupMinimized else { return false }
-        minimizedWith.insert(kind)
+        if !minimizedWith.contains(kind) { minimizedWith.append(kind) }
         return true
     }
 
