@@ -150,11 +150,12 @@ final class WindowVisibilityController {
     private var isGroupMinimized: Bool { proxy != nil }
 
     /// Winamp minimize: one Dock tile for the whole group; the windows hide without changing their open state.
-    /// A group that does not fit on one screen hides the app instead, since one proxy window cannot span displays.
+    /// A group on more than one screen hides the app instead, since one proxy window cannot span displays.
     func minimizeGroup() {
         guard canMinimizeGroup else { return }
         let group = visibleGroup()
-        guard NSScreen.screens.contains(where: { screen in group.allSatisfy { screen.frame.contains($0.window.frame) } }) else {
+        let union = group.map(\.window.frame).reduce(CGRect.null) { $0.union($1) }
+        guard NSScreen.screens.filter({ $0.frame.intersects(union) }).count <= 1 else {
             NSApp.hide(nil)
             return
         }
