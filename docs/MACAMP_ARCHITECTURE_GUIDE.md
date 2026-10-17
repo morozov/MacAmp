@@ -2,7 +2,7 @@
 
 **Version:** 3.3.0
 **Date:** 2026-09-25
-**Scope:** Current architecture (macOS 27+, Swift 6.2): five-window system, unified audio pipeline, AVPlayer-native video DSP
+**Scope:** Current architecture (macOS 26+, Swift 6.2): five-window system, unified audio pipeline, AVPlayer-native video DSP
 **Purpose:** Deep technical reference for developers joining or maintaining MacAmp: what the system is and why. Code-level patterns (snippet, when to use, pitfalls) live in [IMPLEMENTATION_PATTERNS.md](IMPLEMENTATION_PATTERNS.md).
 
 ---
@@ -68,7 +68,7 @@ Lines of Code:            ~20,400
 Tests:                    119 (Swift Testing, run under Thread Sanitizer)
 Supported Formats:        MP3, M4A, FLAC, WAV, AAC, HTTP/HTTPS streams; MP4/MOV/M4V/AVI video
 Skins:                    Winamp 2.x .wsz
-macOS Support:            27.0+ (minimum raised 2026-09-25; macOS 15/26 supported by earlier releases)
+macOS Support:            26.0+ (macOS 15 supported by earlier releases)
 Architecture:             SwiftUI + AVFoundation
 Deployment:               Developer ID signed, notarization-ready
 ```
@@ -1467,9 +1467,9 @@ The generation is rechecked after every `await`, and `isStillRelevant` is checke
 
 ### Processing Format
 
-The tap is created with `MTAudioProcessingTapCreateWithPreferredFormat` (macOS 27), requesting the format from `VideoTap.preferredProcessingFormat(for:)`: **stereo Float32 non-interleaved at the source track's sample rate**. Without a preferred format the tap runs in a format chosen for the current output device, so its format changed with the route; over AirPlay 2 that produced audible volume pumping. If the source format cannot be read, the builder falls back to `MTAudioProcessingTapCreate`. Both use `kMTAudioProcessingTapCreationFlag_PreEffects`.
+On macOS 27 the tap is created with `MTAudioProcessingTapCreateWithPreferredFormat`, requesting the format from `VideoTap.preferredProcessingFormat(for:)`: **stereo Float32 non-interleaved at the source track's sample rate**. Without a preferred format the tap runs in a format chosen for the current output device, so its format changed with the route; over AirPlay 2 that produced audible volume pumping. On macOS 26, or if the source format cannot be read, the builder falls back to `MTAudioProcessingTapCreate`, so AirPlay 2 video audio can still pump there. Both use `kMTAudioProcessingTapCreationFlag_PreEffects`.
 
-Consequence of the stereo pin: 5.1 and wider sources are downmixed, and mono is upmixed, before the tap, so channels 0 and 1 are always left and right for balance. Multichannel video currently plays as stereo on every output; true multichannel output is tracked as issue #88 (S4-4 `video-multichannel-output`).
+Consequence of the stereo pin on macOS 27: 5.1 and wider sources are downmixed, and mono is upmixed, before the tap, so channels 0 and 1 are always left and right for balance. Multichannel video plays as stereo on every output there; the macOS 26 fallback does not pin the channel count; true multichannel output is tracked as issue #88 (S4-4 `video-multichannel-output`).
 
 ### Render Path (`tapProcess`)
 
@@ -1537,7 +1537,7 @@ During video no engine tap is installed, so `startVideoVisualization()` starts t
 - **Multichannel output:** 5.1+ video is downmixed to stereo in the tap (see Processing Format); issue #88, S4-4 `video-multichannel-output`.
 - **P-6:** after a video, loading an audio track does not auto-play; the user has to press Next. Open and non-blocking (`tasks/done/avplayer-native-video-dsp/placeholder.md`).
 - **Streaming video:** HLS video is not a supported target; `MTAudioProcessingTap` is unreliable for streaming items (plan.md §2).
-- **macOS 27 deprecations:** the build carries 16 deprecated-API warnings (14 app, 2 test), including `AVPlayerItemDidPlayToEndTime` in `VideoPlaybackController` and `installTap(onBus:)` in `VisualizerPipeline`; S4-1 `swift64-macos27-readiness` replaces them.
+- **macOS 27 deprecations:** the code uses APIs deprecated in macOS 27, including `AVPlayerItemDidPlayToEndTime` in `VideoPlaybackController` and `installTap(onBus:)` in `VisualizerPipeline`. The macOS 26 minimum keeps the compiler from warning about them; S4-1 `swift64-macos27-readiness` replaces them.
 
 **Tests:** `VideoTapLifecycleTests`, `VideoTapFanoutTests`, `VideoTapSendableContractTests`, `BiquadNumericalMatchTests`, `VideoTapVisualizerRenderTests`, `VideoTapTelemetryTests`, `VideoTapCPUBenchmarkTests`, `VideoSeekStateMatrixTests`, `EngineConfigObserverTests`.
 
@@ -1636,7 +1636,7 @@ When a stream ends unexpectedly, `StreamPlayer` reconnects with exponential back
 
 ## Modern Swift 6.2 Patterns
 
-The project builds with Swift 6.2 strict concurrency (swift-tools-version 6.2, macOS 27 minimum). The code-level patterns and migration steps are in [IMPLEMENTATION_PATTERNS.md](IMPLEMENTATION_PATTERNS.md); this section records where the language features are used.
+The project builds with Swift 6.2 strict concurrency (swift-tools-version 6.2, macOS 26 minimum). The code-level patterns and migration steps are in [IMPLEMENTATION_PATTERNS.md](IMPLEMENTATION_PATTERNS.md); this section records where the language features are used.
 
 ### Strict Concurrency
 
@@ -1645,7 +1645,7 @@ The project builds with Swift 6.2 strict concurrency (swift-tools-version 6.2, m
 // swift-tools-version: 6.2
 let package = Package(
     name: "MacAmp",
-    platforms: [.macOS("27.0")],
+    platforms: [.macOS("26.0")],
     dependencies: [
         .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.20"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0"),

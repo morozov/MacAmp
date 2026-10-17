@@ -21,7 +21,7 @@
 
 ---
 
-MacAmp's docs cover a pixel-perfect Winamp 2.x recreation for macOS 27+: architecture, implementation patterns, the multi-window system, each window type, the sprite/skin system, and build/release. `docs/*.md` describes the current codebase; `docs/archive/` holds superseded material.
+MacAmp's docs cover a pixel-perfect Winamp 2.x recreation for macOS 26+: architecture, implementation patterns, the multi-window system, each window type, the sprite/skin system, and build/release. `docs/*.md` describes the current codebase; `docs/archive/` holds superseded material.
 
 ## Quick Start by Audience
 

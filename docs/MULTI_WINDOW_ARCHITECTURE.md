@@ -1,4 +1,4 @@
-# MacAmp Multi-Window Architecture (macOS 27+)
+# MacAmp Multi-Window Architecture (macOS 26+)
 
 ## Executive Summary
 
@@ -167,7 +167,7 @@ private func observeAlwaysOnTop() {
 - **`self.handlers != nil` guard**: no re-registration after `stop()`.
 - **Explicit `start(...)` / `stop()` lifecycle**: `start` installs the four handlers and observers; `stop` cancels all tasks and clears the handlers.
 
-`Observations` (macOS 26+, so available at the macOS 27 minimum) could replace this pattern; it is not adopted yet:
+`Observations` (macOS 26+, so available at the macOS 26 minimum) could replace this pattern; it is not adopted yet:
 
 ```swift
 for await _ in Observations(\.isAlwaysOnTop, on: settings) {
@@ -250,7 +250,7 @@ Refactor plan and final state: `tasks/done/window-coordinator-refactor/`.
 
 At launch, and after every settle below, `clampOnScreen()` moves each docked group (and each lone window) back onto a screen as one unit (`ScreenClamp.clamp`): one offset per group; stranded groups that fit together move together; a group larger than the screen keeps its left and top edges visible. A group counts as stranded only when it leaves the screen below the menu bar, so one left over the Dock stays put; a stranded group is moved inside the visible frame.
 
-The guard observes `NSApplication` `.didChangeScreenParameters` and `NSWorkspace` `.willSleep` / `.didWake` (macOS 27 typed notifications). A transition snapshots the layout and suppresses snapping and persistence until the screens settle: 1 s after the last screen event, and at least 3 s after wake, because a temporary 1920×1080 screen appears before the real display returns (UserDefaults overrides `screenSettleDelay`, `wakeSettleWindow`). Then:
+The guard observes `NSApplication.didChangeScreenParametersNotification` and `NSWorkspace` `.willSleep` / `.didWake`. A transition snapshots the layout and suppresses snapping and persistence until the screens settle: 1 s after the last screen event, and at least 3 s after wake, because a temporary 1920×1080 screen appears before the real display returns (UserDefaults overrides `screenSettleDelay`, `wakeSettleWindow`). Then:
 
 | Displays after settling | What happens |
 |---|---|

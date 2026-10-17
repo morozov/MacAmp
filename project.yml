@@ -2,7 +2,7 @@ name: MacAmpApp
 options:
   minimumXcodeGenVersion: 2.38.0
   deploymentTarget:
-    macOS: '27.0'
+    macOS: '26.0'
   xcodeVersion: '26.0'
   defaultConfig: Debug
 packages:
@@ -16,7 +16,7 @@ targets:
   MacAmp:
     type: application
     platform: macOS
-    deploymentTarget: '27.0'
+    deploymentTarget: '26.0'
     sources:
       - path: MacAmpApp
         excludes:

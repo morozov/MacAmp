@@ -183,7 +183,7 @@ Finally, test the DMG on a Mac that has never run the app: drag to Applications,
 - [ ] Signed with Developer ID, hardened runtime, entitlements included, no `get-task-allow`
 - [ ] App notarized and stapled
 - [ ] DMG created from a staging folder holding only `MacAmp.app`, signed, notarized, and stapled
-- [ ] Tested on a clean macOS 27+ system
+- [ ] Tested on a clean macOS 26+ system
 - [ ] Release notes written; README.md download link and version references updated
 
 ## Troubleshooting

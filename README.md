@@ -1,6 +1,6 @@
 # MacAmp
 
-![Platform](https://img.shields.io/badge/platform-macOS%2027.0+-blue?logo=apple)
+![Platform](https://img.shields.io/badge/platform-macOS%2026.0+-blue?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-6.2-orange?logo=swift)
 ![Version](https://img.shields.io/badge/version-2.0-brightgreen)
 ![Notarized](https://img.shields.io/badge/Notarized-Apple%20Approved-brightgreen?logo=apple)
@@ -28,7 +28,7 @@ A native macOS audio player that recreates the classic desktop audio player inte
 
 ## Requirements
 
-- **macOS 27.0 or later.** On macOS 15 or 26, use [v1.3](https://github.com/hfyeomans/MacAmp/releases/tag/v1.3), the last release that supports them.
+- **macOS 26.0 or later.** On macOS 15, use [v1.3](https://github.com/hfyeomans/MacAmp/releases/tag/v1.3), the last release that supports it.
 - **Xcode 27** (macOS 27 SDK) and XcodeGen to build from source
 
 ## Download
@@ -663,7 +663,7 @@ MacAmp draws inspiration from the classic desktop audio player that defined a ge
 
 - **Webamp** - Browser-based implementation for architectural patterns
 - **Skin Format Specification** - Classic skin `.wsz` format documentation
-- **Apple Documentation** - SwiftUI and Swift 6.2 for macOS 27+
+- **Apple Documentation** - SwiftUI and Swift 6.2 for macOS 26+
 
 ## License
 

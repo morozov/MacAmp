@@ -136,7 +136,7 @@ final class WindowVisibilityController {
     /// In the Dock while the group is minimized.
     @ObservationIgnored private var proxy: NSWindow?
     @ObservationIgnored private var isCapturingGroup = false
-    @ObservationIgnored private var deminiaturizeToken: NotificationCenter.ObservationToken?
+    @ObservationIgnored private var deminiaturizeToken: NSObjectProtocol?
     /// Runs after the group returns from the Dock.
     @ObservationIgnored var onGroupRestored: (@MainActor () -> Void)?
     /// Runs after a window is shown, so one persisted on a missing display is pulled back on-screen.
@@ -203,8 +203,14 @@ final class WindowVisibilityController {
         }
         isMainWindowVisible = false
         self.proxy = proxy
-        deminiaturizeToken = NotificationCenter.default.addObserver(of: proxy, for: .didDeminiaturize) { [weak self] _ in
-            self?.restoreMinimizedGroup()
+        deminiaturizeToken = NotificationCenter.default.addObserver(
+            forName: NSWindow.didDeminiaturizeNotification,
+            object: proxy,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.restoreMinimizedGroup()
+            }
         }
         proxy.miniaturize(nil)
     }

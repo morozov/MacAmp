@@ -221,8 +221,8 @@ enum VideoTap {
     /// output device and channels 0/1 are always L/R (mono is upmixed, multichannel downmixed); nil = default.
     @MainActor
     static func preferredProcessingFormat(for audioTrack: AVAssetTrack) async -> CMAudioFormatDescription? {
-        guard let source = try? await audioTrack.load(.formatDescriptions).first,
-              let sampleRate = AVAudioFormat(formatDescription: source)?.sampleRate else { return nil }
+        guard let source = try? await audioTrack.load(.formatDescriptions).first else { return nil }
+        let sampleRate = AVAudioFormat(cmAudioFormatDescription: source).sampleRate
         return AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)?.formatDescription
     }
 
@@ -285,7 +285,7 @@ enum VideoTap {
         preferredFormat: CMAudioFormatDescription?,
         tapOut: inout MTAudioProcessingTap?
     ) -> OSStatus {
-        if let preferredFormat {
+        if let preferredFormat, #available(macOS 27, *) {
             return MTAudioProcessingTapCreateWithPreferredFormat(
                 kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PreEffects, preferredFormat, &tapOut)
         }

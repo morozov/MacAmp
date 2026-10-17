@@ -15,6 +15,7 @@ final class WindowScreenGuard {
     private let registry: WindowRegistry
     private let persistence: WindowFramePersistence
     private var observations: [(center: NotificationCenter, token: NotificationCenter.ObservationToken)] = []
+    private var screenParametersObserver: NSObjectProtocol?
     private var snapshot: [WindowKind: NSRect]?
     /// Display frames (by `CGDirectDisplayID`) the current layout's coordinates belong to.
     private var displays: [CGDirectDisplayID: CGRect] = [:]
@@ -33,10 +34,15 @@ final class WindowScreenGuard {
 
     func start() {
         displays = Self.currentDisplays()
-        let app = NotificationCenter.default
-        observations.append((app, app.addObserver(of: NSApplication.self, for: .didChangeScreenParameters) { [weak self] _ in
-            self?.screensChanged()
-        }))
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.screensChanged()
+            }
+        }
         let workspace = NSWorkspace.shared.notificationCenter
         observations.append((workspace, workspace.addObserver(of: NSWorkspace.shared, for: .willSleep) { [weak self] _ in
             self?.willSleep()
@@ -49,6 +55,8 @@ final class WindowScreenGuard {
     func stop() {
         for observation in observations { observation.center.removeObserver(observation.token) }
         observations.removeAll()
+        if let screenParametersObserver { NotificationCenter.default.removeObserver(screenParametersObserver) }
+        screenParametersObserver = nil
         settleTask?.cancel()
         if snapshot != nil { endTransition() }
     }
