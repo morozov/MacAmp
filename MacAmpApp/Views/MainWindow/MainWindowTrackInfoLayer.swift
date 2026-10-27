@@ -49,9 +49,8 @@ struct MainWindowTrackInfoLayer: View {
     }
 }
 
-/// The row of TEXT.bmp glyphs flattened into a single bitmap instead of one
-/// `Image`/`CALayer` per character. The former `HStack` of ~30 sprite views made
-/// a marquee scroll re-commit ~30 layers each 6.7 Hz tick; this commits one.
+/// The row of TEXT.bmp glyphs flattened into a single bitmap so each marquee
+/// scroll tick commits one layer.
 ///
 /// Sized `count*5 × 6` — identical to the former HStack — so the caller's
 /// `.offset` / `.frame` / `.clipped` positioning is byte-for-byte unchanged;

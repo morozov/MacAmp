@@ -53,7 +53,7 @@ final class WinampMainWindowInteractionState {
         guard marqueeDragTranslation == nil else { return }
 
         // .common run-loop mode keeps this firing during user gestures (.eventTracking).
-        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let trackText = self.displayTitleProvider()
@@ -61,7 +61,7 @@ final class WinampMainWindowInteractionState {
                 let displayWidth = WinampMainWindowLayout.trackInfo.width
 
                 if textWidth > displayWidth {
-                    self.scrollOffset = Self.wrappedOffset(self.scrollOffset - 5, textWidth: textWidth)
+                    self.scrollOffset = Self.wrappedOffset(self.scrollOffset - 1, textWidth: textWidth)
                 }
             }
         }
