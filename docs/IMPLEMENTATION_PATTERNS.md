@@ -658,7 +658,7 @@ buildEQSliders()
 ```swift
 // File: MacAmpApp/Views/MainWindow/WinampMainWindowInteractionState.swift
 // Purpose: Timer reads live title value instead of stale capture
-// Context: Scroll timer runs at 0.15s intervals, must track title changes
+// Context: Scroll timer runs at 0.03s intervals, must track title changes
 
 @MainActor
 @Observable
@@ -670,7 +670,7 @@ final class WinampMainWindowInteractionState {
     func startScrolling() {
         guard scrollTimer == nil else { return }
         // .common run-loop mode keeps this firing during user gestures (.eventTracking)
-        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 // CORRECT: Calls closure which reads live value from PlaybackCoordinator

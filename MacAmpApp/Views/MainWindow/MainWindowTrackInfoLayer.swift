@@ -1,7 +1,6 @@
 import SwiftUI
 
 /// Track info display with scrolling text using TEXT.bmp character sprites.
-/// Only re-evaluates when displayTitle or scrollOffset changes.
 struct MainWindowTrackInfoLayer: View {
     @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(UserActionDispatcher.self) private var dispatcher
@@ -16,16 +15,13 @@ struct MainWindowTrackInfoLayer: View {
         let displayWidth = Int(Layout.trackInfo.width)
 
         if textWidth > displayWidth {
-            HStack(spacing: 0) {
-                TrackInfoSprites(text: WinampMainWindowInteractionState.marqueeText(for: trackText))
-                    .offset(x: interactionState.scrollOffset, y: -2)
-                    .onAppear { interactionState.startScrolling() }
-                    .onChange(of: playbackCoordinator.displayTitle) { _, _ in interactionState.resetScrolling() }
-                    .onChange(of: interactionState.transientMessage) { _, _ in interactionState.resetScrolling() }
-            }
-            .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height, alignment: .leading)
-            .clipped()
-            .at(CGPoint(x: Layout.trackInfo.minX, y: Layout.trackInfo.minY))
+            MarqueeTextView(text: WinampMainWindowInteractionState.marqueeText(for: trackText),
+                            interactionState: interactionState)
+                .onAppear { interactionState.startScrolling() }
+                .onChange(of: playbackCoordinator.displayTitle) { _, _ in interactionState.resetScrolling() }
+                .onChange(of: interactionState.transientMessage) { _, _ in interactionState.resetScrolling() }
+                .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height)
+                .at(CGPoint(x: Layout.trackInfo.minX, y: Layout.trackInfo.minY))
         } else {
             TrackInfoSprites(text: trackText)
                 .offset(y: -2)
@@ -49,9 +45,7 @@ struct MainWindowTrackInfoLayer: View {
     }
 }
 
-/// The row of TEXT.bmp glyphs flattened into a single bitmap instead of one
-/// `Image`/`CALayer` per character. The former `HStack` of ~30 sprite views made
-/// a marquee scroll re-commit ~30 layers each 6.7 Hz tick; this commits one.
+/// The row of TEXT.bmp glyphs flattened into a single bitmap.
 ///
 /// Sized `count*5 × 6` — identical to the former HStack — so the caller's
 /// `.offset` / `.frame` / `.clipped` positioning is byte-for-byte unchanged;

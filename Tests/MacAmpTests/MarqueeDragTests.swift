@@ -40,6 +40,22 @@ struct MarqueeDragTests {
         state.cleanup()
     }
 
+    @Test("A replaced observer stopping leaves the current observer receiving offsets")
+    func replacedObserverStops() {
+        let state = state(title: longTitle)
+        let old = NSObject(), new = NSObject()
+        var oldOffsets: [CGFloat] = [], newOffsets: [CGFloat] = []
+        state.observeScrollOffset(old) { oldOffsets.append($0) }
+        state.observeScrollOffset(new) { newOffsets.append($0) }
+        state.stopObservingScrollOffset(old)
+        state.dragMarquee(to: -10)
+        #expect(oldOffsets.isEmpty)
+        #expect(newOffsets == [-10])
+        state.stopObservingScrollOffset(new)
+        state.dragMarquee(to: -20)
+        #expect(newOffsets == [-10])
+    }
+
     @Test("Offsets wrap within one loop of the title and its separator",
           arguments: [(CGFloat(-235), CGFloat(0)), (-236, -1), (5, -230), (-100, -100), (0, 0)])
     func wraps(offset: CGFloat, expected: CGFloat) {

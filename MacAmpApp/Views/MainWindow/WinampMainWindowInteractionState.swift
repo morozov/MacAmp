@@ -13,7 +13,33 @@ final class WinampMainWindowInteractionState {
 
     // MARK: - Track info scrolling
 
-    var scrollOffset: CGFloat = 0
+    /// Horizontal offset of the marquee text, applied by `MarqueeTextNSView`.
+    ///
+    /// Unobserved: a SwiftUI read of this value would re-render the whole main
+    /// window on every scroll tick.
+    @ObservationIgnored var scrollOffset: CGFloat = 0 {
+        didSet {
+            if scrollOffset != oldValue { onScrollOffsetChange?(scrollOffset) }
+        }
+    }
+
+    @ObservationIgnored private var onScrollOffsetChange: ((CGFloat) -> Void)?
+    @ObservationIgnored private weak var scrollOffsetObserver: AnyObject?
+
+    /// Calls `handler` with each new `scrollOffset` until `observer` stops
+    /// observing or another observer replaces it.
+    func observeScrollOffset(_ observer: AnyObject, handler: @escaping (CGFloat) -> Void) {
+        scrollOffsetObserver = observer
+        onScrollOffsetChange = handler
+    }
+
+    /// Ends `observer`'s observation; does nothing if another observer replaced it.
+    func stopObservingScrollOffset(_ observer: AnyObject) {
+        guard scrollOffsetObserver === observer else { return }
+        scrollOffsetObserver = nil
+        onScrollOffsetChange = nil
+    }
+
     var scrollTimer: Timer?
 
     // MARK: - Marquee transient overrides
@@ -53,7 +79,7 @@ final class WinampMainWindowInteractionState {
         guard marqueeDragTranslation == nil else { return }
 
         // .common run-loop mode keeps this firing during user gestures (.eventTracking).
-        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let trackText = self.displayTitleProvider()
@@ -61,7 +87,7 @@ final class WinampMainWindowInteractionState {
                 let displayWidth = WinampMainWindowLayout.trackInfo.width
 
                 if textWidth > displayWidth {
-                    self.scrollOffset = Self.wrappedOffset(self.scrollOffset - 5, textWidth: textWidth)
+                    self.scrollOffset = Self.wrappedOffset(self.scrollOffset - 1, textWidth: textWidth)
                 }
             }
         }
