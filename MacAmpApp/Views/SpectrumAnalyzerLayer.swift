@@ -17,13 +17,16 @@ final class SpectrumAnalyzerNSView: NSView {
 
     /// Colors 0...23 from the skin's visualizer palette.
     var colors: [CGColor] = [] {
-        didSet { needsDisplay = true }
+        didSet {
+            palette = Self.palette(from: colors)
+            needsDisplay = true
+        }
     }
 
     // MARK: - Analyzer configuration
 
     private static let columnCount = 75
-    private let maxLevel = 15
+    private static let maxLevel = 15
     private let peaksEnabled = true
 
     // Falloff presets, slowest to fastest, in per-tick units: bars drop by a
@@ -54,21 +57,22 @@ final class SpectrumAnalyzerNSView: NSView {
     private var fallTickCredit: CFTimeInterval = 0
     private var link: CADisplayLink?
 
-    /// Reused per draw so a frame allocates nothing.
-    private var rowRects = [CGRect]()
-    private var peakRects = [CGRect]()
-    private lazy var gridRects: [CGRect] = {
-        var rects: [CGRect] = []
-        for x in stride(from: 0, to: Int(VisualizerLayout.width), by: 2) {
-            for y in stride(from: 1, to: Int(VisualizerLayout.height), by: 2) {
-                rects.append(CGRect(x: CGFloat(x), y: CGFloat(y), width: 1, height: 1))
-            }
-        }
-        return rects
-    }()
+    private var palette = SpectrumAnalyzerNSView.palette(from: [])
+    /// The frame's bitmap, reused across frames.
+    private var pixels: [UInt32] = []
 
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { true }
+    override var wantsUpdateLayer: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     // MARK: - Display link
 
@@ -105,7 +109,7 @@ final class SpectrumAnalyzerNSView: NSView {
             for x in 0..<Self.columnCount {
                 // Band levels arrive on a 0...255 scale; the analyzer keeps the
                 // bottom 16 of it and saturates above.
-                var v = min(maxLevel, max(0, Int(bands[x])))
+                var v = min(Self.maxLevel, max(0, Int(bands[x])))
 
                 // Bar falloff: drop by a fixed step per tick, snap up to a new hit.
                 if (v << 4) < barFixed[x] {
@@ -121,7 +125,7 @@ final class SpectrumAnalyzerNSView: NSView {
                     peakVelocity[x] = peakInitialVelocity
                 }
                 let level = peakFixed[x] / 256
-                let cap = (peaksEnabled && level >= 0 && level <= maxLevel) ? level : -1
+                let cap = (peaksEnabled && level >= 0 && level <= Self.maxLevel) ? level : -1
                 peakFixed[x] -= Int(peakVelocity[x])
                 peakVelocity[x] *= peakFalloff
                 if peakFixed[x] < 0 { peakFixed[x] = 0 }
@@ -169,41 +173,71 @@ final class SpectrumAnalyzerNSView: NSView {
 
     // MARK: - Drawing
 
-    private func color(_ index: Int, fallback: CGColor) -> CGColor {
-        colors.indices.contains(index) ? colors[index] : fallback
+    override func updateLayer() {
+        guard let layer else { return }
+        let width = Int(bounds.width), height = Int(bounds.height)
+        guard width > 0, height > 0 else { return }
+        if pixels.count != width * height {
+            pixels = [UInt32](repeating: 0, count: width * height)
+        }
+        Self.render(barLevels: barLevels, peakLevels: peakLevels, palette: palette,
+                    width: width, height: height, into: &pixels)
+        layer.magnificationFilter = .nearest
+        layer.contents = Self.image(from: pixels, width: width, height: height)
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
+    /// Visualizer colors 0...23 as sRGB RGBA bytes in memory order, black where
+    /// the skin supplies none and white for a missing peak color.
+    static func palette(from colors: [CGColor]) -> [UInt32] {
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+        func pack(_ color: CGColor) -> UInt32 {
+            guard let c = color.converted(to: sRGB, intent: .defaultIntent, options: nil)?.components,
+                  c.count == 4 else { return 0xFF00_0000 }
+            let bytes = c.map { UInt32((min(1, max(0, $0)) * 255).rounded()) }
+            return bytes[0] | bytes[1] << 8 | bytes[2] << 16 | bytes[3] << 24
+        }
+        return (0..<24).map { index in
+            if colors.indices.contains(index) { return pack(colors[index]) }
+            return index == 23 ? 0xFFFF_FFFF : 0xFF00_0000
+        }
+    }
 
-        let black = CGColor(gray: 0, alpha: 1)
-        context.setFillColor(color(0, fallback: black))
-        context.fill(bounds)
-
-        context.setFillColor(color(1, fallback: black))
-        context.fill(gridRects)
-
-        let floor = bounds.height - 1
-
-        // Every lit pixel in a row shares a color, so a row is one fill.
-        for row in 0..<maxLevel {
-            rowRects.removeAll(keepingCapacity: true)
-            for x in 0..<Self.columnCount where barLevels[x] > row {
-                rowRects.append(CGRect(x: CGFloat(x), y: floor - CGFloat(row), width: 1, height: 1))
+    /// Renders the analyzer one pixel per point, top row first, into `pixels`,
+    /// which holds `width * height` colors from `palette`.
+    static func render(barLevels: [Int], peakLevels: [Int], palette: [UInt32],
+                       width: Int, height: Int, into pixels: inout [UInt32]) {
+        pixels.withUnsafeMutableBufferPointer { buffer in
+            func plot(_ x: Int, _ y: Int, _ color: UInt32) {
+                guard x >= 0, x < width, y >= 0, y < height else { return }
+                buffer[y * width + x] = color
             }
-            guard !rowRects.isEmpty else { continue }
-            context.setFillColor(color(min(17, max(2, 17 - row)), fallback: black))
-            context.fill(rowRects)
+            buffer.update(repeating: palette[0])
+            for x in stride(from: 0, to: Int(VisualizerLayout.width), by: 2) {
+                for y in stride(from: 1, to: Int(VisualizerLayout.height), by: 2) {
+                    plot(x, y, palette[1])
+                }
+            }
+            let floor = height - 1
+            for x in 0..<min(columnCount, barLevels.count, peakLevels.count) {
+                for row in 0..<min(barLevels[x], maxLevel) {
+                    plot(x, floor - row, palette[min(17, max(2, 17 - row))])
+                }
+                if peakLevels[x] >= 0 {
+                    plot(x, floor - peakLevels[x], palette[23])
+                }
+            }
         }
+    }
 
-        peakRects.removeAll(keepingCapacity: true)
-        for x in 0..<Self.columnCount where peakLevels[x] >= 0 {
-            peakRects.append(CGRect(x: CGFloat(x), y: floor - CGFloat(peakLevels[x]), width: 1, height: 1))
-        }
-        if !peakRects.isEmpty {
-            context.setFillColor(color(23, fallback: CGColor(gray: 1, alpha: 1)))
-            context.fill(peakRects)
-        }
+    private static func image(from pixels: [UInt32], width: Int, height: Int) -> CGImage? {
+        guard let provider = CGDataProvider(data: pixels.withUnsafeBytes { Data($0) } as CFData)
+        else { return nil }
+        return CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
+        )
     }
 }
 
