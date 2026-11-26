@@ -39,7 +39,29 @@ struct HLSStreamPlayerTests {
 
     @Test("Pausing an HLS stream stops it, keeps the station, tears the bridge down, and does not reconnect")
     func pauseStops() async throws {
-        let (player, _) = try makePlayer()
+        let (player, origin) = try makePlayer()
+        // Hold live reloads until pause cancels them so this fixture cannot stall.
+        actor PlaylistReloadGate {
+            private var fetchedInitialPlaylist = false
+
+            func waitForPlaylist() async throws {
+                if !fetchedInitialPlaylist {
+                    fetchedInitialPlaylist = true
+                    return
+                }
+                let (reload, continuation) = AsyncStream<Void>.makeStream()
+                defer { continuation.finish() }
+                for await _ in reload {}
+                throw CancellationError()
+            }
+        }
+        let gate = PlaylistReloadGate()
+        player.pipelineForTesting.hlsFetch = { requested in
+            if requested.pathExtension == "m3u8" {
+                try await gate.waitForPlaylist()
+            }
+            return origin.respond(requested)
+        }
         var teardowns = 0
         player.onStreamTerminated = { teardowns += 1 }
         await player.play(station: RadioStation(name: "Live", streamURL: playlistURL))
