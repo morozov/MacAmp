@@ -50,13 +50,15 @@ struct VisualizerView: View {
                     SpectrumAnalyzerLayer(
                         colors: skinManager.currentSkin?.visualizerColors ?? [],
                         bands: { [audioPlayer] in audioPlayer.spectrumBands() },
-                        isRendering: { [audioPlayer] in audioPlayer.isVisualizerRendering }
+                        isRendering: { [audioPlayer] in audioPlayer.isVisualizerRendering },
+                        help: "Switch to oscilloscope"
                     )
                     .frame(width: VisualizerLayout.width, height: height)
                 }
             }
         }
         .frame(width: VisualizerLayout.width, height: height)
+        .help(mode == .none ? "Show spectrum analyzer" : mode == .spectrum ? "Switch to oscilloscope" : "Turn off visualization")
         .onTapGesture {
             // Cycle through modes: spectrum → oscilloscope → none
             let allModes = AppSettings.VisualizerMode.allCases

@@ -32,23 +32,23 @@ struct PlaylistBottomControlsView: View {
 
         Button(action: { menuPresenter.showAddMenu() }, label: {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 25, y: buttonY)
+        }).buttonStyle(.plain).focusable(false).help("Open add menu").position(x: 25, y: buttonY)
 
         Button(action: { menuPresenter.showRemMenu() }, label: {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 54, y: buttonY)
+        }).buttonStyle(.plain).focusable(false).help("Open remove menu").position(x: 54, y: buttonY)
 
         Button(action: { menuPresenter.showSelNotSupportedAlert() }, label: {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 83, y: buttonY)
+        }).buttonStyle(.plain).focusable(false).help("Show selection commands unavailable notice").position(x: 83, y: buttonY)
 
         Button(action: { menuPresenter.showMiscMenu() }, label: {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: 112, y: buttonY)
+        }).buttonStyle(.plain).focusable(false).help("Open miscellaneous actions menu").position(x: 112, y: buttonY)
 
         Button(action: { menuPresenter.showListMenu() }, label: {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).position(x: windowWidth - 33, y: buttonY)
+        }).buttonStyle(.plain).focusable(false).help("Open playlist management menu").position(x: windowWidth - 33, y: buttonY)
     }
 
     @ViewBuilder
@@ -61,20 +61,21 @@ struct PlaylistBottomControlsView: View {
         let transportY = windowHeight - 11
         let baseX = windowWidth - 142
 
-        transportButton(action: { dispatcher.perform(.previousTrack) }, x: baseX, y: transportY)
-        transportButton(action: { dispatcher.perform(.togglePlayPause) }, x: baseX + 10, y: transportY)
-        transportButton(action: { dispatcher.perform(.togglePlayPause) }, x: baseX + 20, y: transportY)
-        transportButton(action: { dispatcher.perform(.stop) }, x: baseX + 30, y: transportY)
-        transportButton(action: { dispatcher.perform(.nextTrack) }, x: baseX + 40, y: transportY)
-        transportButton(action: { dispatcher.perform(.openFiles) }, x: baseX + 50, y: transportY)
+        transportButton(action: { dispatcher.perform(.previousTrack) }, help: "Previous track (Z)", x: baseX, y: transportY)
+        transportButton(action: { dispatcher.perform(.togglePlayPause) }, help: playbackCoordinator.isPlaying ? "Pause (C)" : "Play (C)", x: baseX + 10, y: transportY)
+        transportButton(action: { dispatcher.perform(.togglePlayPause) }, help: playbackCoordinator.isPlaying ? "Pause (C)" : "Play (C)", x: baseX + 20, y: transportY)
+        transportButton(action: { dispatcher.perform(.stop) }, help: "Stop (V)", x: baseX + 30, y: transportY)
+        transportButton(action: { dispatcher.perform(.nextTrack) }, help: "Next track (B)", x: baseX + 40, y: transportY)
+        transportButton(action: { dispatcher.perform(.openFiles) }, help: "Open files (L)", x: baseX + 50, y: transportY)
     }
 
-    private func transportButton(action: @escaping () -> Void, x: CGFloat, y: CGFloat) -> some View {
+    private func transportButton(action: @escaping () -> Void, help: String, x: CGFloat, y: CGFloat) -> some View {
         Button(action: action, label: {
             Color.clear.frame(width: 10, height: 10).contentShape(Rectangle())
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help(help)
         .position(x: x, y: y)
     }
 

@@ -250,6 +250,7 @@ struct VideoWindowChromeView<Content: View>: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help("Hide video window")
         .position(x: pixelSize.width - 6.5, y: 7.5)
 
         // 1X button - clickable region over baked-on sprite
@@ -269,6 +270,7 @@ struct VideoWindowChromeView<Content: View>: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
+        .help("Use normal video window size")
         .position(x: 31.5, y: bottomBarY)  // Dynamic Y position
 
         // 2X button - clickable region over baked-on sprite
@@ -288,6 +290,7 @@ struct VideoWindowChromeView<Content: View>: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
+        .help("Use double video window size")
         .position(x: 46.5, y: bottomBarY)  // Dynamic Y position
     }
 
@@ -299,6 +302,7 @@ struct VideoWindowChromeView<Content: View>: View {
             .fill(Color.clear)
             .frame(width: 20, height: 20)
             .contentShape(Rectangle())
+            .help("Drag to resize video window")
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in

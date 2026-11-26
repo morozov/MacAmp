@@ -17,11 +17,11 @@ struct PlaylistMenuPresenter {
 
     func showAddMenu() {
         let tiles: [PlaylistSpritePopupTile] = [
-            tile("PLAYLIST_ADD_URL", "PLAYLIST_ADD_URL_SELECTED",
+            tile("PLAYLIST_ADD_URL", "PLAYLIST_ADD_URL_SELECTED", "Add an internet radio URL",
                  PlaylistWindowActions.shared.addURL),
-            tile("PLAYLIST_ADD_DIR", "PLAYLIST_ADD_DIR_SELECTED",
+            tile("PLAYLIST_ADD_DIR", "PLAYLIST_ADD_DIR_SELECTED", "Add a directory to the playlist",
                  PlaylistWindowActions.shared.addDirectory),
-            tile("PLAYLIST_ADD_FILE", "PLAYLIST_ADD_FILE_SELECTED",
+            tile("PLAYLIST_ADD_FILE", "PLAYLIST_ADD_FILE_SELECTED", "Add files to the playlist",
                  PlaylistWindowActions.shared.addFile),
         ]
         present(tiles: tiles, barSprite: "PLAYLIST_ADD_MENU_BAR", tilesLeft: Self.addPopupLeft)
@@ -34,13 +34,14 @@ struct PlaylistMenuPresenter {
             PlaylistSpritePopupTile(
                 normalSprite: "PLAYLIST_REMOVE_MISC",
                 selectedSprite: "PLAYLIST_REMOVE_MISC_SELECTED",
+                help: "Open options to remove missing entries or move selected files to Trash",
                 action: { showRemoveMiscMenu() }
             ),
-            tile("PLAYLIST_REMOVE_ALL", "PLAYLIST_REMOVE_ALL_SELECTED",
+            tile("PLAYLIST_REMOVE_ALL", "PLAYLIST_REMOVE_ALL_SELECTED", "Clear the playlist",
                  PlaylistWindowActions.shared.removeAll),
-            tile("PLAYLIST_CROP", "PLAYLIST_CROP_SELECTED",
+            tile("PLAYLIST_CROP", "PLAYLIST_CROP_SELECTED", "Remove all unselected entries from the playlist",
                  PlaylistWindowActions.shared.cropPlaylist),
-            tile("PLAYLIST_REMOVE_SELECTED", "PLAYLIST_REMOVE_SELECTED_SELECTED",
+            tile("PLAYLIST_REMOVE_SELECTED", "PLAYLIST_REMOVE_SELECTED_SELECTED", "Remove selected entries from the playlist",
                  PlaylistWindowActions.shared.removeSelected),
         ]
         present(tiles: tiles, barSprite: "PLAYLIST_REMOVE_MENU_BAR", tilesLeft: Self.remPopupLeft)
@@ -91,14 +92,17 @@ struct PlaylistMenuPresenter {
             PlaylistSpritePopupTile(
                 normalSprite: "PLAYLIST_SORT_LIST",
                 selectedSprite: "PLAYLIST_SORT_LIST_SELECTED",
+                help: "Open playlist sorting actions",
                 action: { showSortMenu() }
             ),
             PlaylistSpritePopupTile(
                 normalSprite: "PLAYLIST_FILE_INFO", selectedSprite: "PLAYLIST_FILE_INFO_SELECTED",
+                help: "Open file information actions",
                 action: { showFileInfoMenu() }
             ),
             PlaylistSpritePopupTile(
                 normalSprite: "PLAYLIST_MISC_OPTIONS", selectedSprite: "PLAYLIST_MISC_OPTIONS_SELECTED",
+                help: "Open miscellaneous playlist options",
                 action: { showMiscOptionsMenu() }
             ),
         ]
@@ -197,11 +201,11 @@ struct PlaylistMenuPresenter {
 
     func showListMenu() {
         let tiles: [PlaylistSpritePopupTile] = [
-            tile("PLAYLIST_NEW_LIST", "PLAYLIST_NEW_LIST_SELECTED",
+            tile("PLAYLIST_NEW_LIST", "PLAYLIST_NEW_LIST_SELECTED", "Clear the playlist and start an empty list",
                  PlaylistWindowActions.shared.newList),
-            tile("PLAYLIST_SAVE_LIST", "PLAYLIST_SAVE_LIST_SELECTED",
+            tile("PLAYLIST_SAVE_LIST", "PLAYLIST_SAVE_LIST_SELECTED", "Save the playlist to a file",
                  PlaylistWindowActions.shared.saveList),
-            tile("PLAYLIST_LOAD_LIST", "PLAYLIST_LOAD_LIST_SELECTED",
+            tile("PLAYLIST_LOAD_LIST", "PLAYLIST_LOAD_LIST_SELECTED", "Replace the current playlist from a file",
                  PlaylistWindowActions.shared.loadList),
         ]
         let tilesLeft = windowWidth - Self.listPopupRight - PlaylistSpritePopup.tileWidth
@@ -211,12 +215,14 @@ struct PlaylistMenuPresenter {
     private func tile(
         _ normal: String,
         _ selected: String,
+        _ help: String,
         _ action: @escaping (NSMenuItem) -> Void
     ) -> PlaylistSpritePopupTile {
         let player = audioPlayer
         return PlaylistSpritePopupTile(
             normalSprite: normal,
             selectedSprite: selected,
+            help: help,
             action: {
                 let item = NSMenuItem()
                 item.representedObject = player

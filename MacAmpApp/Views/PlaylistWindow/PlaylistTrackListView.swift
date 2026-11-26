@@ -29,6 +29,7 @@ struct PlaylistTrackListView: View {
                                 onDoubleClick: {
                                     Task { await playbackCoordinator.play(track: track) }
                                 },
+                                help: "Click to select; double-click to play; drag to reorder. Command-click toggles selection; Shift-click extends it.",
                                 onDrag: onTrackDrag,
                                 onMouseUp: onTrackRelease
                             )

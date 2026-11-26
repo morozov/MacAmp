@@ -15,6 +15,7 @@ struct PlaylistResizeHandle: View {
             .fill(Color.clear)
             .frame(width: widthOnly ? 9 : 20, height: widthOnly ? 9 : 20)
             .contentShape(Rectangle())
+            .help(widthOnly ? "Drag to resize playlist width" : "Drag to resize playlist")
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in

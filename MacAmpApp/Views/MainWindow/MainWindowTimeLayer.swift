@@ -34,6 +34,7 @@ struct MainWindowTimeLayer: View {
         .onTapGesture {
             dispatcher.perform(.toggleTimeDisplayMode)
         }
+        .help(settings.timeDisplayMode == .elapsed ? "Use remaining-time mode" : "Use elapsed-time mode")
         .at(Layout.timeDisplay)
     }
 

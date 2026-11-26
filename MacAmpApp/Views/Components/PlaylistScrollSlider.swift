@@ -65,6 +65,7 @@ struct PlaylistScrollSlider: View {
                         isDragging = false
                     }
             )
+            .help(isDisabled ? "All playlist tracks are visible" : "Scroll through the playlist")
             .disabled(isDisabled)
             .opacity(isDisabled ? 0.5 : 1.0)
         }

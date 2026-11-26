@@ -24,7 +24,7 @@ struct WinampVolumeSlider: View {
     var body: some View {
         ZStack(alignment: .leading) {
             volumeTrack
-            volumeInteractionArea
+            volumeInteractionArea.help("Adjust volume")
         }
         .frame(width: sliderWidth, height: sliderHeight)
     }
@@ -161,7 +161,7 @@ struct WinampBalanceSlider: View {
     var body: some View {
         ZStack(alignment: .leading) {
             balanceTrack
-            balanceInteractionArea
+            balanceInteractionArea.help("Adjust left/right balance")
         }
         .frame(width: sliderWidth, height: sliderHeight)
     }

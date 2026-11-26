@@ -12,9 +12,11 @@ struct PlaylistTitleBarButtons: View {
 
         SkinHitButton(pressedSprite: shaded ? "PLAYLIST_EXPAND_SELECTED" : "PLAYLIST_COLLAPSE_SELECTED",
                       width: 9, height: 9) { dispatcher.perform(.shadePlaylistWindow) }
+            .help(shaded ? "Expand playlist" : "Shade playlist")
             .position(x: windowWidth - 16.5, y: buttonY)
 
         SkinHitButton(pressedSprite: "PLAYLIST_CLOSE_SELECTED", width: 9, height: 9) { dispatcher.perform(.togglePlaylistWindow) }
+            .help("Hide playlist")
             .position(x: windowWidth - 6.5, y: buttonY)
     }
 }

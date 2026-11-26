@@ -39,16 +39,22 @@ struct MainWindowShadeLayer: View {
     private func buildShadeTransportButtons() -> some View {
         Group {
             SkinHitButton(width: 7, height: 10) { dispatcher.perform(.previousTrack) }
+                .help("Previous track (Z)")
                 .at(Layout.shadePreviousButton)
             SkinHitButton(width: 10, height: 10) { dispatcher.perform(.togglePlayPause) }
+                .help(playbackCoordinator.isPlaying ? "Pause (C)" : "Play (C)")
                 .at(Layout.shadePlayButton)
             SkinHitButton(width: 9, height: 10) { dispatcher.perform(.togglePlayPause) }
+                .help(playbackCoordinator.isPlaying ? "Pause (C)" : "Play (C)")
                 .at(Layout.shadePauseButton)
             SkinHitButton(width: 9, height: 10) { dispatcher.perform(.stop) }
+                .help("Stop (V)")
                 .at(Layout.shadeStopButton)
             SkinHitButton(width: 10, height: 10) { dispatcher.perform(.nextTrack) }
+                .help("Next track (B)")
                 .at(Layout.shadeNextButton)
             SkinHitButton(width: 10, height: 10) { dispatcher.perform(.openFiles) }
+                .help("Open files (L)")
                 .at(Layout.shadeEjectButton)
         }
     }
@@ -71,6 +77,8 @@ struct MainWindowShadeLayer: View {
                 GeometryReader { geo in
                     Color.clear
                         .contentShape(Rectangle())
+                        .help(audioPlayer.currentMediaType == .video || audioPlayer.currentTrack?.url.isFileURL == true
+                            ? "Seek within the current track" : "Seeking is unavailable for streams")
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in interactionState.handlePositionDrag(value, in: geo, audioPlayer: audioPlayer) }
@@ -106,6 +114,7 @@ struct MainWindowShadeLayer: View {
         .frame(width: 30, height: 6, alignment: .topLeading)
         .contentShape(Rectangle())
         .onTapGesture { dispatcher.perform(.toggleTimeDisplayMode) }
+        .help(settings.timeDisplayMode == .elapsed ? "Use remaining-time mode" : "Use elapsed-time mode")
         .at(Layout.shadeTime)
     }
 
@@ -118,21 +127,25 @@ struct MainWindowShadeLayer: View {
                 optionsPresenter.showOptionsMenu(from: Layout.optionsButton, settings: settings,
                                                  audioPlayer: audioPlayer, isDoubleSizeMode: settings.isDoubleSizeMode)
             }
+            .help("Open options menu")
             .at(Layout.optionsButton)
 
             SkinHitButton(pressedSprite: "MAIN_MINIMIZE_BUTTON_DEPRESSED", width: 9, height: 9) {
                 dispatcher.perform(.minimizeApp)
             }
+            .help("Minimize player")
             .at(Layout.minimizeButton)
 
             SkinHitButton(pressedSprite: "MAIN_SHADE_BUTTON_SELECTED_DEPRESSED", width: 9, height: 9) {
                 dispatcher.perform(.shadeMainWindow)
             }
+            .help("Expand main window")
             .at(Layout.shadeButton)
 
             SkinHitButton(pressedSprite: "MAIN_CLOSE_BUTTON_DEPRESSED", width: 9, height: 9) {
                 dispatcher.perform(.quitApp)
             }
+            .help("Quit MacAmp")
             .at(Layout.closeButton)
         }
     }

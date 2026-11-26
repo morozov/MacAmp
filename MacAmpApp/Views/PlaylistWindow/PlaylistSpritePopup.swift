@@ -4,6 +4,7 @@ struct PlaylistSpritePopupTile: Identifiable {
     let id = UUID()
     let normalSprite: String
     let selectedSprite: String
+    let help: String
     let action: () -> Void
 }
 
@@ -51,5 +52,6 @@ private struct PlaylistSpritePopupTileView: View {
         .contentShape(Rectangle())
         .onHover { hovering in isHovered = hovering }
         .onTapGesture { onTap() }
+        .help(tile.help)
     }
 }

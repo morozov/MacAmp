@@ -127,9 +127,9 @@ struct ButterchurnWebView: NSViewRepresentable {
                                 text-align: center; padding-top: 40%; font-size: 12px; }
                 </style>
             </head>
-            <body>
-                <canvas id="canvas"></canvas>
-                <div id="fallback">Butterchurn unavailable</div>
+            <body title="Right-click for visualization options">
+                <canvas id="canvas" title="Right-click for visualization options"></canvas>
+                <div id="fallback" title="Right-click for visualization options">Butterchurn unavailable</div>
             </body>
             </html>
             """

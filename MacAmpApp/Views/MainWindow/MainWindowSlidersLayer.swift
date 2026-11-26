@@ -65,6 +65,8 @@ struct MainWindowPositionSlider: View {
                 GeometryReader { geo in
                     Color.clear
                         .contentShape(Rectangle())
+                        .help(audioPlayer.currentMediaType == .video || audioPlayer.currentTrack?.url.isFileURL == true
+                            ? "Seek within the current track" : "Seeking is unavailable for streams")
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in interactionState.handlePositionDrag(value, in: geo, audioPlayer: audioPlayer) }

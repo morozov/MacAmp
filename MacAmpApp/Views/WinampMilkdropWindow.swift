@@ -188,6 +188,7 @@ struct WinampMilkdropWindow: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
+        .help("Right-click for visualization options")
     }
 
     // MARK: - Context Menu

@@ -163,11 +163,13 @@ struct WinampEqualizerWindow: View {
         SkinHitButton(pressedSprite: shaded ? "EQ_MINIMIZE_BUTTON_ACTIVE" : maximizePressedSprite, width: 9, height: 9) {
             dispatcher.perform(.shadeEqualizerWindow)
         }
+        .help(shaded ? "Expand equalizer" : "Shade equalizer")
         .at(EQCoords.shadeButton)
 
         SkinHitButton(pressedSprite: shaded ? "EQ_SHADE_CLOSE_BUTTON_ACTIVE" : "EQ_CLOSE_BUTTON_ACTIVE", width: 9, height: 9) {
             dispatcher.perform(.toggleEqualizerWindow)
         }
+        .help("Hide equalizer")
         .at(EQCoords.closeButton)
     }
 
@@ -188,6 +190,7 @@ struct WinampEqualizerWindow: View {
             .focusable(false)
             .accessibilityIdentifier("MacAmp.EQ.OnOff")
             .accessibilityValue(audioPlayer.isEqOn ? "on" : "off")
+            .help(audioPlayer.isEqOn ? "Turn equalizer off (N)" : "Turn equalizer on (N)")
             .at(EQCoords.onButton)
 
             Button(action: { dispatcher.perform(.toggleEqualizerAuto) }) {
@@ -198,6 +201,7 @@ struct WinampEqualizerWindow: View {
             .focusable(false)
             .accessibilityIdentifier("MacAmp.EQ.Auto")
             .accessibilityValue(audioPlayer.eqAutoEnabled ? "on" : "off")
+            .help(audioPlayer.eqAutoEnabled ? "Turn automatic presets off (A)" : "Turn automatic presets on (A)")
             .at(EQCoords.autoButton)
         }
     }
@@ -216,7 +220,8 @@ struct WinampEqualizerWindow: View {
             thumbHeight: thumbHeight,
             backgroundSprite: "EQ_SLIDER_BACKGROUND",
             thumbSprite: "EQ_SLIDER_THUMB",
-            thumbActiveSprite: "EQ_SLIDER_THUMB_SELECTED"
+            thumbActiveSprite: "EQ_SLIDER_THUMB_SELECTED",
+            help: "Adjust preamp"
         )
         .at(EQCoords.preampSlider) // x: 21, y: 38 (exact webamp position)
     }
@@ -237,7 +242,8 @@ struct WinampEqualizerWindow: View {
                 thumbHeight: thumbHeight,
                 backgroundSprite: "EQ_SLIDER_BACKGROUND",
                 thumbSprite: "EQ_SLIDER_THUMB",
-                thumbActiveSprite: "EQ_SLIDER_THUMB_SELECTED"
+                thumbActiveSprite: "EQ_SLIDER_THUMB_SELECTED",
+                help: "Adjust \(Int(BiquadCoefficientSet.frequencies[bandIndex])) Hz gain"
             )
             .at(CGPoint(
                 x: EQCoords.eqSliderPositions[bandIndex], // Use exact positions from webamp
@@ -275,6 +281,7 @@ struct WinampEqualizerWindow: View {
                 }
             )
         }
+        .help(showPresetPicker ? "Close EQ presets" : "Open EQ presets")
         .at(EQCoords.presetsButton)
     }
 
@@ -308,6 +315,7 @@ struct WinampEqualizerWindow: View {
                              thumbPrefix: "EQ_SHADE_VOLUME_SLIDER",
                              set: { playbackCoordinator.setVolume(Float($0)) },
                              commit: { playbackCoordinator.commitVolume() })
+                .help("Adjust volume")
                 .at(EQCoords.shadeVolume)
 
             buildShadeSlider(value: Double(audioPlayer.balance + 1) / 2, width: EQCoords.shadeBalanceWidth,
@@ -317,6 +325,7 @@ struct WinampEqualizerWindow: View {
                                  playbackCoordinator.setBalance(abs(balance) < 0.12 ? 0 : balance)
                              },
                              commit: { playbackCoordinator.commitBalance() })
+                .help("Adjust left/right balance")
                 .at(EQCoords.shadeBalance)
 
             buildTitlebarButtons(shaded: true)

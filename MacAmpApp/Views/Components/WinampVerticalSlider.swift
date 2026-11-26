@@ -12,6 +12,7 @@ struct WinampVerticalSlider: View {
     let backgroundSprite: String
     let thumbSprite: String
     let thumbActiveSprite: String
+    let help: String
 
     @State private var isDragging = false
 
@@ -50,6 +51,7 @@ struct WinampVerticalSlider: View {
             GeometryReader { geo in
                 Color.clear
                     .contentShape(Rectangle())
+                    .help(help)
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { gesture in

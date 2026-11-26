@@ -67,6 +67,7 @@ struct EQPresetPickerView: View {
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
             .background(Color.secondary.opacity(0.05))
+            .help("Import an EQ preset from a file")
             .onTapGesture {
                 onImport()
             }
@@ -103,6 +104,7 @@ struct EQPresetPickerView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(hoveredPreset == preset.id ? Color.accentColor.opacity(0.15) : Color.clear)
                 )
+                .help("Apply \(preset.name) preset\(allowDeletion ? "; right-click to delete" : "")")
                 .onHover { hovering in
                     hoveredPreset = hovering ? preset.id : nil
                 }

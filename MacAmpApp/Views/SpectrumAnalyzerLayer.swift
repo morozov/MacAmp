@@ -247,16 +247,20 @@ struct SpectrumAnalyzerLayer: NSViewRepresentable {
     let colors: [Color]
     let bands: () -> [Float]
     let isRendering: () -> Bool
+    var help: String?
 
     func makeNSView(context: Context) -> SpectrumAnalyzerNSView {
         let view = SpectrumAnalyzerNSView()
-        view.bandsProvider = bands
-        view.isRenderingProvider = isRendering
-        view.colors = Self.cgColors(from: colors)
+        configure(view)
         return view
     }
 
     func updateNSView(_ nsView: SpectrumAnalyzerNSView, context: Context) {
+        configure(nsView)
+    }
+
+    func configure(_ nsView: SpectrumAnalyzerNSView) {
+        nsView.toolTip = help
         nsView.bandsProvider = bands
         nsView.isRenderingProvider = isRendering
         let resolved = Self.cgColors(from: colors)

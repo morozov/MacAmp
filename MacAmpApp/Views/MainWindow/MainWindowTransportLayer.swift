@@ -4,6 +4,7 @@ import SwiftUI
 /// Separate View struct creates a recomposition boundary — only re-evaluates
 /// when PlaybackCoordinator state actually used by these buttons changes.
 struct MainWindowTransportLayer: View {
+    @Environment(PlaybackCoordinator.self) private var playbackCoordinator
     @Environment(UserActionDispatcher.self) private var dispatcher
 
     private typealias Layout = WinampMainWindowLayout
@@ -15,6 +16,7 @@ struct MainWindowTransportLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help("Previous track (Z)")
         .at(Layout.prevButton)
 
         Button(action: { dispatcher.perform(.togglePlayPause) }, label: {
@@ -22,6 +24,7 @@ struct MainWindowTransportLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help(playbackCoordinator.isPlaying ? "Pause (C)" : "Play (C)")
         .at(Layout.playButton)
 
         Button(action: { dispatcher.perform(.togglePlayPause) }, label: {
@@ -29,6 +32,7 @@ struct MainWindowTransportLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help(playbackCoordinator.isPlaying ? "Pause (C)" : "Play (C)")
         .at(Layout.pauseButton)
 
         // Nav buttons
@@ -37,6 +41,7 @@ struct MainWindowTransportLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help("Stop (V)")
         .at(Layout.stopButton)
 
         Button(action: { dispatcher.perform(.nextTrack) }, label: {
@@ -44,6 +49,7 @@ struct MainWindowTransportLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help("Next track (B)")
         .at(Layout.nextButton)
 
         Button(action: { dispatcher.perform(.openFiles) }, label: {
@@ -51,6 +57,7 @@ struct MainWindowTransportLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
+        .help("Open files (L)")
         .at(Layout.ejectButton)
     }
 }

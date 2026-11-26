@@ -57,6 +57,7 @@ struct MilkdropWindowChromeView<Content: View>: View {
             })
             .buttonStyle(.plain)
             .focusable(false)
+            .help("Hide Milkdrop window")
             .position(x: pixelSize.width - 6.5, y: 7.5)
 
             // Resize handle (bottom-right corner)
@@ -169,6 +170,7 @@ struct MilkdropWindowChromeView<Content: View>: View {
             .fill(Color.clear)
             .frame(width: 20, height: 20)
             .contentShape(Rectangle())
+            .help("Drag to resize Milkdrop window")
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in

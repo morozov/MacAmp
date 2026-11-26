@@ -11,6 +11,9 @@ final class TitlebarDragCaptureNSView: NSView {
     init(windowKind: WindowKind) {
         self.windowKind = windowKind
         super.init(frame: .zero)
+        toolTip = windowKind == .main
+            ? "Drag the player group; Shift-drag this window alone without snapping"
+            : "Drag this window; Shift-drag without snapping"
     }
 
     required init?(coder: NSCoder) {

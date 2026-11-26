@@ -63,21 +63,25 @@ struct MainWindowFullLayer: View {
                 optionsPresenter.showOptionsMenu(from: Layout.optionsButton, settings: settings,
                                                  audioPlayer: audioPlayer, isDoubleSizeMode: settings.isDoubleSizeMode)
             }
+            .help("Open options menu")
             .at(Layout.optionsButton)
 
             SkinHitButton(pressedSprite: "MAIN_MINIMIZE_BUTTON_DEPRESSED", width: 9, height: 9) {
                 dispatcher.perform(.minimizeApp)
             }
+            .help("Minimize player")
             .at(Layout.minimizeButton)
 
             SkinHitButton(pressedSprite: "MAIN_SHADE_BUTTON_DEPRESSED", width: 9, height: 9) {
                 dispatcher.perform(.shadeMainWindow)
             }
+            .help("Shade main window")
             .at(Layout.shadeButton)
 
             SkinHitButton(pressedSprite: "MAIN_CLOSE_BUTTON_DEPRESSED", width: 9, height: 9) {
                 dispatcher.perform(.quitApp)
             }
+            .help("Quit MacAmp")
             .at(Layout.closeButton)
         }
     }
@@ -104,6 +108,7 @@ struct MainWindowFullLayer: View {
             })
             .buttonStyle(.plain)
             .focusable(false)
+            .help(audioPlayer.shuffleEnabled ? "Turn shuffle off (S)" : "Turn shuffle on (S)")
             .at(Layout.shuffleButton)
 
             Button(action: { dispatcher.perform(.cycleRepeatMode) }, label: {
@@ -112,7 +117,7 @@ struct MainWindowFullLayer: View {
             })
             .buttonStyle(.plain)
             .focusable(false)
-            .help(audioPlayer.repeatMode.label)
+            .help(audioPlayer.repeatMode == .off ? "Repeat all tracks (R)" : "Turn repeat off (R)")
             .at(Layout.repeatButton)
         }
     }
@@ -134,6 +139,7 @@ struct MainWindowFullLayer: View {
             })
             .buttonStyle(.plain)
             .focusable(false)
+            .help(eqVisible ? "Hide equalizer" : "Show equalizer")
             .at(Layout.eqButton)
 
             Button(action: { dispatcher.perform(.togglePlaylistWindow) }, label: {
@@ -141,6 +147,7 @@ struct MainWindowFullLayer: View {
             })
             .buttonStyle(.plain)
             .focusable(false)
+            .help(playlistVisible ? "Hide playlist" : "Show playlist")
             .at(Layout.playlistButton)
         }
     }
@@ -163,7 +170,7 @@ struct MainWindowFullLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Toggle always on top (\(WinampKeyBindings.alwaysOnTop.displayLabel))")
+        .help("\(settings.isAlwaysOnTop ? "Turn off" : "Turn on") always on top (\(WinampKeyBindings.alwaysOnTop.displayLabel))")
         .at(Layout.clutterButtonA)
 
         let iSprite = settings.showTrackInfoDialog ? "MAIN_CLUTTER_BAR_BUTTON_I_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_I"
@@ -184,7 +191,7 @@ struct MainWindowFullLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Toggle window size")
+        .help(settings.isDoubleSizeMode ? "Use normal size (\(WinampKeyBindings.doubleSize.displayLabel))" : "Use double size (\(WinampKeyBindings.doubleSize.displayLabel))")
         .at(Layout.clutterButtonD)
 
         let vSprite = settings.showVideoWindow ? "MAIN_CLUTTER_BAR_BUTTON_V_SELECTED" : "MAIN_CLUTTER_BAR_BUTTON_V"
@@ -193,7 +200,7 @@ struct MainWindowFullLayer: View {
         })
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Video Window (\(WinampKeyBindings.videoWindow.displayLabel))")
+        .help("\(settings.showVideoWindow ? "Hide" : "Show") video window (\(WinampKeyBindings.videoWindow.displayLabel))")
         .at(Layout.clutterButtonV)
     }
 }

@@ -33,6 +33,7 @@ struct MainWindowTrackInfoLayer: View {
         Color.clear
             .contentShape(Rectangle())
             .frame(width: Layout.trackInfo.width, height: Layout.trackInfo.height)
+            .help("Double-click for file information; drag to scroll the title")
             .onTapGesture(count: 2) { dispatcher.perform(.showTrackInfo) }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 1)

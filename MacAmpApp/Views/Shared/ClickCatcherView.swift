@@ -41,16 +41,22 @@ final class ClickCatcherNSView: NSView {
 struct ClickCatcherView: NSViewRepresentable {
     let onSingleClick: (_ yFromTop: CGFloat, _ windowY: CGFloat) -> Void
     let onDoubleClick: () -> Void
+    var help: String?
     var onDrag: (_ windowY: CGFloat) -> Void = { _ in }
     var onMouseUp: (_ windowY: CGFloat) -> Void = { _ in }
 
     func makeNSView(context: Context) -> ClickCatcherNSView {
         let view = ClickCatcherNSView()
-        updateNSView(view, context: context)
+        configure(view)
         return view
     }
 
     func updateNSView(_ nsView: ClickCatcherNSView, context: Context) {
+        configure(nsView)
+    }
+
+    func configure(_ nsView: ClickCatcherNSView) {
+        nsView.toolTip = help
         nsView.onSingleClick = onSingleClick
         nsView.onDoubleClick = onDoubleClick
         nsView.onDrag = onDrag
