@@ -31,8 +31,21 @@ struct TrackInfoView: View {
     private var currentURL: URL? { target?.url }
 
     private var isStream: Bool {
+        if let target { return !target.url.isFileURL }
         if case .radioStation = playbackCoordinator.currentSource { return true }
         return false
+    }
+
+    static func isActiveStream(
+        target: Track?, currentTrack: Track?, source: PlaybackCoordinator.PlaybackSource?
+    ) -> Bool {
+        guard case .radioStation = source else { return false }
+        guard let target else { return true }
+        return !target.url.isFileURL && target.id == currentTrack?.id
+    }
+
+    static func location(of track: Track) -> String {
+        track.url.isFileURL ? track.url.path : track.url.absoluteString
     }
 
     var body: some View {
@@ -55,7 +68,7 @@ struct TrackInfoView: View {
     private var header: some View {
         if let url = currentURL {
             HStack(spacing: 6) {
-                pathField(url.path)
+                pathField(target.map(Self.location) ?? url.absoluteString)
                 if let index = playlistIndex {
                     stepButton("<<", help: "Previous file", to: index - 1)
                     stepButton(">>", help: "Next file", to: index + 1)
@@ -96,7 +109,7 @@ struct TrackInfoView: View {
 
     @ViewBuilder
     private var content: some View {
-        if currentURL != nil {
+        if currentURL != nil, !isStream {
             HStack(alignment: .top, spacing: 16) {
                 metadataGroup
                 VStack(alignment: .leading, spacing: 12) {
@@ -110,7 +123,11 @@ struct TrackInfoView: View {
             Fieldset(title: "Format Info") {
                 textBox(streamFormatText, height: 60)
             }
-            Text("Stream playback — some metadata may be unavailable")
+            if let target {
+                Text(target.playlistTitle)
+                    .textSelection(.enabled)
+            }
+            Text("Stream metadata may be unavailable")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
@@ -279,6 +296,8 @@ struct TrackInfoView: View {
     }
 
     private var streamFormatText: String {
+        guard Self.isActiveStream(target: target, currentTrack: playbackCoordinator.currentTrack,
+                                  source: playbackCoordinator.currentSource) else { return "" }
         var lines: [String] = []
         if audioPlayer.bitrate > 0 { lines.append("\(audioPlayer.bitrate) kbps") }
         if audioPlayer.sampleRate > 0 {

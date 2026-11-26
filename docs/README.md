@@ -1,9 +1,9 @@
 # MacAmp Documentation Guide
 
-**Version:** 3.14.0
-**Date:** 2026-09-28
+**Version:** 3.15.0
+**Date:** 2026-11-26
 **Purpose:** Master index and navigation guide for all MacAmp documentation
-**Total Documentation:** 8,899 active lines across 12 current docs + 27 archived docs
+**Total Documentation:** 8,932 active lines across 12 current docs + 27 archived docs
 
 ---
 
@@ -51,7 +51,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 
 ## Complete Documentation Inventory
 
-### Architecture & Design (9 documents, 7,964 lines)
+### Architecture & Design (9 documents, 7,991 lines)
 
 #### **[MACAMP_ARCHITECTURE_GUIDE.md](MACAMP_ARCHITECTURE_GUIDE.md)** ⭐
 - **Size**: 157KB, 2,441 lines
@@ -138,8 +138,8 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 - **Related Docs**: SPRITE_SYSTEM_COMPLETE.md, WINDOW_FOCUS_ARCHITECTURE.md
 
 #### **[PLAYLIST_WINDOW.md](PLAYLIST_WINDOW.md)** ⭐
-- **Size**: 19KB, 391 lines
-- **Last Updated**: 2026-09-28
+- **Size**: 24KB, 409 lines
+- **Last Updated**: 2026-11-26
 - **Status**: ✅ PRODUCTION
 - **Purpose**: Complete playlist window documentation with segment-based resize system
 - **Key Sections**:
@@ -148,6 +148,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
   - Titlebar (whole bar drags; `SkinHitButton` shade/close) and the 14px shade strip (title, track length, width-only resize grip)
   - Three-section bottom bar (LEFT/CENTER/RIGHT)
   - List operations (NEW LIST / LOAD LIST / SAVE LIST), sorting, missing-file removal and selected-file Trash
+  - Selected-entry File Info and Playlist Entry editing
   - Track position display (`trackPositionString`)
   - Resize gesture with AppKit preview overlay
   - Scroll slider with proportional thumb
@@ -395,6 +396,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 | **Playlist list operations (NEW/LOAD/SAVE)** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
 | **Playlist Remove Misc / Trash** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
 | **Playlist sorting / reverse / randomize** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
+| **Playlist File Info / entry editing** | PLAYLIST_WINDOW.md | [File Info and Playlist Entry](PLAYLIST_WINDOW.md#file-info-and-playlist-entry) |
 | **M3UWriter** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
 | **QueueConfined protocol** | `MacAmpApp/Audio/Streaming/QueueConfined.swift` | (code file; no dedicated doc section yet) |
 | **TimeFormatting** | `MacAmpApp/Utilities/TimeFormatting.swift` | (code file; no dedicated doc section yet) |
@@ -504,9 +506,9 @@ CODE_SIGNING_FIX.md, CODE_SIGNING_FIX_DIAGRAM.md, and RELEASE_BUILD_COMPARISON.m
 IMPLEMENTATION_PATTERNS.md          3,085 lines  (35%)
 MACAMP_ARCHITECTURE_GUIDE.md        2,441 lines  (27%)
 MILKDROP_WINDOW.md                    613 lines  (7%)
-README.md (this file)                 552 lines  (6%)
+README.md (this file)                 558 lines  (6%)
 VIDEO_WINDOW.md                       537 lines  (6%)
-PLAYLIST_WINDOW.md                    391 lines  (4%)
+PLAYLIST_WINDOW.md                    409 lines  (5%)
 SPRITE_SYSTEM_COMPLETE.md             337 lines  (4%)
 MULTI_WINDOW_ARCHITECTURE.md          323 lines  (4%)
 RELEASE_BUILD_GUIDE.md                241 lines  (3%)
@@ -514,15 +516,15 @@ WINDOW_FOCUS_ARCHITECTURE.md          148 lines  (2%)
 WINAMP_SKIN_VARIATIONS.md             142 lines  (2%)
 CUSTOM_DRAG_FIX.md                     98 lines  (1%)
 ─────────────────────────────
-TOTAL:                              8,899 lines
+TOTAL:                              8,932 lines
 ```
 
 ### Documentation by Category
 
-- **Architecture & Design**: 89% (7,964 lines)
+- **Architecture & Design**: 89% (7,991 lines)
 - **Build & Distribution**: 3% (241 lines)
 - **Skin System**: 2% (142 lines)
-- **Navigation & Index**: 6% (552 lines)
+- **Navigation & Index**: 6% (558 lines)
 
 ---
 
@@ -547,6 +549,7 @@ TOTAL:                              8,899 lines
 
 ## Version History
 
+- **3.15.0 (2026-11-26):** Documented playlist File Info sequencing, stream information and Playlist Entry editing.
 - **3.14.0 (2026-09-28):** Window docking, off-screen recovery, group minimize and windowshade documented in MULTI_WINDOW_ARCHITECTURE.md; stale `DockingController` references removed across docs; index re-audited (inventory sizes/dates, topic lookup, common questions, statistics).
 - **3.13.0 (2026-09-25):** Pruned this index (removed duplicate category/reading-path/map sections and stale quality metrics); leaner RELEASE_BUILD_GUIDE, SPRITE_SYSTEM_COMPLETE, WINAMP_SKIN_VARIATIONS, WINDOW_FOCUS_ARCHITECTURE, CUSTOM_DRAG_FIX re-verified against code.
 - **3.12.0 (2026-09-25):** Documented AVPlayer-native video DSP (`MTAudioProcessingTap`) and fixed stale docs.

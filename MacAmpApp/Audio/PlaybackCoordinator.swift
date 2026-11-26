@@ -319,12 +319,17 @@ final class PlaybackCoordinator {
         clearNowPlayingInfo()
     }
 
+    var currentPlaylistTrack: Track? {
+        guard let currentTrack else { return nil }
+        return audioPlayer.playlist.first(where: { $0.id == currentTrack.id }) ?? currentTrack
+    }
+
     func togglePlayPause() {
         if isPlaying {
             pause()
         } else if isPaused {
             resume()
-        } else if let track = currentTrack {
+        } else if let track = currentPlaylistTrack {
             // Idle with a selected track (e.g., just restored from playlist.m3u
             // on launch, or after Stop). Play from the beginning.
             Task { await play(track: track) }
@@ -454,7 +459,6 @@ final class PlaybackCoordinator {
 
     /// Update coordinator state when metadata loads (don't replay)
     func updateTrackMetadata(_ track: Track) {
-        // Check URL match (not ID - metadata loading creates new Track with different ID)
         guard let current = currentTrack, current.url == track.url else { return }
 
         // Update with real metadata

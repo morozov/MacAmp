@@ -1,7 +1,7 @@
 # MacAmp Playlist Window Documentation
 
-**Version:** 1.3.0
-**Last Updated:** 2026-09-25
+**Version:** 1.4.0
+**Last Updated:** 2026-11-26
 **Status:** Production
 
 ---
@@ -115,6 +115,9 @@ Window Layout (Default 275×232):
 MacAmpApp/Views/PlaylistWindow/
   PlaylistWindowInteractionState.swift  (60 lines, @Observable state)
   PlaylistFileRemoval.swift            (file probes and Trash outcomes)
+  PlaylistEntryEditor.swift            (native path editor)
+  PlaylistEntryLocation.swift          (entry path/URL parsing)
+  PlaylistFileInfoSession.swift        (selected-entry presentation lifetime)
   PlaylistMenuPresenter.swift           (195 lines, AppKit NSMenu bridge)
   PlaylistTrackListView.swift           (78 lines, track list + selection)
   PlaylistBottomControlsView.swift      (113 lines, transport + time)
@@ -200,7 +203,21 @@ Filesystem work runs off the main actor. Results identify tracks by ID, so inter
 
 Reordering preserves track identities, the active track, selection, cursor and anchor. The list scrolls to the active track, clamped to the last page. With no active track, it scrolls to the top. A changed CUE run is rebuilt at the current position while preserving playback or pause state. Empty and singleton lists remain unchanged.
 
-File Info and Misc Options currently show a "Not supported yet" alert.
+Misc Options currently shows a "Not supported yet" alert.
+
+### File Info and Playlist Entry
+
+The MISC **File Info** tile opens **File info...** and **Playlist entry...**. Commands read the current selection when invoked and process selected entries in playlist order. An empty selection does nothing. Targets follow their track IDs if rows move; removed targets are skipped.
+
+**File info...** opens the read-only File Info panel. Done advances through the selected entries; Escape or closing the panel ends the sequence. Done waits while a selected entry's information loads. The panel's previous/next buttons leave the selection sequence and navigate the playlist normally. A new information request supersedes any pending load.
+
+Local entries show file metadata, with each CUE slice's own title, artist and track number. Remote entries show their complete URL and playlist title. Playback format details appear only for the active stream entry, identified by track ID; another entry with the same URL does not inherit those details. Remote entries do not trigger local-file metadata loading.
+
+**Playlist entry...** opens a native editor with a read-only Old field and an editable New field. Both start with the entry's path or complete URL. OK accepts absolute file paths, `~/` paths, file URLs and HTTP(S) URLs without requiring the local file to exist. Invalid input repeats the same editor with an explanation; Cancel ends the sequence. A local CUE segment cannot be changed to an internet stream. That rejection preserves the row and playback and allows correction or cancellation.
+
+Accepted edits preserve row identity, selection, cursor, anchor and playlist position. Local CUE edits also preserve slice bounds and provenance without rewriting the sheet or siblings. Loaded playback continues on its existing source; a later start resolves the edited row. A changed future CUE slice rebuilds the scheduled run at the current position while preserving playback or pause state.
+
+The row's URL changes immediately. Local metadata refreshes asynchronously, so the next editor can open before that refresh finishes. A filename or complete URL supplies the interim title. Known duration stays unchanged; unknown duration is filled from the slice bounds or loaded metadata. Request tokens prevent older loads from overwriting later edits or restoring removed rows. A second Playlist Entry invocation is ignored while an editor sequence is active.
 
 ### Track Position Display
 
@@ -385,6 +402,7 @@ Defined in `MacAmpApp/Models/SkinSprites.swift` (PLEDIT sheet).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-11-26 | Selected-entry File Info and Playlist Entry editing |
 | 1.3.0 | 2026-09-25 | Pruned; snippets replaced with current code; activation and sprite names corrected |
 | 1.2.0 | 2026-03-25 | List operations (NEW/LOAD/SAVE), PlaylistWindowActions.swift, track position display |
 | 1.1.0 | February 2026 | Decomposition into child view structs |

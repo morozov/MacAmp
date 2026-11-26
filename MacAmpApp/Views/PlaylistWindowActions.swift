@@ -10,6 +10,7 @@ final class PlaylistWindowActions: NSObject {
     weak var radioLibrary: RadioStationLibrary?
     weak var playbackCoordinator: PlaybackCoordinator?
     private var loadListGeneration: UInt64 = 0
+    private var isEditingPlaylistEntries = false
 
     private func showAlert(_ title: String, _ message: String) {
         WinampAlertHelper.showInfo(title: title, message: message)
@@ -547,8 +548,57 @@ final class PlaylistWindowActions: NSObject {
         interactionState.scrollOffsetPixels = CGFloat(min(currentRow, lastPage)) * PlaylistWindowSizeState.trackRowHeight
     }
 
-    @objc func fileInfo(_ sender: NSMenuItem) {
-        showAlert("File Info", "Not supported yet")
+    var presentFileInfo: ([Track]) -> Void = { tracks in
+        WindowCoordinator.shared?.showPlaylistFileInfo(tracks)
+    }
+
+    func selectedTracks(
+        audioPlayer: AudioPlayer, interactionState: PlaylistWindowInteractionState
+    ) -> [Track] {
+        interactionState.selectedIndices.sorted().compactMap { index in
+            audioPlayer.playlist.indices.contains(index) ? audioPlayer.playlist[index] : nil
+        }
+    }
+
+    func fileInfo(audioPlayer: AudioPlayer, interactionState: PlaylistWindowInteractionState) {
+        let tracks = selectedTracks(audioPlayer: audioPlayer, interactionState: interactionState)
+        guard !tracks.isEmpty else { return }
+        presentFileInfo(tracks)
+    }
+
+    @discardableResult
+    func editPlaylistEntries(
+        audioPlayer: AudioPlayer, interactionState: PlaylistWindowInteractionState,
+        prompt: (Track, String?) -> String?,
+        loadMetadata: @escaping (URL) async -> MetadataLoader.TrackMetadata = MetadataLoader.loadTrackMetadata
+    ) -> [Task<Void, Never>] {
+        guard !isEditingPlaylistEntries else { return [] }
+        isEditingPlaylistEntries = true
+        defer { isEditingPlaylistEntries = false }
+        var refreshes: [Task<Void, Never>] = []
+        let ids = selectedTracks(audioPlayer: audioPlayer, interactionState: interactionState).map(\.id)
+        for id in ids {
+            guard let track = audioPlayer.playlist.first(where: { $0.id == id }) else { continue }
+            var error: String?
+            while true {
+                guard let text = prompt(track, error) else { return refreshes }
+                guard let url = PlaylistEntryLocation.url(from: text) else {
+                    error = "Enter an absolute file path or an HTTP, HTTPS, or file URL."
+                    continue
+                }
+                guard let current = audioPlayer.playlist.first(where: { $0.id == id && $0.url == track.url }) else { break }
+                if current.rejectsStreamTransition(to: url) {
+                    error = "A CUE segment cannot be changed to an internet stream. Choose a local file."
+                    continue
+                }
+                if let refresh = audioPlayer.editPlaylistEntry(id: id, expectedURL: track.url, url: url,
+                                                               loadMetadata: loadMetadata) {
+                    refreshes.append(refresh)
+                }
+                break
+            }
+        }
+        return refreshes
     }
 
     @objc func miscOptions(_ sender: NSMenuItem) {

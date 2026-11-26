@@ -125,6 +125,18 @@ final class PlaylistController {
         return false
     }
 
+    @discardableResult
+    func editEntry(
+        id: UUID, expectedURL: URL, url: URL, title: String, artist: String, duration: Double? = nil
+    ) -> Track? {
+        guard let index = playlist.firstIndex(where: { $0.id == id && $0.url == expectedURL }) else { return nil }
+        playlist[index].url = url
+        playlist[index].title = title
+        playlist[index].artist = artist
+        if let duration { playlist[index].duration = duration }
+        return playlist[index]
+    }
+
     /// Check if a track URL is already in playlist or pending
     func containsTrack(url: URL) -> Bool {
         let normalizedURL = url.standardizedFileURL

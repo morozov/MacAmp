@@ -93,12 +93,44 @@ struct PlaylistMenuPresenter {
                 selectedSprite: "PLAYLIST_SORT_LIST_SELECTED",
                 action: { showSortMenu() }
             ),
-            tile("PLAYLIST_FILE_INFO", "PLAYLIST_FILE_INFO_SELECTED",
-                 PlaylistWindowActions.shared.fileInfo),
+            PlaylistSpritePopupTile(
+                normalSprite: "PLAYLIST_FILE_INFO", selectedSprite: "PLAYLIST_FILE_INFO_SELECTED",
+                action: { showFileInfoMenu() }
+            ),
             tile("PLAYLIST_MISC_OPTIONS", "PLAYLIST_MISC_OPTIONS_SELECTED",
                  PlaylistWindowActions.shared.miscOptions),
         ]
         present(tiles: tiles, barSprite: "PLAYLIST_MISC_MENU_BAR", tilesLeft: Self.miscPopupLeft)
+    }
+
+    static func makeFileInfoMenu(
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState,
+        actions: PlaylistWindowActions = .shared,
+        editEntries: @escaping () -> Void
+    ) -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(MenuItemFactory.createMenuItem(title: "File info...") {
+            actions.fileInfo(audioPlayer: audioPlayer, interactionState: interactionState)
+        })
+        menu.addItem(MenuItemFactory.createMenuItem(title: "Playlist entry...", action: editEntries))
+        return menu
+    }
+
+    private func showFileInfoMenu() {
+        guard !UnitTestSupport.isActive else { return }
+        Task { @MainActor in
+            guard let window = WindowCoordinator.shared?.playlistWindow else { return }
+            PlaylistSpritePopupHost.current?.dismiss()
+            let menu = Self.makeFileInfoMenu(audioPlayer: audioPlayer, interactionState: interactionState) {
+                let editor = PlaylistEntryEditor()
+                PlaylistWindowActions.shared.editPlaylistEntries(
+                    audioPlayer: audioPlayer, interactionState: interactionState, prompt: editor.prompt
+                )
+            }
+            let origin = window.convertPoint(toScreen: NSPoint(x: 122, y: 48))
+            menu.popUp(positioning: nil, at: origin, in: nil)
+        }
     }
 
     private func showSortMenu() {

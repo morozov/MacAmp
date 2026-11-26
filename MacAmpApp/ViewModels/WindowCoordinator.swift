@@ -314,6 +314,18 @@ final class WindowCoordinator {
         controller.show(track)
     }
 
+    func showPlaylistFileInfo(_ tracks: [Track]) {
+        guard !UnitTestSupport.isActive, !tracks.isEmpty else { return }
+        let controller = trackInfoController ?? TrackInfoWindowController(
+            audioPlayer: audioPlayer,
+            playbackCoordinator: playbackCoordinator,
+            settings: settings
+        )
+        trackInfoController = controller
+        controller.applyWindowLevel(alwaysOnTop: settings.isAlwaysOnTop)
+        controller.showSelection(tracks)
+    }
+
     func showAllWindows() { visibility.showAllWindows() }
     func showMain() { visibility.showMain() }
     func hideMain() { visibility.hideMain() }

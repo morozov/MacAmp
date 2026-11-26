@@ -24,7 +24,7 @@ struct CueSlice: Equatable, Sendable {
 /// Provides metadata and identifies stream vs local file playback routing.
 struct Track: Identifiable, Equatable, Sendable {
     let id = UUID()
-    let url: URL
+    var url: URL
     var title: String
     var artist: String
     var duration: Double
@@ -58,6 +58,10 @@ struct Track: Identifiable, Equatable, Sendable {
 
     /// True when this track plays a CUE-defined slice of `url` rather than the whole file.
     var isCueSlice: Bool { cueSlice != nil }
+
+    func rejectsStreamTransition(to url: URL) -> Bool {
+        self.url.isFileURL && cueSlice != nil && ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+    }
 
     static func == (lhs: Track, rhs: Track) -> Bool {
         lhs.id == rhs.id

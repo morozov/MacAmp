@@ -43,6 +43,23 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
     @ObservationIgnored private var isHandlingCompletion = false
     @ObservationIgnored private var seekGuardActive = false
     @ObservationIgnored private var playlistGeneration: UInt64 = 0
+    @ObservationIgnored private var metadataRequests: [UUID: TrackMetadataRequest] = [:]
+
+    private struct TrackMetadataRequest {
+        enum Kind {
+            case initial(URL)
+            case edit
+        }
+
+        let id = UUID()
+        let kind: Kind
+
+        var pendingURL: URL? {
+            if case .initial(let url) = kind { return url }
+            return nil
+        }
+
+    }
 
     /// Snapshot captured by the engine config observer's onWill callback,
     /// consumed by the matching onDid callback. Carries the pre-rewire state
@@ -491,12 +508,16 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
 
     // MARK: - Track Management
 
-    func addTrack(url: URL) {
+    @discardableResult
+    func addTrack(
+        url: URL,
+        loadMetadata: @escaping (URL) async -> MetadataLoader.TrackMetadata = MetadataLoader.loadTrackMetadata
+    ) -> Task<Void, Never>? {
         let normalizedURL = url.standardizedFileURL
 
         if playlistController.containsTrack(url: normalizedURL) {
             AppLog.debug(.audio, "Track already pending or in playlist: \(normalizedURL.lastPathComponent)")
-            return
+            return nil
         }
 
         AppLog.debug(.audio, "Adding track from \(normalizedURL.lastPathComponent)")
@@ -512,20 +533,31 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         playlistController.addPlaceholder(placeholder)
 
         let generation = playlistGeneration
-        Task { @MainActor [weak self] in
+        let request = TrackMetadataRequest(kind: .initial(normalizedURL))
+        metadataRequests[placeholder.id] = request
+        return Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.playlistController.removePendingURL(normalizedURL) }
+            defer {
+                if self.metadataRequests[placeholder.id]?.id == request.id {
+                    self.playlistController.removePendingURL(normalizedURL)
+                    self.metadataRequests[placeholder.id] = nil
+                }
+            }
 
             AppLog.debug(.audio, "Loading metadata for \(normalizedURL.lastPathComponent)")
-            let metadata = await MetadataLoader.loadTrackMetadata(from: normalizedURL)
+            let metadata = await loadMetadata(normalizedURL)
 
-            // Reject stale metadata if playlist was cleared/replaced while loading
-            guard self.playlistGeneration == generation else {
+            guard self.playlistGeneration == generation,
+                  self.metadataRequests[placeholder.id]?.id == request.id,
+                  self.playlist.contains(where: { $0.id == placeholder.id && $0.url == normalizedURL }) else {
                 AppLog.debug(.audio, "Discarding stale metadata for \(normalizedURL.lastPathComponent) — playlist changed")
                 return
             }
 
-            let track = Track(url: normalizedURL, title: metadata.title, artist: metadata.artist, duration: metadata.duration)
+            var track = placeholder
+            track.title = metadata.title
+            track.artist = metadata.artist
+            track.duration = metadata.duration
             AppLog.debug(.audio, "Metadata loaded - title: '\(track.title)', artist: '\(track.artist)', duration: \(track.duration)s")
 
             if self.playlistController.replacePlaceholder(id: placeholder.id, with: track) {
@@ -544,9 +576,42 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
                     self.currentTrackURL = track.url
                     self.onTrackMetadataUpdate?(track)
                 }
-            } else if !self.playlistController.containsTrack(url: normalizedURL) {
-                self.playlistController.addTrack(track)
             }
+        }
+    }
+
+    @discardableResult
+    func editPlaylistEntry(
+        id: UUID, expectedURL: URL, url: URL,
+        loadMetadata: @escaping (URL) async -> MetadataLoader.TrackMetadata = MetadataLoader.loadTrackMetadata
+    ) -> Task<Void, Never>? {
+        guard expectedURL != url,
+              let original = playlist.first(where: { $0.id == id && $0.url == expectedURL }),
+              !original.rejectsStreamTransition(to: url) else { return nil }
+        let previousRequest = metadataRequests[id]
+        guard playlistController.editEntry(
+            id: id, expectedURL: expectedURL, url: url,
+            title: url.isFileURL ? url.lastPathComponent : url.absoluteString, artist: ""
+        ) != nil else { return nil }
+        if let pendingURL = previousRequest?.pendingURL { playlistController.removePendingURL(pendingURL) }
+        rebuildCueRunIfNeeded()
+        let request = TrackMetadataRequest(kind: .edit)
+        metadataRequests[id] = request
+        guard url.isFileURL else {
+            metadataRequests[id] = nil
+            return nil
+        }
+        return Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if self.metadataRequests[id]?.id == request.id { self.metadataRequests[id] = nil }
+            }
+            let metadata = await loadMetadata(url)
+            guard self.metadataRequests[id]?.id == request.id else { return }
+            self.playlistController.editEntry(
+                id: id, expectedURL: url, url: url, title: metadata.title, artist: metadata.artist,
+                duration: original.duration <= 0 ? original.cueSlice?.duration ?? metadata.duration : nil
+            )
         }
     }
 
@@ -647,6 +712,12 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
             ? playlistController.playlist[index].id
             : nil
         let removedIsInRun = removedID != nil && runSlices.contains { $0.id == removedID }
+        if let removedID {
+            if let pendingURL = metadataRequests[removedID]?.pendingURL {
+                playlistController.removePendingURL(pendingURL)
+            }
+            metadataRequests[removedID] = nil
+        }
         playlistController.removeTrack(at: index)
         // If the removed slice was part of the current scheduled run, the engine
         // segment still spans through its data and would play the just-removed
@@ -672,17 +743,16 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
     @discardableResult
     func moveTracks(at indices: Set<Int>, by step: Int) -> Bool {
         guard playlistController.moveTracks(at: indices, by: step) else { return false }
-        if let current = currentTrack, current.isCueSlice,
-           isPlaying || isPaused, engine.audioFile != nil,
-           let position = runSlices.firstIndex(where: { $0.id == current.id }),
-           runSlices[position...].map(\.id) != computeRunSlices(startingAt: current).map(\.id) {
-            seek(to: currentTime, resume: isPlaying)
-        }
+        rebuildCueRunIfNeeded()
         return true
     }
 
     func reorderPlaylist(_ ordering: PlaylistOrdering) {
         playlistController.reorder(ordering)
+        rebuildCueRunIfNeeded()
+    }
+
+    private func rebuildCueRunIfNeeded() {
         if let current = currentTrack, current.isCueSlice,
            isPlaying || isPaused, engine.audioFile != nil,
            let position = runSlices.firstIndex(where: { $0.id == current.id }),
@@ -693,6 +763,7 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
 
     func replacePlaylist(with tracks: [Track]) {
         playlistGeneration &+= 1
+        metadataRequests.removeAll()
         playlistController.clear()
         for track in tracks { playlistController.addTrack(track) }
         runSlices = []
@@ -701,6 +772,7 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
 
     func clearPlaylist() {
         playlistGeneration &+= 1
+        metadataRequests.removeAll()
         playlistController.clear()
         runSlices = []
     }
