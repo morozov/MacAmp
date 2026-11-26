@@ -391,57 +391,67 @@ struct LockFreeRingBufferConcurrencyTests {
         #expect(sawGenChange)
     }
 
-    @Test("High throughput — 48kHz simulated audio rate",
+    @Test("Concurrent transfer preserves every sample in frame order",
           .timeLimit(.minutes(1)))
-    func highThroughput() async {
-        let buffer = LockFreeRingBuffer(capacity: 4096, channelCount: 2)
-        let sampleRate = 48000
-        let durationSeconds = 2
-        let framesPerChunk = 512
-        let totalFrames = sampleRate * durationSeconds
-        let chunksToWrite = totalFrames / framesPerChunk
-        let sampleCount = framesPerChunk * 2
+    func concurrentTransferPreservesSampleOrder() async {
+        let capacity = 257
+        let channelCount = 2
+        let totalFrames = 16_387
+        let framesPerWrite = 67
+        let framesPerRead = 43
+        let buffer = LockFreeRingBuffer(capacity: capacity, channelCount: channelCount)
+        let consumedFrames = ManagedAtomic<Int>(0)
         let writerDone = ManagedAtomic<Bool>(false)
-        let didReadAnyData = ManagedAtomic<Bool>(false)
 
         await withTaskGroup(of: Void.self) { group in
-            // Writer at ~48kHz
             group.addTask {
-                var source = [Float](repeating: 0.25, count: sampleCount)
-                for _ in 0..<chunksToWrite {
-                    _ = buffer.write(from: &source, frameCount: framesPerChunk)
+                var framesWritten = 0
+                defer { writerDone.store(true, ordering: .releasing) }
+                while framesWritten < totalFrames && !Task.isCancelled {
+                    let frameCount = min(framesPerWrite, totalFrames - framesWritten)
+                    // Credits cover completed reads, so unread storage cannot be overwritten.
+                    while framesWritten + frameCount - consumedFrames.load(ordering: .acquiring) > capacity {
+                        if Task.isCancelled { return }
+                        await Task.yield()
+                    }
+                    var source = (0..<(frameCount * channelCount)).map {
+                        Float(framesWritten * channelCount + $0 + 1)
+                    }
+                    let written = buffer.write(from: &source, frameCount: frameCount)
+                    #expect(written == frameCount)
+                    framesWritten += frameCount
                 }
-                writerDone.store(true, ordering: .releasing)
+                #expect(framesWritten == totalFrames)
             }
 
-            // Reader at ~48kHz
             group.addTask {
-                var dest = [Float](repeating: 0, count: sampleCount)
-                var emptyReadsAfterDone = 0
-                while true {
-                    let n = buffer.read(into: &dest, frameCount: framesPerChunk)
-                    if n > 0 {
-                        didReadAnyData.store(true, ordering: .relaxed)
-                        emptyReadsAfterDone = 0
-                        continue
+                var dest = [Float](repeating: -1, count: framesPerRead * channelCount)
+                var received = [Float]()
+                received.reserveCapacity(totalFrames * channelCount)
+                var framesRead = 0
+                while !Task.isCancelled {
+                    // Observe completion before reading to include the final published write.
+                    let done = writerDone.load(ordering: .acquiring)
+                    let readCount = buffer.read(into: &dest, frameCount: framesPerRead)
+                    if readCount > 0 {
+                        received.append(contentsOf: dest.prefix(readCount * channelCount))
+                        framesRead += readCount
+                        consumedFrames.store(framesRead, ordering: .releasing)
+                    } else if done {
+                        break
+                    } else {
+                        await Task.yield()
                     }
-                    if writerDone.load(ordering: .acquiring) {
-                        emptyReadsAfterDone += 1
-                        if emptyReadsAfterDone >= 256 {
-                            break
-                        }
-                    }
-                    await Task.yield()
                 }
+                #expect(framesRead == totalFrames)
+                #expect(received.count == totalFrames * channelCount)
+                let firstMismatch = received.indices.first { received[$0] != Float($0 + 1) }
+                #expect(firstMismatch == nil, "First mismatched sample: \(String(describing: firstMismatch))")
             }
         }
 
-        let stats = buffer.telemetry()
-        let didRead = didReadAnyData.load(ordering: .relaxed)
-        #expect(didRead)
-        // Overrun threshold is contention-dependent — can exceed on loaded CI machines
-        withKnownIssue("Overrun count is non-deterministic under task scheduling contention", isIntermittent: true) {
-            #expect(stats.overruns < UInt64(chunksToWrite / 2), "Too many overruns: \(stats.overruns)")
-        }
+        #expect(consumedFrames.load(ordering: .acquiring) == totalFrames)
+        #expect(buffer.availableFrames == 0)
+        #expect(buffer.telemetry().overruns == 0)
     }
 }
