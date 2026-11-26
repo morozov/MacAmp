@@ -531,8 +531,20 @@ final class PlaylistWindowActions: NSObject {
 
     // MARK: - Misc Menu Actions
 
-    @objc func sortList(_ sender: NSMenuItem) {
-        showAlert("Sort List", "Not supported yet")
+    func sortList(
+        _ ordering: PlaylistOrdering,
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState,
+        visibleTrackCount: Int
+    ) {
+        guard audioPlayer.playlist.count > 1 else { return }
+        let oldIDs = audioPlayer.playlist.map(\.id)
+        audioPlayer.reorderPlaylist(ordering)
+        interactionState.didReorderTracks(from: oldIDs, to: audioPlayer.playlist.map(\.id))
+        selectedIndices = interactionState.selectedIndices
+        let currentRow = (audioPlayer.playlistPosition ?? 1) - 1
+        let lastPage = max(0, audioPlayer.playlist.count - max(1, visibleTrackCount))
+        interactionState.scrollOffsetPixels = CGFloat(min(currentRow, lastPage)) * PlaylistWindowSizeState.trackRowHeight
     }
 
     @objc func fileInfo(_ sender: NSMenuItem) {

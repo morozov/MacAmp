@@ -84,6 +84,25 @@ final class PlaylistController {
 
     // MARK: - Playlist Operations
 
+    func reorder(_ ordering: PlaylistOrdering) {
+        var generator = SystemRandomNumberGenerator()
+        reorder(ordering, using: &generator)
+    }
+
+    func reorder(_ ordering: PlaylistOrdering, using generator: inout some RandomNumberGenerator) {
+        guard playlist.count > 1 else { return }
+        let currentID = currentTrack?.id
+        switch ordering {
+        case .reverse:
+            playlist.reverse()
+        case .randomize:
+            playlist.shuffle(using: &generator)
+        case .title, .filename, .pathAndFilename:
+            playlist.sort { ordering.compare($0, $1) == .orderedAscending }
+        }
+        currentIndex = currentID.flatMap { id in playlist.firstIndex { $0.id == id } }
+    }
+
     /// Add a track to the playlist
     func addTrack(_ track: Track) {
         playlist.append(track)

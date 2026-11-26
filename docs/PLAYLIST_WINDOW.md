@@ -196,7 +196,11 @@ The bottom bar's LEFT section contains buttons for playlist list operations, imp
 
 Filesystem work runs off the main actor. Results identify tracks by ID, so intervening playlist edits cannot remove unrelated rows. Surviving selection, cursor and anchor follow their rows.
 
-Sort List, File Info and Misc Options currently show a "Not supported yet" alert.
+**Sort List** opens commands for title, filename, path and filename, reverse, and randomize. Title sorting uses the displayed artist/title string with natural numeric ordering and ignores case and character width. Filename and path sorting place local files first; non-file entries follow in natural order by complete URL, including query strings and trailing slashes. Path sorting compares local directories before filenames.
+
+Reordering preserves track identities, the active track, selection, cursor and anchor. The list scrolls to the active track, clamped to the last page. With no active track, it scrolls to the top. A changed CUE run is rebuilt at the current position while preserving playback or pause state. Empty and singleton lists remain unchanged.
+
+File Info and Misc Options currently show a "Not supported yet" alert.
 
 ### Track Position Display
 

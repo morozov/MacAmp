@@ -681,6 +681,16 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         return true
     }
 
+    func reorderPlaylist(_ ordering: PlaylistOrdering) {
+        playlistController.reorder(ordering)
+        if let current = currentTrack, current.isCueSlice,
+           isPlaying || isPaused, engine.audioFile != nil,
+           let position = runSlices.firstIndex(where: { $0.id == current.id }),
+           runSlices[position...].map(\.id) != computeRunSlices(startingAt: current).map(\.id) {
+            seek(to: currentTime, resume: isPlaying)
+        }
+    }
+
     func replacePlaylist(with tracks: [Track]) {
         playlistGeneration &+= 1
         playlistController.clear()

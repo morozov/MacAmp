@@ -30,6 +30,10 @@ struct Track: Identifiable, Equatable, Sendable {
     var duration: Double
     var cueSlice: CueSlice?
 
+    var playlistTitle: String {
+        artist.isEmpty ? title : "\(artist) - \(title)"
+    }
+
     init(
         url: URL,
         title: String,

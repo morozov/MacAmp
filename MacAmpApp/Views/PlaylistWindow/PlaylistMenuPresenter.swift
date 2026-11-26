@@ -88,14 +88,50 @@ struct PlaylistMenuPresenter {
 
     func showMiscMenu() {
         let tiles: [PlaylistSpritePopupTile] = [
-            tile("PLAYLIST_SORT_LIST", "PLAYLIST_SORT_LIST_SELECTED",
-                 PlaylistWindowActions.shared.sortList),
+            PlaylistSpritePopupTile(
+                normalSprite: "PLAYLIST_SORT_LIST",
+                selectedSprite: "PLAYLIST_SORT_LIST_SELECTED",
+                action: { showSortMenu() }
+            ),
             tile("PLAYLIST_FILE_INFO", "PLAYLIST_FILE_INFO_SELECTED",
                  PlaylistWindowActions.shared.fileInfo),
             tile("PLAYLIST_MISC_OPTIONS", "PLAYLIST_MISC_OPTIONS_SELECTED",
                  PlaylistWindowActions.shared.miscOptions),
         ]
         present(tiles: tiles, barSprite: "PLAYLIST_MISC_MENU_BAR", tilesLeft: Self.miscPopupLeft)
+    }
+
+    private func showSortMenu() {
+        guard !UnitTestSupport.isActive else { return }
+        Task { @MainActor in
+            guard let window = WindowCoordinator.shared?.playlistWindow else { return }
+            PlaylistSpritePopupHost.current?.dismiss()
+            let contentHeight = windowHeight - PlaylistWindowSizeState.topBarHeight - PlaylistWindowSizeState.bottomBarHeight
+            let menu = Self.makeSortMenu(
+                audioPlayer: audioPlayer, interactionState: interactionState,
+                visibleTrackCount: Int(contentHeight / PlaylistWindowSizeState.trackRowHeight)
+            )
+            let origin = window.convertPoint(toScreen: NSPoint(x: 122, y: 66))
+            menu.popUp(positioning: nil, at: origin, in: nil)
+        }
+    }
+
+    static func makeSortMenu(
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState,
+        visibleTrackCount: Int
+    ) -> NSMenu {
+        let menu = NSMenu()
+        for ordering in PlaylistOrdering.allCases {
+            if ordering == .reverse { menu.addItem(.separator()) }
+            menu.addItem(MenuItemFactory.createMenuItem(title: ordering.menuTitle) {
+                PlaylistWindowActions.shared.sortList(
+                    ordering, audioPlayer: audioPlayer, interactionState: interactionState,
+                    visibleTrackCount: visibleTrackCount
+                )
+            })
+        }
+        return menu
     }
 
     func showListMenu() {

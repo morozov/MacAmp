@@ -335,6 +335,18 @@ final class PlaylistWindowInteractionState {
         }
     }
 
+    func didReorderTracks(from oldIDs: [UUID], to newIDs: [UUID]) {
+        let positions = Dictionary(uniqueKeysWithValues: newIDs.enumerated().map { ($0.element, $0.offset) })
+        func remap(_ index: Int) -> Int? {
+            guard oldIDs.indices.contains(index) else { return nil }
+            return positions[oldIDs[index]]
+        }
+        selectedIndices = Set(selectedIndices.compactMap(remap))
+        cursorIndex = cursorIndex.flatMap(remap)
+        anchorIndex = anchorIndex.flatMap(remap)
+        cancelRowDrag()
+    }
+
     func didRemoveTracks(at indices: Set<Int>) {
         guard !indices.isEmpty else { return }
         func remap(_ index: Int) -> Int? {
