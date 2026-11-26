@@ -86,15 +86,64 @@ struct PlaybackSwitchOutputTests {
         try await capture.expectOnlyNewAudio()
     }
 
+    private func classifierBuffers(oldAt sample: AVAudioFramePosition? = nil, hasNewTone: Bool = true) -> [Capture.Buffer] {
+        [AVAudioFramePosition(79380), 83790, 88200].map {
+            Capture.Buffer(sampleTime: $0, frames: 4410, sampleRate: 44100,
+                           old: $0 == sample ? 0.5 : 0, new: hasNewTone ? 0.5 : 0)
+        }
+    }
+
+    @Test("Switch classification admits recorded buffers across sample rates and cutoff boundaries")
+    func classifierRates() {
+        let buffers = classifierBuffers()
+        let cases: [(rate: Double, marker: AVAudioFramePosition, expected: [AVAudioFramePosition])] = [
+            (44100, 79380, [83790, 88200]),
+            (48000, 87040, [83790, 88200]),
+            (44100, 79694, [83790, 88200]),
+            (44100, 79693, [83790, 88200]),
+            (44100, 79695, [88200]),
+            (48000, 87104, [83790, 88200]),
+            (48000, 87103, [83790, 88200]),
+            (48000, 87105, [88200]),
+        ]
+        for item in cases {
+            let after = Capture.buffersAfterSwitch(buffers, renderSampleTime: item.marker, renderSampleRate: item.rate)
+            #expect(after.map(\.sampleTime) == item.expected)
+        }
+    }
+
+    @Test("Admitted buffers without new tone fail the arrival requirement")
+    func classifierMissingNewTone() {
+        let after = Capture.buffersAfterSwitch(classifierBuffers(hasNewTone: false),
+                                               renderSampleTime: 87040, renderSampleRate: 48000)
+        #expect(after.map(\.sampleTime) == [83790, 88200])
+        #expect(!after.contains { $0.new > Capture.threshold })
+    }
+
+    @Test("Old tone in the earliest admitted buffer fails leakage despite later new tone")
+    func classifierOldLeak() {
+        let after = Capture.buffersAfterSwitch(classifierBuffers(oldAt: 83790),
+                                               renderSampleTime: 87040, renderSampleRate: 48000)
+        #expect(after.contains { $0.new > Capture.threshold })
+        #expect(after.filter { $0.old > Capture.threshold }.map(\.sampleTime) == [83790])
+    }
+
     /// Records each output buffer's position and which tones it carries, from
     /// a moment of steady old playback through the switch that follows.
     private final class Capture: @unchecked Sendable {
-        struct Buffer { let sampleTime: AVAudioFramePosition; let frames: Int; let old: Double; let new: Double }
+        struct Buffer {
+            let sampleTime: AVAudioFramePosition
+            let frames: Int
+            let sampleRate: Double
+            let old: Double
+            let new: Double
+        }
 
         private let lock = NSLock()
         private var buffers: [Buffer] = []
         private var switchedAt = 0
         private var switchSampleTime: AVAudioFramePosition = 0
+        private var switchSampleRate: Double = 0
         private weak var player: AudioPlayer?
 
         @MainActor
@@ -121,7 +170,7 @@ struct PlaybackSwitchOutputTests {
             guard let data = buffer.floatChannelData?[0] else { return }
             let frames = Int(buffer.frameLength)
             let rate = buffer.format.sampleRate
-            let entry = Buffer(sampleTime: sampleTime, frames: frames,
+            let entry = Buffer(sampleTime: sampleTime, frames: frames, sampleRate: rate,
                                old: Self.level(of: PlaybackSwitchOutputTests.oldTone, in: data, frames, rate),
                                new: Self.level(of: PlaybackSwitchOutputTests.newTone, in: data, frames, rate))
             lock.withLock { buffers.append(entry) }
@@ -131,7 +180,12 @@ struct PlaybackSwitchOutputTests {
         @MainActor
         func markSwitch() {
             let sampleTime = player?.engineForTesting.outputSampleTimeForTesting ?? 0
-            lock.withLock { switchedAt = buffers.count; switchSampleTime = sampleTime }
+            let sampleRate = player?.engineForTesting.spatialOutput.renderingFormat.sampleRate ?? 0
+            lock.withLock {
+                switchedAt = buffers.count
+                switchSampleTime = sampleTime
+                switchSampleRate = sampleRate
+            }
         }
 
         private func snapshot() -> [Buffer] {
@@ -161,26 +215,38 @@ struct PlaybackSwitchOutputTests {
             player?.engineForTesting.removeOutputTapForTesting()
 
             let all = snapshot()
-            let (from, mark) = lock.withLock { (switchedAt, switchSampleTime) }
+            let (from, mark, rate) = lock.withLock { (switchedAt, switchSampleTime, switchSampleRate) }
             let tail = Array(all[from...])
-            // Audio already rendered when the switch was made may still be on
-            // its way to the tap; allow one render cycle past the mark.
-            let margin: AVAudioFramePosition = 4096
-            var after: [Buffer] = []
-            var restarted = false
-            var previous: AVAudioFramePosition?
-            for buffer in tail {
-                if let previous, buffer.sampleTime < previous { restarted = true }
-                previous = buffer.sampleTime
-                if restarted || buffer.sampleTime >= mark + margin { after.append(buffer) }
-            }
+            let after = Self.buffersAfterSwitch(tail, renderSampleTime: mark, renderSampleRate: rate)
 
             #expect(after.contains { $0.new > Self.threshold }, "the new track never reached the output")
             let leaked = after.filter { $0.old > Self.threshold }
-            let detail = leaked.map {
-                "at \($0.sampleTime - mark) frames, \($0.frames) frames, old \(String(format: "%.3f", $0.old)), new \(String(format: "%.3f", $0.new))"
+            let detail = leaked.map { buffer in
+                let secondsAfterSwitch = Double(buffer.sampleTime) / buffer.sampleRate - Double(mark) / rate
+                return "at \(secondsAfterSwitch) seconds, \(buffer.frames) frames, old \(String(format: "%.3f", buffer.old)), new \(String(format: "%.3f", buffer.new))"
             }.joined(separator: "; ")
             #expect(leaked.isEmpty, "old track audio after the switch: \(detail)")
+        }
+
+        static func buffersAfterSwitch(
+            _ buffers: [Buffer],
+            renderSampleTime: AVAudioFramePosition,
+            renderSampleRate: Double
+        ) -> [Buffer] {
+            // Audio already rendered when the switch was made may still be on
+            // its way to the tap; allow one render cycle past the mark.
+            let renderMargin: AVAudioFramePosition = 4096
+            var after: [Buffer] = []
+            var restarted = false
+            var previous: AVAudioFramePosition?
+            for buffer in buffers {
+                if let previous, buffer.sampleTime < previous { restarted = true }
+                previous = buffer.sampleTime
+                let hasReachedCutoff = Double(buffer.sampleTime) * renderSampleRate
+                    >= Double(renderSampleTime + renderMargin) * buffer.sampleRate
+                if restarted || hasReachedCutoff { after.append(buffer) }
+            }
+            return after
         }
     }
 }
