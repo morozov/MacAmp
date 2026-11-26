@@ -1,6 +1,6 @@
 # MacAmp Playlist Window Documentation
 
-**Version:** 1.5.1
+**Version:** 1.6.0
 **Last Updated:** 2026-11-26
 **Status:** Production
 
@@ -204,6 +204,14 @@ Filesystem work runs off the main actor. Results identify tracks by ID, so inter
 **Sort List** opens commands for title, filename, path and filename, reverse, and randomize. Title sorting uses the displayed artist/title string with natural numeric ordering and ignores case and character width. Filename and path sorting place local files first; non-file entries follow in natural order by complete URL, including query strings and trailing slashes. Path sorting compares local directories before filenames.
 
 Reordering preserves track identities, the active track, selection, cursor and anchor. The list scrolls to the active track, clamped to the last page. With no active track, it scrolls to the top. A changed CUE run is rebuilt at the current position while preserving playback or pause state. Empty and singleton lists remain unchanged.
+
+### Selection Menu
+
+The SEL button opens a skinned popup with **Invert Selection**, **Select None** and **Select All**, from top to bottom. Commands use the playlist and selection at invocation. They preserve cursor, range anchor, scroll position and playback.
+
+Selection commands update the displayed selection and the shared action selection immediately. Remove Selected and Crop read the displayed selection when invoked. After either command changes the playlist, both selections clear; surviving cursor and anchor positions follow their rows. An empty selection leaves the playlist unchanged and shows the existing notice.
+
+Shift-click range selection and Command-click toggling remain available.
 
 ### Misc Options
 
@@ -416,6 +424,7 @@ Defined in `MacAmpApp/Models/SkinSprites.swift` (PLEDIT sheet).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.6.0 | 2026-11-26 | Selection popup and selection consistency after removal and crop |
 | 1.5.1 | 2026-11-26 | Popup action lifetime and dialog Escape dismissal |
 | 1.5.0 | 2026-11-26 | HTML playlist export and selected-title rebuilding |
 | 1.4.0 | 2026-11-26 | Selected-entry File Info and Playlist Entry editing |

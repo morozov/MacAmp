@@ -1,9 +1,9 @@
 # MacAmp Documentation Guide
 
-**Version:** 3.16.1
+**Version:** 3.17.0
 **Date:** 2026-11-26
 **Purpose:** Master index and navigation guide for all MacAmp documentation
-**Total Documentation:** 8,953 active lines across 12 current docs + 27 archived docs
+**Total Documentation:** 8,965 active lines across 12 current docs + 27 archived docs
 
 ---
 
@@ -51,7 +51,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 
 ## Complete Documentation Inventory
 
-### Architecture & Design (9 documents, 8,004 lines)
+### Architecture & Design (9 documents, 8,016 lines)
 
 #### **[MACAMP_ARCHITECTURE_GUIDE.md](MACAMP_ARCHITECTURE_GUIDE.md)** ⭐
 - **Size**: 157KB, 2,441 lines
@@ -138,7 +138,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 - **Related Docs**: SPRITE_SYSTEM_COMPLETE.md, WINDOW_FOCUS_ARCHITECTURE.md
 
 #### **[PLAYLIST_WINDOW.md](PLAYLIST_WINDOW.md)** ⭐
-- **Size**: 26KB, 425 lines
+- **Size**: 26KB, 434 lines
 - **Last Updated**: 2026-11-26
 - **Status**: ✅ PRODUCTION
 - **Purpose**: Complete playlist window documentation with segment-based resize system
@@ -148,6 +148,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
   - Titlebar (whole bar drags; `SkinHitButton` shade/close) and the 14px shade strip (title, track length, width-only resize grip)
   - Three-section bottom bar (LEFT/CENTER/RIGHT)
   - List operations (NEW LIST / LOAD LIST / SAVE LIST), sorting, missing-file removal and selected-file Trash
+  - Selection popup and selection consistency after removal and crop
   - Popup action lifetime and dialog Escape dismissal
   - Selected-entry File Info and Playlist Entry editing
   - HTML playlist export and selected-title rebuilding
@@ -397,6 +398,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 | **Stream elapsed time** | BUILDING_RETRO_MACOS_APPS_SKILL.md | Lesson #34 (Anchor-Based Timer) |
 | **Playlist list operations (NEW/LOAD/SAVE)** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
 | **Playlist Remove Misc / Trash** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
+| **Playlist selection commands** | PLAYLIST_WINDOW.md | [Selection Menu](PLAYLIST_WINDOW.md#selection-menu) |
 | **Playlist sorting / reverse / randomize** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
 | **Playlist File Info / entry editing** | PLAYLIST_WINDOW.md | [File Info and Playlist Entry](PLAYLIST_WINDOW.md#file-info-and-playlist-entry) |
 | **Playlist HTML export / title rebuilding** | PLAYLIST_WINDOW.md | [Misc Options](PLAYLIST_WINDOW.md#misc-options) |
@@ -509,9 +511,9 @@ CODE_SIGNING_FIX.md, CODE_SIGNING_FIX_DIAGRAM.md, and RELEASE_BUILD_COMPARISON.m
 IMPLEMENTATION_PATTERNS.md          3,085 lines  (35%)
 MACAMP_ARCHITECTURE_GUIDE.md        2,441 lines  (27%)
 MILKDROP_WINDOW.md                    613 lines  (7%)
-README.md (this file)                 563 lines  (6%)
+README.md (this file)                 566 lines  (6%)
 VIDEO_WINDOW.md                       537 lines  (6%)
-PLAYLIST_WINDOW.md                    425 lines  (5%)
+PLAYLIST_WINDOW.md                    434 lines  (5%)
 SPRITE_SYSTEM_COMPLETE.md             337 lines  (4%)
 MULTI_WINDOW_ARCHITECTURE.md          323 lines  (4%)
 RELEASE_BUILD_GUIDE.md                241 lines  (3%)
@@ -519,15 +521,15 @@ WINDOW_FOCUS_ARCHITECTURE.md          148 lines  (2%)
 WINAMP_SKIN_VARIATIONS.md             142 lines  (2%)
 CUSTOM_DRAG_FIX.md                     98 lines  (1%)
 ─────────────────────────────
-TOTAL:                              8,953 lines
+TOTAL:                              8,965 lines
 ```
 
 ### Documentation by Category
 
-- **Architecture & Design**: 89% (8,004 lines)
+- **Architecture & Design**: 89% (8,016 lines)
 - **Build & Distribution**: 3% (241 lines)
 - **Skin System**: 2% (142 lines)
-- **Navigation & Index**: 6% (561 lines)
+- **Navigation & Index**: 6% (566 lines)
 
 ---
 
@@ -552,6 +554,7 @@ TOTAL:                              8,953 lines
 
 ## Version History
 
+- **3.17.0 (2026-11-26):** Documented selection commands and selection consistency after removal and crop.
 - **3.16.1 (2026-11-26):** Documented popup action lifetime and dialog Escape dismissal.
 - **3.16.0 (2026-11-26):** Documented HTML playlist export, received stream titles and selected-title rebuilding with CUE length preservation.
 - **3.15.0 (2026-11-26):** Documented playlist File Info sequencing, stream information and Playlist Entry editing.

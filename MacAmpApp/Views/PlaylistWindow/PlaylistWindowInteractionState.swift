@@ -41,6 +41,18 @@ final class PlaylistWindowInteractionState {
     private(set) var resizePreview = WindowResizePreviewOverlay()
     private(set) var keyboardMonitor: Any?
 
+    func selectAll(playlistCount: Int) {
+        selectedIndices = Set(0..<playlistCount)
+    }
+
+    func selectNone() {
+        selectedIndices = []
+    }
+
+    func invertSelection(playlistCount: Int) {
+        selectedIndices = Set(0..<playlistCount).subtracting(selectedIndices)
+    }
+
     func installKeyboardMonitor(
         playlistWindow: @escaping () -> NSWindow?,
         playlistCount: @escaping () -> Int,

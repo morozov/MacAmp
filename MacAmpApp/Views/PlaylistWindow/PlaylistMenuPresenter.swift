@@ -12,6 +12,7 @@ struct PlaylistMenuPresenter {
     private static let popupBottomFromWindowBottom: CGFloat = 12
     private static let addPopupLeft: CGFloat = 14
     private static let remPopupLeft: CGFloat = 43
+    private static let selPopupLeft: CGFloat = 72
     private static let miscPopupLeft: CGFloat = 101
     private static let listPopupRight: CGFloat = 22
 
@@ -28,23 +29,39 @@ struct PlaylistMenuPresenter {
     }
 
     func showRemMenu() {
-        PlaylistWindowActions.shared.selectedIndices = interactionState.selectedIndices
+        present(tiles: Self.makeRemoveTiles(audioPlayer: audioPlayer, interactionState: interactionState,
+                                          removeMisc: { showRemoveMiscMenu() }),
+                barSprite: "PLAYLIST_REMOVE_MENU_BAR", tilesLeft: Self.remPopupLeft)
+    }
 
-        let tiles: [PlaylistSpritePopupTile] = [
+    static func makeRemoveTiles(
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState,
+        actions: PlaylistWindowActions = .shared,
+        removeMisc: @escaping () -> Void
+    ) -> [PlaylistSpritePopupTile] {
+        [
             PlaylistSpritePopupTile(
                 normalSprite: "PLAYLIST_REMOVE_MISC",
                 selectedSprite: "PLAYLIST_REMOVE_MISC_SELECTED",
                 help: "Open options to remove missing entries or move selected files to Trash",
-                action: { showRemoveMiscMenu() }
+                action: removeMisc
             ),
-            tile("PLAYLIST_REMOVE_ALL", "PLAYLIST_REMOVE_ALL_SELECTED", "Clear the playlist",
-                 PlaylistWindowActions.shared.removeAll),
-            tile("PLAYLIST_CROP", "PLAYLIST_CROP_SELECTED", "Remove all unselected entries from the playlist",
-                 PlaylistWindowActions.shared.cropPlaylist),
-            tile("PLAYLIST_REMOVE_SELECTED", "PLAYLIST_REMOVE_SELECTED_SELECTED", "Remove selected entries from the playlist",
-                 PlaylistWindowActions.shared.removeSelected),
+            PlaylistSpritePopupTile(
+                normalSprite: "PLAYLIST_REMOVE_ALL", selectedSprite: "PLAYLIST_REMOVE_ALL_SELECTED",
+                help: "Clear the playlist", action: { audioPlayer.clearPlaylist() }
+            ),
+            PlaylistSpritePopupTile(
+                normalSprite: "PLAYLIST_CROP", selectedSprite: "PLAYLIST_CROP_SELECTED",
+                help: "Remove all unselected entries from the playlist",
+                action: { actions.cropPlaylist(audioPlayer: audioPlayer, interactionState: interactionState) }
+            ),
+            PlaylistSpritePopupTile(
+                normalSprite: "PLAYLIST_REMOVE_SELECTED", selectedSprite: "PLAYLIST_REMOVE_SELECTED_SELECTED",
+                help: "Remove selected entries from the playlist",
+                action: { actions.removeSelected(audioPlayer: audioPlayer, interactionState: interactionState) }
+            ),
         ]
-        present(tiles: tiles, barSprite: "PLAYLIST_REMOVE_MENU_BAR", tilesLeft: Self.remPopupLeft)
     }
 
     private func showRemoveMiscMenu() {
@@ -80,11 +97,33 @@ struct PlaylistMenuPresenter {
         return menu
     }
 
-    func showSelNotSupportedAlert() {
-        WinampAlertHelper.showInfo(
-            title: "Selection Menu",
-            message: "Not supported yet. Use Shift+click for multi-select (planned feature)."
-        )
+    func showSelMenu() {
+        present(tiles: Self.makeSelectionTiles(audioPlayer: audioPlayer, interactionState: interactionState),
+                barSprite: "PLAYLIST_SELECT_MENU_BAR", tilesLeft: Self.selPopupLeft)
+    }
+
+    static func makeSelectionTiles(
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState,
+        actions: PlaylistWindowActions = .shared
+    ) -> [PlaylistSpritePopupTile] {
+        func selectionTile(_ sprite: String, help: String, select: @escaping () -> Void) -> PlaylistSpritePopupTile {
+            PlaylistSpritePopupTile(normalSprite: sprite, selectedSprite: sprite + "_SELECTED", help: help) {
+                select()
+                actions.selectedIndices = interactionState.selectedIndices
+            }
+        }
+        return [
+            selectionTile("PLAYLIST_INVERT_SELECTION", help: "Invert selection") {
+                interactionState.invertSelection(playlistCount: audioPlayer.playlist.count)
+            },
+            selectionTile("PLAYLIST_SELECT_ZERO", help: "Select none") {
+                interactionState.selectNone()
+            },
+            selectionTile("PLAYLIST_SELECT_ALL", help: "Select all") {
+                interactionState.selectAll(playlistCount: audioPlayer.playlist.count)
+            },
+        ]
     }
 
     func showMiscMenu() {

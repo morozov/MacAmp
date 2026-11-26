@@ -353,6 +353,7 @@ struct SkinSprites {
             // Popup menu side-bars: 3px vertical chrome drawn at popup-left - 3.
             Sprite(name: "PLAYLIST_ADD_MENU_BAR", x: 48, y: 111, width: 3, height: 54),
             Sprite(name: "PLAYLIST_REMOVE_MENU_BAR", x: 100, y: 111, width: 3, height: 72),
+            Sprite(name: "PLAYLIST_SELECT_MENU_BAR", x: 150, y: 111, width: 3, height: 54),
             Sprite(name: "PLAYLIST_MISC_MENU_BAR", x: 200, y: 111, width: 3, height: 54),
             Sprite(name: "PLAYLIST_LIST_BAR", x: 250, y: 111, width: 3, height: 54),
 

@@ -439,43 +439,36 @@ final class PlaylistWindowActions: NSObject {
 
     // MARK: - Remove Menu Actions
 
-    @objc func removeSelected(_ sender: NSMenuItem) {
-        guard let audioPlayer = sender.representedObject as? AudioPlayer else {
-            return
-        }
-
-        let indices = PlaylistWindowActions.shared.selectedIndices
+    func removeSelected(audioPlayer: AudioPlayer, interactionState: PlaylistWindowInteractionState) {
+        let indices = interactionState.selectedIndices
+        selectedIndices = indices
         if indices.isEmpty {
             showAlert("Remove Selected", "No tracks selected")
         } else {
-            for index in indices.sorted().reversed() {
+            let validIndices = indices.filter { audioPlayer.playlist.indices.contains($0) }
+            for index in validIndices.sorted().reversed() {
                 audioPlayer.removeTrack(at: index)
             }
-            PlaylistWindowActions.shared.selectedIndices = []
+            interactionState.didRemoveTracks(at: validIndices)
+            interactionState.selectNone()
+            selectedIndices = interactionState.selectedIndices
         }
     }
 
-    @objc func cropPlaylist(_ sender: NSMenuItem) {
-        guard let audioPlayer = sender.representedObject as? AudioPlayer else {
-            return
-        }
-
-        let indices = PlaylistWindowActions.shared.selectedIndices
+    func cropPlaylist(audioPlayer: AudioPlayer, interactionState: PlaylistWindowInteractionState) {
+        let indices = interactionState.selectedIndices
+        selectedIndices = indices
         if indices.isEmpty {
             showAlert("Crop Playlist", "No tracks selected. Select tracks to keep, then crop.")
         } else {
-            let validIndices = indices.sorted().filter { $0 < audioPlayer.playlist.count }
+            let oldIDs = audioPlayer.playlist.map(\.id)
+            let validIndices = indices.sorted().filter { audioPlayer.playlist.indices.contains($0) }
             let selectedTracks = validIndices.map { audioPlayer.playlist[$0] }
             audioPlayer.replacePlaylist(with: selectedTracks)
-            PlaylistWindowActions.shared.selectedIndices = []
+            interactionState.didReorderTracks(from: oldIDs, to: audioPlayer.playlist.map(\.id))
+            interactionState.selectNone()
+            selectedIndices = interactionState.selectedIndices
         }
-    }
-
-    @objc func removeAll(_ sender: NSMenuItem) {
-        guard let audioPlayer = sender.representedObject as? AudioPlayer else {
-            return
-        }
-        audioPlayer.clearPlaylist()
     }
 
     func removeMissingFiles(audioPlayer: AudioPlayer, interactionState: PlaylistWindowInteractionState) async {

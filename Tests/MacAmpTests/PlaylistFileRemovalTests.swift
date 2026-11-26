@@ -211,14 +211,13 @@ struct PlaylistFileRemovalTests {
         try data.write(to: file)
         let player = AudioPlayer()
         player.playlistController.addTrack(track(file))
-        let actions = PlaylistWindowActions.shared
-        let savedSelection = actions.selectedIndices
-        defer { actions.selectedIndices = savedSelection }
-        actions.selectedIndices = [0]
-        let sender = NSMenuItem()
-        sender.representedObject = player
-        actions.removeSelected(sender)
+        let actions = PlaylistWindowActions()
+        let ui = PlaylistWindowInteractionState()
+        ui.selectedIndices = [0]
+        actions.removeSelected(audioPlayer: player, interactionState: ui)
         #expect(player.playlist.isEmpty)
+        #expect(ui.selectedIndices.isEmpty)
+        #expect(actions.selectedIndices.isEmpty)
         #expect(try Data(contentsOf: file) == data)
     }
 

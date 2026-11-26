@@ -38,9 +38,9 @@ struct PlaylistBottomControlsView: View {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
         }).buttonStyle(.plain).focusable(false).help("Open remove menu").position(x: 54, y: buttonY)
 
-        Button(action: { menuPresenter.showSelNotSupportedAlert() }, label: {
+        Button(action: { menuPresenter.showSelMenu() }, label: {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
-        }).buttonStyle(.plain).focusable(false).help("Show selection commands unavailable notice").position(x: 83, y: buttonY)
+        }).buttonStyle(.plain).focusable(false).help("Open selection menu").position(x: 83, y: buttonY)
 
         Button(action: { menuPresenter.showMiscMenu() }, label: {
             Color.clear.frame(width: width, height: height).contentShape(Rectangle())
