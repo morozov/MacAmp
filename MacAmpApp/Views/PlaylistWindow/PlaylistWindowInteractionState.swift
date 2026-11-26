@@ -335,6 +335,18 @@ final class PlaylistWindowInteractionState {
         }
     }
 
+    func didRemoveTracks(at indices: Set<Int>) {
+        guard !indices.isEmpty else { return }
+        func remap(_ index: Int) -> Int? {
+            guard !indices.contains(index) else { return nil }
+            return index - indices.filter { $0 < index }.count
+        }
+        selectedIndices = Set(selectedIndices.compactMap(remap))
+        cursorIndex = cursorIndex.flatMap(remap)
+        anchorIndex = anchorIndex.flatMap(remap)
+        cancelRowDrag()
+    }
+
     func clampScrollOffset(maxOffsetPixels: CGFloat) {
         if scrollOffsetPixels > maxOffsetPixels {
             scrollOffsetPixels = max(0, maxOffsetPixels)

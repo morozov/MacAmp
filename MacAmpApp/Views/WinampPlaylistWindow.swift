@@ -51,7 +51,7 @@ struct WinampPlaylistWindow: View {
             audioPlayer: audioPlayer,
             windowHeight: windowHeight,
             windowWidth: windowWidth,
-            selectedIndices: ui.selectedIndices
+            interactionState: ui
         )
     }
 

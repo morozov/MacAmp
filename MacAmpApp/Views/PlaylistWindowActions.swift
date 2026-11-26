@@ -472,8 +472,61 @@ final class PlaylistWindowActions: NSObject {
         audioPlayer.clearPlaylist()
     }
 
-    @objc func removeMisc(_ sender: NSMenuItem) {
-        showAlert("Remove Misc", "Not supported yet")
+    func removeMissingFiles(audioPlayer: AudioPlayer, interactionState: PlaylistWindowInteractionState) async {
+        let outcome = await PlaylistFileRemoval.missingFiles(in: audioPlayer.playlist)
+        applyRemoval(outcome, audioPlayer: audioPlayer, interactionState: interactionState)
+    }
+
+    func physicallyRemoveSelectedFiles(
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState,
+        confirm: @MainActor ([Track]) -> Bool = confirmFileRemoval,
+        trash: @Sendable (URL) throws -> Void = PlaylistFileRemoval.trashFile,
+        reportFailures: @MainActor ([PlaylistFileRemoval.Failure]) -> Void = showRemovalFailures
+    ) async {
+        let tracks = PlaylistFileRemoval.selectedLocalTracks(
+            in: audioPlayer.playlist, indices: interactionState.selectedIndices
+        )
+        guard !tracks.isEmpty else { return }
+        let confirmed = confirm(tracks)
+        let outcome = await PlaylistFileRemoval.trashFiles(tracks, confirmed: confirmed, trash: trash)
+        applyRemoval(outcome, audioPlayer: audioPlayer, interactionState: interactionState)
+        if !outcome.failures.isEmpty { reportFailures(outcome.failures) }
+    }
+
+    func applyRemoval(
+        _ outcome: PlaylistFileRemoval.Outcome,
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState
+    ) {
+        let indices = Set(audioPlayer.playlist.indices.filter {
+            outcome.removedIDs.contains(audioPlayer.playlist[$0].id)
+        })
+        for index in indices.sorted(by: >) { audioPlayer.removeTrack(at: index) }
+        interactionState.didRemoveTracks(at: indices)
+        selectedIndices = interactionState.selectedIndices
+    }
+
+    private static func confirmFileRemoval(_ tracks: [Track]) -> Bool {
+        guard !UnitTestSupport.isActive else { return false }
+        let alert = NSAlert()
+        alert.messageText = "Move selected files to Trash?"
+        alert.informativeText = "The selected local files will be moved to the Trash and removed from the playlist."
+        if tracks.contains(where: \.isCueSlice) {
+            alert.informativeText += " CUE tracks share an audio file; moving it to Trash also makes its other slices unavailable."
+        }
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private static func showRemovalFailures(_ failures: [PlaylistFileRemoval.Failure]) {
+        guard !UnitTestSupport.isActive else { return }
+        WinampAlertHelper.showError(
+            title: "Unable to Remove Files",
+            message: failures.map { "\($0.url.lastPathComponent): \($0.message)" }.joined(separator: "\n")
+        )
     }
 
     // MARK: - Misc Menu Actions

@@ -138,7 +138,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 - **Related Docs**: SPRITE_SYSTEM_COMPLETE.md, WINDOW_FOCUS_ARCHITECTURE.md
 
 #### **[PLAYLIST_WINDOW.md](PLAYLIST_WINDOW.md)** ⭐
-- **Size**: 19KB, 382 lines
+- **Size**: 19KB, 387 lines
 - **Last Updated**: 2026-09-28
 - **Status**: ✅ PRODUCTION
 - **Purpose**: Complete playlist window documentation with segment-based resize system
@@ -147,7 +147,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
   - PlaylistWindowSizeState @Observable model
   - Titlebar (whole bar drags; `SkinHitButton` shade/close) and the 14px shade strip (title, track length, width-only resize grip)
   - Three-section bottom bar (LEFT/CENTER/RIGHT)
-  - List operations (NEW LIST / LOAD LIST / SAVE LIST)
+  - List operations (NEW LIST / LOAD LIST / SAVE LIST), missing-file removal and selected-file Trash
   - Track position display (`trackPositionString`)
   - Resize gesture with AppKit preview overlay
   - Scroll slider with proportional thumb
@@ -393,6 +393,7 @@ The suite has 137 tests in 21 suites. Suite tags, `xcodebuildmcp` usage and per-
 | **`Remote commands` / MPRemoteCommandCenter** | BUILDING_RETRO_MACOS_APPS_SKILL.md | Lesson #32 (Now Playing) |
 | **Stream elapsed time** | BUILDING_RETRO_MACOS_APPS_SKILL.md | Lesson #34 (Anchor-Based Timer) |
 | **Playlist list operations (NEW/LOAD/SAVE)** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
+| **Playlist Remove Misc / Trash** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
 | **M3UWriter** | PLAYLIST_WINDOW.md | [List Operations](PLAYLIST_WINDOW.md#list-operations-new-list--load-list--save-list) |
 | **QueueConfined protocol** | `MacAmpApp/Audio/Streaming/QueueConfined.swift` | (code file; no dedicated doc section yet) |
 | **TimeFormatting** | `MacAmpApp/Utilities/TimeFormatting.swift` | (code file; no dedicated doc section yet) |
@@ -504,7 +505,7 @@ MACAMP_ARCHITECTURE_GUIDE.md        2,441 lines  (27%)
 MILKDROP_WINDOW.md                    613 lines  (7%)
 README.md (this file)                 552 lines  (6%)
 VIDEO_WINDOW.md                       537 lines  (6%)
-PLAYLIST_WINDOW.md                    382 lines  (4%)
+PLAYLIST_WINDOW.md                    387 lines  (4%)
 SPRITE_SYSTEM_COMPLETE.md             337 lines  (4%)
 MULTI_WINDOW_ARCHITECTURE.md          323 lines  (4%)
 RELEASE_BUILD_GUIDE.md                241 lines  (3%)

@@ -114,6 +114,7 @@ Window Layout (Default 275×232):
 ```
 MacAmpApp/Views/PlaylistWindow/
   PlaylistWindowInteractionState.swift  (60 lines, @Observable state)
+  PlaylistFileRemoval.swift            (file probes and Trash outcomes)
   PlaylistMenuPresenter.swift           (195 lines, AppKit NSMenu bridge)
   PlaylistTrackListView.swift           (78 lines, track list + selection)
   PlaylistBottomControlsView.swift      (113 lines, transport + time)
@@ -191,7 +192,11 @@ The bottom bar's LEFT section contains buttons for playlist list operations, imp
 
 - **SAVE LIST**: Opens `NSSavePanel` with `.m3u` default extension. Writes `#EXTM3U` format via `M3UWriter.write()` off the main actor.
 
-Sort List, File Info, Misc Options and Remove Misc currently show a "Not supported yet" alert.
+**Remove Misc** opens a submenu with **Remove missing files from playlist** and **Physically remove selected file(s)**. Missing-file removal scans local entries for readability and removes unavailable rows without deleting files. Physical removal asks for confirmation, moves selected local files to Trash, and removes only rows whose files were moved successfully. Remote URLs remain in the playlist. Failed files remain selected and appear in a combined error report. CUE slices share their backing file; the confirmation warns that other slices become unavailable when that file moves to Trash.
+
+Filesystem work runs off the main actor. Results identify tracks by ID, so intervening playlist edits cannot remove unrelated rows. Surviving selection, cursor and anchor follow their rows.
+
+Sort List, File Info and Misc Options currently show a "Not supported yet" alert.
 
 ### Track Position Display
 

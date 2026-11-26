@@ -7,7 +7,7 @@ struct PlaylistMenuPresenter {
     let audioPlayer: AudioPlayer
     let windowHeight: CGFloat
     let windowWidth: CGFloat
-    let selectedIndices: Set<Int>
+    let interactionState: PlaylistWindowInteractionState
 
     private static let popupBottomFromWindowBottom: CGFloat = 12
     private static let addPopupLeft: CGFloat = 14
@@ -28,11 +28,14 @@ struct PlaylistMenuPresenter {
     }
 
     func showRemMenu() {
-        PlaylistWindowActions.shared.selectedIndices = selectedIndices
+        PlaylistWindowActions.shared.selectedIndices = interactionState.selectedIndices
 
         let tiles: [PlaylistSpritePopupTile] = [
-            tile("PLAYLIST_REMOVE_MISC", "PLAYLIST_REMOVE_MISC_SELECTED",
-                 PlaylistWindowActions.shared.removeMisc),
+            PlaylistSpritePopupTile(
+                normalSprite: "PLAYLIST_REMOVE_MISC",
+                selectedSprite: "PLAYLIST_REMOVE_MISC_SELECTED",
+                action: { showRemoveMiscMenu() }
+            ),
             tile("PLAYLIST_REMOVE_ALL", "PLAYLIST_REMOVE_ALL_SELECTED",
                  PlaylistWindowActions.shared.removeAll),
             tile("PLAYLIST_CROP", "PLAYLIST_CROP_SELECTED",
@@ -41,6 +44,39 @@ struct PlaylistMenuPresenter {
                  PlaylistWindowActions.shared.removeSelected),
         ]
         present(tiles: tiles, barSprite: "PLAYLIST_REMOVE_MENU_BAR", tilesLeft: Self.remPopupLeft)
+    }
+
+    private func showRemoveMiscMenu() {
+        guard !UnitTestSupport.isActive else { return }
+        Task { @MainActor in
+            guard let window = WindowCoordinator.shared?.playlistWindow else { return }
+            PlaylistSpritePopupHost.current?.dismiss()
+            let menu = Self.makeRemoveMiscMenu(audioPlayer: audioPlayer, interactionState: interactionState)
+            let origin = window.convertPoint(toScreen: NSPoint(x: 64, y: 84))
+            menu.popUp(positioning: nil, at: origin, in: nil)
+        }
+    }
+
+    static func makeRemoveMiscMenu(
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState
+    ) -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(MenuItemFactory.createMenuItem(title: "Remove missing files from playlist") {
+            Task { @MainActor in
+                await PlaylistWindowActions.shared.removeMissingFiles(
+                    audioPlayer: audioPlayer, interactionState: interactionState
+                )
+            }
+        })
+        menu.addItem(MenuItemFactory.createMenuItem(title: "Physically remove selected file(s)") {
+            Task { @MainActor in
+                await PlaylistWindowActions.shared.physicallyRemoveSelectedFiles(
+                    audioPlayer: audioPlayer, interactionState: interactionState
+                )
+            }
+        })
+        return menu
     }
 
     func showSelNotSupportedAlert() {
