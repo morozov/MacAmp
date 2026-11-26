@@ -41,27 +41,110 @@ struct SpatialAudioOutputTests {
         let eq = EqualizerController()
         let viz = VisualizerPipeline()
         let engine = AudioEngineController(eqNode: eq.eqNode, visualizerPipeline: viz)
+        let output = engine.spatialOutput
+        defer { engine.shutdown() }
+        let clock = ContinuousClock()
+        func waitFor(_ condition: () -> Bool) async -> Bool {
+            let deadline = clock.now.advanced(by: .seconds(10))
+            while clock.now < deadline && !Task.isCancelled {
+                if condition() { return true }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            return !Task.isCancelled && condition()
+        }
+        func seconds(_ start: ContinuousClock.Instant, _ end: ContinuousClock.Instant) -> Double {
+            let parts = start.duration(to: end).components
+            return Double(parts.seconds) + Double(parts.attoseconds) * 1e-18
+        }
         try engine.loadFile(url: url)
         #expect(engine.scheduleFrom(time: 0, seekID: UUID()))
+        let initialFrames = try #require(engine.outputSampleTimeForTesting)
+        let initialEnqueued = output.enqueuedCount
+        let sampleRate = output.renderingFormat.sampleRate
+        let frameSeconds = 1 / sampleRate
+        struct Observation {
+            let before: ContinuousClock.Instant
+            let after: ContinuousClock.Instant
+            let position: Double
+            let leadBefore: Double
+            let leadAfter: Double
+            let frames: Int64
+            let produced: Double
+            let enqueued: Int
+            let clamps: Int
+            let gapRuns: Int
+        }
+        enum PositionObservationError: Error { case timedOut }
+        func observeQuiescentFeed() async throws -> Observation {
+            let deadline = clock.now.advanced(by: .seconds(10))
+            while clock.now < deadline && !Task.isCancelled {
+                let frames = try #require(engine.outputSampleTimeForTesting) - initialFrames
+                let enqueued = output.enqueuedCount
+                #expect(frames == Int64(enqueued - initialEnqueued) * Int64(output.maximumFrameCount))
+                let before = clock.now
+                let leadBefore = output.leadSeconds
+                let position = engine.currentPlaybackSeconds
+                let leadAfter = output.leadSeconds
+                let after = clock.now
+                if seconds(before, after) <= 0.15 / 40 {
+                    return Observation(before: before, after: after, position: position,
+                                       leadBefore: leadBefore, leadAfter: leadAfter, frames: frames,
+                                       produced: Double(frames) / sampleRate, enqueued: enqueued,
+                                       clamps: output.ptsClampsFired, gapRuns: output.gapRuns)
+                }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try Task.checkCancellation()
+            throw PositionObservationError.timedOut
+        }
         engine.playAudio()
-        try await Task.sleep(nanoseconds: 700_000_000)
+        try #require(await waitFor { engine.currentPlaybackSeconds >= 0.5 && output.enqueuedCount > initialEnqueued && output.leadSeconds > 0 })
         #expect(engine.spatialOutput.pastPTSEnqueues == 0)  // none during normal play
 
         // Underrun: the clock runs on past what was produced.
-        let heard = engine.currentPlaybackSeconds + engine.spatialOutput.leadSeconds
-        engine.spatialOutput.suspendFeed()
-        try await Task.sleep(nanoseconds: 2_500_000_000)
+        output.suspendFeed()
+        let beforeUnderrun = try await observeQuiescentFeed()
+        #expect(beforeUnderrun.produced >= beforeUnderrun.position + beforeUnderrun.leadAfter - frameSeconds)
+        #expect(beforeUnderrun.produced <= beforeUnderrun.position + beforeUnderrun.leadBefore + frameSeconds)
+        try #require(await waitFor { output.leadSeconds < -0.5 })
         #expect(engine.spatialOutput.leadSeconds < -0.5)  // frontier now behind the clock
-
-        let resumedAt = Date()
-        engine.spatialOutput.ensureFeeding()
-        try await Task.sleep(nanoseconds: 400_000_000)
+        let clampsBeforeRecovery = output.ptsClampsFired
+        output.ensureFeeding()
+        try #require(await waitFor { output.enqueuedCount > beforeUnderrun.enqueued && output.leadSeconds >= 0.5 })
+        output.suspendFeed()
+        let recovered = try await observeQuiescentFeed()
+        try #require(recovered.clamps <= clampsBeforeRecovery + 1, "A second underrun invalidated the recovery observation")
+        try #require(recovered.leadAfter > 0, "Recovery observation lost its buffered lead")
+        #expect(engine.isEngineRunning)
+        #expect(engine.isPlayerNodePlaying)
+        #expect(recovered.frames > beforeUnderrun.frames)
+        #expect(recovered.enqueued > beforeUnderrun.enqueued)
         #expect(engine.spatialOutput.pastPTSEnqueues == 0)
+        #expect(recovered.gapRuns == beforeUnderrun.gapRuns)
         // The file resumes where the audio ran out, not where the clock went on to.
-        let position = engine.currentPlaybackSeconds
-        let expected = heard + Date().timeIntervalSince(resumedAt)
-        #expect(abs(position - expected) < 0.15, "position \(position) s, expected \(expected) s")
-        engine.shutdown()
+        let expectedPosition = recovered.produced - (recovered.leadBefore + recovered.leadAfter) / 2
+        #expect(abs(recovered.position - expectedPosition) < 0.15,
+                "recovered position \(recovered.position) s, expected \(expectedPosition) s, residual \(recovered.position - expectedPosition) s")
+        #expect(recovered.produced >= recovered.position + recovered.leadAfter - frameSeconds)
+        #expect(recovered.produced <= recovered.position + recovered.leadBefore + frameSeconds)
+        #expect(recovered.clamps == clampsBeforeRecovery + 1)
+
+        try #require(await waitFor { output.currentTimeSeconds > recovered.position + frameSeconds })
+        let start = try await observeQuiescentFeed()
+        try #require(start.clamps == recovered.clamps && start.leadAfter > 0,
+                     "The progression baseline lost its recovered lead or clamp count")
+        output.ensureFeeding()
+        try #require(await waitFor { output.currentTimeSeconds > start.position + 0.25 && output.enqueuedCount > start.enqueued })
+        output.suspendFeed()
+        let end = try await observeQuiescentFeed()
+        try #require(end.clamps == start.clamps && end.leadAfter > 0,
+                     "A further underrun invalidated the progression observation")
+        let positionDelta = end.position - start.position
+        #expect(positionDelta >= seconds(start.after, end.before) - 0.15)
+        #expect(positionDelta <= seconds(start.before, end.after) + 0.15)
+        #expect(end.enqueued > start.enqueued)
+        #expect(end.gapRuns == beforeUnderrun.gapRuns)
+        #expect(output.pastPTSEnqueues == 0)
     }
 
     @Test("The feed keeps ahead of the clock beyond the initial burst")
