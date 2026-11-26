@@ -605,6 +605,39 @@ final class PlaylistWindowActions: NSObject {
         showAlert("Misc Options", "Not supported yet")
     }
 
+    @discardableResult
+    func generateHTMLPlaylist(
+        audioPlayer: AudioPlayer,
+        destination: URL? = nil,
+        write: @escaping @Sendable ([Track], URL) async throws -> Void = HTMLPlaylistWriter.write,
+        open: @escaping @MainActor (URL) -> Void = openHTMLPlaylist,
+        report: @escaping @MainActor (String, String) -> Void = reportHTMLPlaylistError
+    ) -> Task<Void, Never> {
+        let tracks = audioPlayer.playlist
+        let directory = UnitTestSupport.isActive
+            ? UnitTestSupport.applicationSupportDirectory ?? FileManager.default.temporaryDirectory
+            : FileManager.default.temporaryDirectory
+        let url = destination ?? directory.appendingPathComponent("\(UUID().uuidString).html")
+        return Task { @MainActor in
+            do {
+                try await write(tracks, url)
+                open(url)
+            } catch {
+                report("Error", "Error writing HTML file.")
+            }
+        }
+    }
+
+    private static func openHTMLPlaylist(_ url: URL) {
+        guard !UnitTestSupport.isActive else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private static func reportHTMLPlaylistError(_ title: String, _ message: String) {
+        guard !UnitTestSupport.isActive else { return }
+        WinampAlertHelper.showError(title: title, message: message)
+    }
+
     // MARK: - List Operations
 
     @objc func newList(_ sender: NSMenuItem) {
