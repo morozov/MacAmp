@@ -15,7 +15,7 @@ struct PlaylistSpritePopup: View {
 
     let tiles: [PlaylistSpritePopupTile]
     let barSprite: String
-    let onItemFired: () -> Void
+    let onSelect: (@escaping () -> Void) -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -27,8 +27,7 @@ struct PlaylistSpritePopup: View {
             VStack(spacing: 0) {
                 ForEach(tiles) { tile in
                     PlaylistSpritePopupTileView(tile: tile) {
-                        tile.action()
-                        onItemFired()
+                        onSelect(tile.action)
                     }
                 }
             }

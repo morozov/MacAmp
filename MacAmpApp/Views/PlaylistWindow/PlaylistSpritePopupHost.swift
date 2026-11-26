@@ -6,10 +6,27 @@ final class PlaylistSpritePopupHost: NSObject {
     static var current: PlaylistSpritePopupHost?
 
     private let panel: NSPanel
+    private weak var parentWindow: NSWindow?
+    private let monitors: LocalEventMonitorRegistration
+    private let notifications: NotificationCenter
     private var localEventMonitor: Any?
     private var deactivateObserver: NSObjectProtocol?
+    private var isDismissed = false
 
-    private init(
+    init(
+        panel: NSPanel,
+        parentWindow: NSWindow,
+        monitors: LocalEventMonitorRegistration = .appKit,
+        notifications: NotificationCenter = .default
+    ) {
+        self.panel = panel
+        self.parentWindow = parentWindow
+        self.monitors = monitors
+        self.notifications = notifications
+        super.init()
+    }
+
+    private convenience init(
         tiles: [PlaylistSpritePopupTile],
         barSprite: String,
         screenOrigin: NSPoint,
@@ -22,13 +39,13 @@ final class PlaylistSpritePopupHost: NSObject {
         )
         let frame = NSRect(origin: screenOrigin, size: size)
 
-        self.panel = NSPanel(
+        let panel = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        super.init()
+        self.init(panel: panel, parentWindow: parentWindow)
 
         panel.isFloatingPanel = true
         panel.hasShadow = false
@@ -37,16 +54,14 @@ final class PlaylistSpritePopupHost: NSObject {
         panel.level = .floating
         panel.hidesOnDeactivate = false
 
-        let rootView = PlaylistSpritePopup(tiles: tiles, barSprite: barSprite) { [weak self] in
-            self?.dismiss()
+        let rootView = PlaylistSpritePopup(tiles: tiles, barSprite: barSprite) { [weak self] action in
+            self?.select(action)
         }
         .environment(skinManager)
 
         let hosting = NSHostingView(rootView: rootView)
         hosting.frame = NSRect(origin: .zero, size: size)
         panel.contentView = hosting
-
-        parentWindow.addChildWindow(panel, ordered: .above)
     }
 
     static func show(
@@ -56,7 +71,6 @@ final class PlaylistSpritePopupHost: NSObject {
         skinManager: SkinManager,
         parentWindow: NSWindow
     ) {
-        current?.dismiss()
         let host = PlaylistSpritePopupHost(
             tiles: tiles,
             barSprite: barSprite,
@@ -64,33 +78,36 @@ final class PlaylistSpritePopupHost: NSObject {
             skinManager: skinManager,
             parentWindow: parentWindow
         )
-        current = host
-        host.installEventMonitor()
-        host.panel.orderFront(nil)
+        host.activate()
+        if !UnitTestSupport.isActive { host.panel.orderFront(nil) }
+    }
+
+    func activate() {
+        guard !isDismissed, Self.current !== self else { return }
+        Self.current?.dismiss()
+        Self.current = self
+        parentWindow?.addChildWindow(panel, ordered: .above)
+        installEventMonitor()
+    }
+
+    func select(_ action: () -> Void) {
+        withExtendedLifetime(self) {
+            guard !isDismissed else { return }
+            dismiss()
+            action()
+        }
     }
 
     private func installEventMonitor() {
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown, .scrollWheel, .keyDown]
+        localEventMonitor = monitors.add(
+            [.leftMouseDown, .rightMouseDown, .scrollWheel, .keyDown]
         ) { [weak self] event in
             guard let self else { return event }
-
-            if event.type == .keyDown {
-                if event.keyCode == 53 {
-                    self.dismiss()
-                    return nil
-                }
-                return event
-            }
-
-            if event.window !== self.panel {
-                self.dismiss()
-            }
-            return event
+            return self.handle(event, in: event.window)
         }
 
         // Match NSMenu behavior: dismiss on app deactivate.
-        deactivateObserver = NotificationCenter.default.addObserver(
+        deactivateObserver = notifications.addObserver(
             forName: NSApplication.didResignActiveNotification,
             object: nil,
             queue: .main
@@ -101,14 +118,29 @@ final class PlaylistSpritePopupHost: NSObject {
         }
     }
 
+    func handle(_ event: NSEvent, in eventWindow: NSWindow?) -> NSEvent? {
+        guard !isDismissed else { return event }
+        if event.type == .keyDown {
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            guard event.keyCode == 53, modifiers.isEmpty,
+                  let parentWindow, eventWindow === parentWindow else { return event }
+            dismiss()
+            return nil
+        }
+        if eventWindow !== panel { dismiss() }
+        return event
+    }
+
     func dismiss() {
+        guard !isDismissed else { return }
+        isDismissed = true
         if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
+            monitors.remove(monitor)
         }
         if let observer = deactivateObserver {
-            NotificationCenter.default.removeObserver(observer)
             deactivateObserver = nil
+            notifications.removeObserver(observer)
         }
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)

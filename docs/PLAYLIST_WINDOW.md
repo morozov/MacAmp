@@ -1,6 +1,6 @@
 # MacAmp Playlist Window Documentation
 
-**Version:** 1.5.0
+**Version:** 1.5.1
 **Last Updated:** 2026-11-26
 **Status:** Production
 
@@ -194,6 +194,8 @@ The bottom bar's LEFT section contains buttons for playlist list operations, imp
 - **LOAD LIST**: Opens `NSOpenPanel` filtered to `.m3u`/`.m3u8` files and parses off the main actor. A `loadListGeneration` token rejects the result if another load started meanwhile. On success it clears the current playlist, adds the parsed entries (replaces, not appends) and auto-plays the first track. `AudioPlayer`'s `playlistGeneration` token guards against stale metadata tasks from the previous playlist.
 
 - **SAVE LIST**: Opens `NSSavePanel` with `.m3u` default extension. Writes `#EXTM3U` format via `M3UWriter.write()` off the main actor.
+
+Choosing a skinned popup command dismisses the popup before its action starts. Escape dismisses the active notice or cancels a dialog without changing the playlist or selection. Return keeps the dialog's default action.
 
 **Remove Misc** opens a submenu with **Remove missing files from playlist** and **Physically remove selected file(s)**. Missing-file removal scans local entries for readability and removes unavailable rows without deleting files. Physical removal asks for confirmation, moves selected local files to Trash, and removes only rows whose files were moved successfully. Remote URLs remain in the playlist. Failed files remain selected and appear in a combined error report. CUE slices share their backing file; the confirmation warns that other slices become unavailable when that file moves to Trash.
 
@@ -414,6 +416,7 @@ Defined in `MacAmpApp/Models/SkinSprites.swift` (PLEDIT sheet).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.1 | 2026-11-26 | Popup action lifetime and dialog Escape dismissal |
 | 1.5.0 | 2026-11-26 | HTML playlist export and selected-title rebuilding |
 | 1.4.0 | 2026-11-26 | Selected-entry File Info and Playlist Entry editing |
 | 1.3.0 | 2026-09-25 | Pruned; snippets replaced with current code; activation and sprite names corrected |

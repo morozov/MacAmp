@@ -138,10 +138,10 @@ extension SkinManager {
         alert.alertStyle = style
         alert.addButton(withTitle: "OK")
 
-        if let window = NSApp.keyWindow ?? NSApp.windows.first {
-            return await alert.beginSheetModal(for: window)
-        } else {
-            return alert.runModal()
+        return await withCheckedContinuation { continuation in
+            WinampAlertHelper.present(alert, sheetFor: NSApp.keyWindow ?? NSApp.windows.first, completion: { response in
+                continuation.resume(returning: response)
+            })
         }
     }
 
@@ -182,10 +182,6 @@ extension SkinManager {
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
 
-        if let window = NSApp.keyWindow ?? NSApp.windows.first {
-            alert.beginSheetModal(for: window) { _ in }
-        } else {
-            alert.runModal()
-        }
+        WinampAlertHelper.present(alert, sheetFor: NSApp.keyWindow ?? NSApp.windows.first)
     }
 }

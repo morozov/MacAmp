@@ -376,7 +376,12 @@ final class PlaylistWindowActions: NSObject {
 
     /// Prompts for an internet-radio stream URL and adds it to the playlist.
     /// Shared by the menu action and the `⌘L` keyboard shortcut.
-    func presentAddURLPrompt(audioPlayer: AudioPlayer) {
+    func presentAddURLPrompt(
+        audioPlayer: AudioPlayer,
+        run: (NSAlert) -> NSApplication.ModalResponse = {
+            UnitTestSupport.isActive ? .abort : $0.runModal()
+        }
+    ) {
         let alert = NSAlert()
         alert.messageText = "Add Internet Radio Station"
         alert.informativeText = "Enter the stream URL (HTTP or HTTPS):"
@@ -392,7 +397,7 @@ final class PlaylistWindowActions: NSObject {
         alert.addButton(withTitle: "Add")
         alert.addButton(withTitle: "Cancel")
 
-        let response = alert.runModal()
+        let response = run(alert)
 
         if response == .alertFirstButtonReturn {
             let urlString = input.stringValue.trimmingCharacters(in: .whitespaces)
