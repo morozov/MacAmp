@@ -40,6 +40,7 @@ final class StreamPlayer: BitrateSource {
     private(set) var currentStation: RadioStation?
     private(set) var streamTitle: String?
     private(set) var streamArtist: String?
+    private(set) var receivedTitleMetadata: ICYFramer.ICYMetadata?
     private(set) var error: String?
 
     // MARK: - Pipeline
@@ -151,6 +152,7 @@ final class StreamPlayer: BitrateSource {
         error = nil
         streamTitle = nil
         streamArtist = nil
+        receivedTitleMetadata = nil
 
         let rb = LockFreeRingBuffer(capacity: Self.ringBufferCapacityFrames, channelCount: 2)
         ringBuffer = rb
@@ -273,6 +275,7 @@ final class StreamPlayer: BitrateSource {
         currentStation = nil
         streamTitle = nil
         streamArtist = nil
+        receivedTitleMetadata = nil
         error = nil
         ringBuffer = nil
         currentSampleRate = 0
@@ -364,6 +367,9 @@ final class StreamPlayer: BitrateSource {
 
         pipeline.onMetadata = { [weak self] (metadata: ICYFramer.ICYMetadata) in
             guard let self else { return }
+            if let title = metadata.title, !title.isEmpty {
+                self.receivedTitleMetadata = metadata
+            }
             if let title = metadata.title {
                 self.streamTitle = title
             }

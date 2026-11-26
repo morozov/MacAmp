@@ -97,8 +97,10 @@ struct PlaylistMenuPresenter {
                 normalSprite: "PLAYLIST_FILE_INFO", selectedSprite: "PLAYLIST_FILE_INFO_SELECTED",
                 action: { showFileInfoMenu() }
             ),
-            tile("PLAYLIST_MISC_OPTIONS", "PLAYLIST_MISC_OPTIONS_SELECTED",
-                 PlaylistWindowActions.shared.miscOptions),
+            PlaylistSpritePopupTile(
+                normalSprite: "PLAYLIST_MISC_OPTIONS", selectedSprite: "PLAYLIST_MISC_OPTIONS_SELECTED",
+                action: { showMiscOptionsMenu() }
+            ),
         ]
         present(tiles: tiles, barSprite: "PLAYLIST_MISC_MENU_BAR", tilesLeft: Self.miscPopupLeft)
     }
@@ -115,6 +117,33 @@ struct PlaylistMenuPresenter {
         })
         menu.addItem(MenuItemFactory.createMenuItem(title: "Playlist entry...", action: editEntries))
         return menu
+    }
+
+    static func makeMiscOptionsMenu(
+        generateHTML: @escaping () -> Void,
+        rebuildTitles: @escaping () -> Void
+    ) -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(MenuItemFactory.createMenuItem(title: "Generate HTML playlist", action: generateHTML))
+        menu.addItem(.separator())
+        menu.addItem(MenuItemFactory.createMenuItem(title: "Rebuild titles on selection", action: rebuildTitles))
+        return menu
+    }
+
+    private func showMiscOptionsMenu() {
+        guard !UnitTestSupport.isActive else { return }
+        Task { @MainActor in
+            guard let window = WindowCoordinator.shared?.playlistWindow else { return }
+            PlaylistSpritePopupHost.current?.dismiss()
+            let actions = PlaylistWindowActions.shared
+            let menu = Self.makeMiscOptionsMenu(generateHTML: {
+                actions.generateHTMLPlaylist(audioPlayer: audioPlayer)
+            }, rebuildTitles: {
+                actions.rebuildTitles(audioPlayer: audioPlayer, interactionState: interactionState)
+            })
+            let origin = window.convertPoint(toScreen: NSPoint(x: 122, y: 30))
+            menu.popUp(positioning: nil, at: origin, in: nil)
+        }
     }
 
     private func showFileInfoMenu() {

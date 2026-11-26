@@ -49,6 +49,7 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
         enum Kind {
             case initial(URL)
             case edit
+            case rebuild
         }
 
         let id = UUID()
@@ -617,6 +618,44 @@ final class AudioPlayer: BitrateSource { // swiftlint:disable:this type_body_len
 
     func addStreamTrack(_ track: Track) {
         playlistController.addTrack(track)
+    }
+
+    @discardableResult
+    func rebuildPlaylistTitles(
+        ids: [UUID],
+        activeStream: (url: URL, title: String)? = nil,
+        loadMetadata: @escaping (URL) async -> MetadataLoader.TrackMetadata = MetadataLoader.loadTrackMetadata
+    ) -> Task<Void, Never> {
+        let selectedIDs = Set(ids)
+        let requests = playlist.filter { selectedIDs.contains($0.id) }.map { track in
+            if let pendingURL = metadataRequests[track.id]?.pendingURL {
+                playlistController.removePendingURL(pendingURL)
+            }
+            let request = TrackMetadataRequest(kind: .rebuild)
+            metadataRequests[track.id] = request
+            return (track, request)
+        }
+        return Task { @MainActor [weak self] in
+            guard let self else { return }
+            for (track, request) in requests {
+                guard self.metadataRequests[track.id]?.id == request.id,
+                      self.playlist.contains(where: { $0.id == track.id && $0.url == track.url }) else { continue }
+                let metadata: MetadataLoader.TrackMetadata
+                if track.url.isFileURL {
+                    metadata = await loadMetadata(track.url)
+                } else {
+                    let title = activeStream.flatMap { $0.url == track.url ? $0.title : nil } ?? track.url.absoluteString
+                    metadata = .init(title: title, artist: "", duration: 0)
+                }
+                guard self.metadataRequests[track.id]?.id == request.id else { continue }
+                self.playlistController.editEntry(
+                    id: track.id, expectedURL: track.url, url: track.url,
+                    title: metadata.title, artist: metadata.artist,
+                    duration: track.isCueSlice ? nil : metadata.duration
+                )
+                self.metadataRequests[track.id] = nil
+            }
+        }
     }
 
     /// Add the tracks parsed from a CUE sheet directly to the playlist, bypassing

@@ -601,8 +601,16 @@ final class PlaylistWindowActions: NSObject {
         return refreshes
     }
 
-    @objc func miscOptions(_ sender: NSMenuItem) {
-        showAlert("Misc Options", "Not supported yet")
+    @discardableResult
+    func rebuildTitles(
+        audioPlayer: AudioPlayer,
+        interactionState: PlaylistWindowInteractionState,
+        loadMetadata: @escaping (URL) async -> MetadataLoader.TrackMetadata = MetadataLoader.loadTrackMetadata
+    ) -> Task<Void, Never> {
+        let ids = selectedTracks(audioPlayer: audioPlayer, interactionState: interactionState).map(\.id)
+        return audioPlayer.rebuildPlaylistTitles(
+            ids: ids, activeStream: playbackCoordinator?.playlistStreamTitle, loadMetadata: loadMetadata
+        )
     }
 
     @discardableResult

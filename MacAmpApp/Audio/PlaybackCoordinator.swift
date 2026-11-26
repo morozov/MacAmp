@@ -574,6 +574,14 @@ final class PlaybackCoordinator {
         streamPlayer.streamArtist
     }
 
+    var playlistStreamTitle: (url: URL, title: String)? {
+        guard case .radioStation(let station) = currentSource,
+              let metadata = streamPlayer.receivedTitleMetadata,
+              let title = metadata.title, !title.isEmpty else { return nil }
+        let artist = metadata.artist ?? ""
+        return (station.streamURL, artist.isEmpty ? title : "\(artist) - \(title)")
+    }
+
     var isBuffering: Bool {
         streamPlayer.isBuffering
     }

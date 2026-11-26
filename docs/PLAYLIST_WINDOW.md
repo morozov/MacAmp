@@ -1,6 +1,6 @@
 # MacAmp Playlist Window Documentation
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Last Updated:** 2026-11-26
 **Status:** Production
 
@@ -203,7 +203,19 @@ Filesystem work runs off the main actor. Results identify tracks by ID, so inter
 
 Reordering preserves track identities, the active track, selection, cursor and anchor. The list scrolls to the active track, clamped to the last page. With no active track, it scrolls to the top. A changed CUE run is rebuilt at the current position while preserving playback or pause state. Empty and singleton lists remain unchanged.
 
-Misc Options currently shows a "Not supported yet" alert.
+### Misc Options
+
+The MISC **Misc Options** tile opens **Generate HTML playlist** and **Rebuild titles on selection**.
+
+**Generate HTML playlist** exports the complete playlist in its current order, independently of selection. The UTF-8 HTML file contains escaped titles, known track lengths and a duration summary. Unknown lengths are estimated from the known entries. The file stays in the temporary directory and opens in the default browser, where its save link allows a permanent copy. Write failures show an error without opening the browser.
+
+The generated document retains its template's Winamp branding. If every duration is unknown, its summary says there are no tracks even though the ordered rows remain in the document. An unrepresentable duration total reports an export error.
+
+**Rebuild titles on selection** captures selected entries when chosen and reloads their metadata in playlist order. Local entries receive fresh title, artist and duration. Each selected CUE slice receives its backing file's title and artist while keeping its existing length, bounds and provenance. The sheet and unselected siblings stay unchanged.
+
+Remote entries use received song metadata when their URL matches the loaded stream; otherwise their complete URL supplies the title. Playlist labels and station names do not substitute for received metadata. Stream rebuilding performs no network request and leaves duration unknown.
+
+Rebuilding preserves row identity, selection, cursor, anchor and loaded playback, including position and pause state. A later start uses the refreshed row. Request tokens reject obsolete results after edits, removal, playlist replacement or another rebuild. Empty selection does nothing.
 
 ### File Info and Playlist Entry
 
@@ -402,6 +414,7 @@ Defined in `MacAmpApp/Models/SkinSprites.swift` (PLEDIT sheet).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.0 | 2026-11-26 | HTML playlist export and selected-title rebuilding |
 | 1.4.0 | 2026-11-26 | Selected-entry File Info and Playlist Entry editing |
 | 1.3.0 | 2026-09-25 | Pruned; snippets replaced with current code; activation and sprite names corrected |
 | 1.2.0 | 2026-03-25 | List operations (NEW/LOAD/SAVE), PlaylistWindowActions.swift, track position display |
